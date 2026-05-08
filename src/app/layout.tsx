@@ -33,8 +33,14 @@ export default function RootLayout({
         <Providers>
           <header className="bg-[var(--brand-primary)] text-white shadow-md">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-              <div className="flex items-center">
-                <span className="font-bold text-xl tracking-tight">Timeoff</span>
+              <div className="flex items-center gap-6">
+                <a href="/" className="font-bold text-xl tracking-tight">Timeoff</a>
+                <nav className="hidden sm:flex space-x-4">
+                  <a href="/" className="text-white/80 hover:text-white transition">首頁</a>
+                  <a href="/apply" className="text-white/80 hover:text-white transition">請假</a>
+                  <a href="/admin/approvals" className="text-white/80 hover:text-white transition">審核</a>
+                  <a href="/admin/gantt" className="text-white/80 hover:text-white transition">團隊甘特圖</a>
+                </nav>
               </div>
               <div className="flex items-center gap-4">
                 <UserAuth />
