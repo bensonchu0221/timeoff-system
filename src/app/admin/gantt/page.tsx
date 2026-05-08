@@ -57,7 +57,7 @@ export default async function GanttPage() {
   })
 
   // 產生 X 軸的日期陣列
-  const days = []
+  const days: Date[] = []
   const current = new Date(startDate)
   while (current <= endDate) {
     days.push(new Date(current))

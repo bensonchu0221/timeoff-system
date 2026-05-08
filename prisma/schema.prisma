@@ -36,6 +36,7 @@ model User {
   emailVerified  DateTime?
   image          String?
   role           Role      @default(EMPLOYEE)
+  department     String?
   hireDate       DateTime?
   
   // NextAuth

@@ -103,7 +103,7 @@ export default async function ApprovalsPage() {
                       <button
                         formAction={async (formData) => {
                           "use server"
-                          await reviewLeave(formData.get("leaveId") as string, "APPROVED", "")
+                          await reviewLeave(formData.get("leaveId") as string, "APPROVED")
                         }}
                         className="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1 rounded-md transition"
                       >
@@ -112,7 +112,7 @@ export default async function ApprovalsPage() {
                       <button
                         formAction={async (formData) => {
                           "use server"
-                          await reviewLeave(formData.get("leaveId") as string, "REJECTED", "主管駁回")
+                          await reviewLeave(formData.get("leaveId") as string, "REJECTED")
                         }}
                         className="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded-md transition"
                       >
