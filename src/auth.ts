@@ -12,6 +12,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        const email = user.email || profile?.email;
+        if (!email) return false;
+        
+        // 網域白名單檢查
+        if (email.endsWith("@popin.cc") || email.endsWith("@broadciel.com")) {
+          return true;
+        }
+        
+        // 拒絕非白名單網域登入
+        return false;
+      }
+      return true;
+    },
     async session({ session, user }) {
       if (session.user && user) {
         session.user.id = user.id;
