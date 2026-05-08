@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum PartOfDay {
+  ALL_DAY
+  MORNING
+  AFTERNOON
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  name           String?
+  emailVerified  DateTime?
+  image          String?
+  role           Role      @default(EMPLOYEE)
+  hireDate       DateTime?
+  
+  // NextAuth
+  accounts       Account[]
+  sessions       Session[]
+
+  // Self-relation for manager-employee hierarchy
+  managerId      String?
+  manager        User?     @relation("ManagerToEmployee", fields: [managerId], references: [id])
+  subordinates   User[]    @relation("ManagerToEmployee")
+
+  // Leaves and Quotas
+  leaveRequests  LeaveRequest[]     @relation("UserLeaveRequests")
+  approvedLeaves LeaveRequest[]     @relation("ApproverLeaveRequests")
+  leaveBalances  UserLeaveBalance[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model LeaveType {
+  id             String    @id @default(uuid())
+  name           String    @unique // e.g., "特休", "病假", "事假"
+  defaultDays    Float     @default(0) // Default quota (e.g., 14 for Personal leave)
+  isPaid         Boolean   @default(true)
+  
+  // Relations
+  requests       LeaveRequest[]
+  balances       UserLeaveBalance[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model UserLeaveBalance {
+  id             String    @id @default(uuid())
+  userId         String
+  leaveTypeId    String
+  year           Int       // The year this balance applies to
+  totalQuota     Float     // The total quota for this year (can be overridden per user)
+  
+  user           User      @relation(fields: [userId], references: [id])
+  leaveType      LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([userId, leaveTypeId, year])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model LeaveRequest {
+  id             String      @id @default(uuid())
+  userId         String
+  leaveTypeId    String
+  startDate      DateTime
+  endDate        DateTime
+  partOfDay      PartOfDay   @default(ALL_DAY)
+  durationDays   Float       // Calculated days, excluding holidays/weekends
+  reason         String?     @db.Text
+  status         LeaveStatus @default(PENDING)
+  
+  approverId     String?
+  approver       User?       @relation("ApproverLeaveRequests", fields: [approverId], references: [id])
+  
+  user           User        @relation("UserLeaveRequests", fields: [userId], references: [id])
+  leaveType      LeaveType   @relation(fields: [leaveTypeId], references: [id])
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Holiday {
+  id             String    @id @default(uuid())
+  date           DateTime  @unique
+  name           String
+  isWorkDay      Boolean   @default(false) // true if it's a make-up work day on a weekend
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// ------------------------------
+// NextAuth / Auth.js Models
+// ------------------------------
+
+model Account {
+  id                 String  @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
