@@ -40,6 +40,7 @@ export default function RootLayout({
                   <a href="/apply" className="text-white/80 hover:text-white transition">請假</a>
                   <a href="/admin/approvals" className="text-white/80 hover:text-white transition">審核</a>
                   <a href="/admin/gantt" className="text-white/80 hover:text-white transition">團隊甘特圖</a>
+                  <a href="/admin/users" className="text-white/80 hover:text-white transition">員工管理</a>
                 </nav>
               </div>
               <div className="flex items-center gap-4">
