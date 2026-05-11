@@ -10,17 +10,19 @@ export async function updateUserRole(userId: string, role: Role) {
     data: { role },
   })
   revalidatePath("/admin/users")
+  return { success: true, message: "已更新角色權限" }
 }
 
 export async function updateUserManager(userId: string, managerId: string | null) {
   // Prevent setting self as manager
-  if (userId === managerId) return;
+  if (userId === managerId) throw new Error("不能設定自己為主管");
 
   await prisma.user.update({
     where: { id: userId },
     data: { managerId },
   })
   revalidatePath("/admin/users")
+  return { success: true, message: "已更新直屬主管" }
 }
 
 export async function createUser(data: FormData) {

@@ -111,11 +111,11 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           disabled={[{ dayOfWeek: [0, 6] }, ...publicHolidays]}
           modifiers={{ holiday: publicHolidays }}
           modifiersStyles={{
-            holiday: { color: 'red', fontWeight: 'bold' }
+            holiday: { color: '#C48F8B', fontWeight: 'bold' }
           }}
           className="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
           styles={{
-            day_selected: { backgroundColor: 'var(--brand-primary)', color: 'white' }
+            day_selected: { backgroundColor: '#7A9A8A', color: 'white' }
           }}
         />
         <p className="mt-4 text-sm text-gray-500">

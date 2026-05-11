@@ -3,6 +3,7 @@
 import { Role } from "@prisma/client"
 import { useTransition } from "react"
 import { updateUserRole, updateUserManager } from "./actions"
+import toast from "react-hot-toast"
 
 type UserNode = {
   id: string
@@ -16,14 +17,24 @@ export function UserTable({ users }: { users: UserNode[] }) {
   const [isPending, startTransition] = useTransition()
 
   const handleRoleChange = (userId: string, newRole: Role) => {
-    startTransition(() => {
-      updateUserRole(userId, newRole)
+    startTransition(async () => {
+      try {
+        const res = await updateUserRole(userId, newRole)
+        if (res?.success) toast.success(res.message)
+      } catch (err: any) {
+        toast.error(err.message || "更新失敗")
+      }
     })
   }
 
   const handleManagerChange = (userId: string, managerId: string) => {
-    startTransition(() => {
-      updateUserManager(userId, managerId === "none" ? null : managerId)
+    startTransition(async () => {
+      try {
+        const res = await updateUserManager(userId, managerId === "none" ? null : managerId)
+        if (res?.success) toast.success(res.message)
+      } catch (err: any) {
+        toast.error(err.message || "更新失敗")
+      }
     })
   }
 

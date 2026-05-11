@@ -31,7 +31,13 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
-        <Toaster position="top-right" />
+        <Toaster 
+          position="top-right" 
+          toastOptions={{
+            duration: 5000,
+            className: '!bg-gray-900/80 !text-white !backdrop-blur-md',
+          }}
+        />
         <Providers>
           <header className="bg-[var(--brand-primary)] text-white shadow-md">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
