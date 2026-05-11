@@ -3,6 +3,7 @@ import { UserTable } from "./UserTable"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { createUser } from "./actions"
+import { CreateUserForm } from "./CreateUserForm"
 
 export const metadata = {
   title: "層級與角色設定 | Timeoff",
