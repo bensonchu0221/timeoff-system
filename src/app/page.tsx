@@ -12,7 +12,7 @@ export const metadata = {
 
 export default async function DashboardPage() {
   const session = await auth()
-  
+
   if (!session?.user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -24,7 +24,7 @@ export default async function DashboardPage() {
   }
 
   const year = new Date().getFullYear()
-  
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email! },
     include: { manager: true }
@@ -33,7 +33,7 @@ export default async function DashboardPage() {
   if (!user) return null;
 
   const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
-  
+
   const balances = await Promise.all(
     leaveTypes.map(async (lt) => {
       const bal = await getUserLeaveBalance(user.id, lt.id, year)
@@ -42,7 +42,10 @@ export default async function DashboardPage() {
   )
 
   const history = await prisma.leaveRequest.findMany({
-    where: { userId: user.id },
+    where: { 
+      userId: user.id,
+      status: { not: "CANCELLED" }
+    },
     include: { leaveType: true },
     orderBy: { createdAt: 'desc' },
     take: 10
@@ -52,6 +55,7 @@ export default async function DashboardPage() {
   const allLeavesThisYear = await prisma.leaveRequest.findMany({
     where: {
       userId: user.id,
+      status: { not: "CANCELLED" },
       startDate: {
         gte: new Date(year, 0, 1),
         lt: new Date(year + 1, 0, 1)
@@ -72,11 +76,11 @@ export default async function DashboardPage() {
             部門：{user.department || '未設定'} | 直屬主管：{user.manager?.name || '無'}
           </p>
         </div>
-        <Link 
+        <Link
           href="/apply"
           className="px-6 py-2 bg-[var(--brand-primary)] text-white font-medium rounded-md shadow hover:bg-[var(--brand-primary-dark)] transition whitespace-nowrap"
         >
-          ➕ 申請休假
+          申請休假
         </Link>
       </div>
 
@@ -84,14 +88,14 @@ export default async function DashboardPage() {
       <YearlyHeatmap leaves={allLeavesThisYear} year={year} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* 左側：剩餘天數列表 */}
         <div className="lg:col-span-1 space-y-4">
           <h2 className="text-lg font-medium text-gray-900 mb-4">{year} 年假別額度</h2>
           <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden divide-y divide-gray-100">
             {balances.map(b => {
               const percentage = b.total > 0 ? (b.remaining / b.total) * 100 : 0
-              
+
               return (
                 <div key={b.type} className="p-4">
                   <div className="flex justify-between items-center mb-1">
@@ -103,8 +107,8 @@ export default async function DashboardPage() {
                   </div>
                   {/* 莫蘭迪色系進度條，高度變低 */}
                   <div className="w-full bg-[#E5E7E5] rounded-full h-1.5 mt-2">
-                    <div 
-                      className="bg-[#7A9A8A] h-1.5 rounded-full transition-all duration-500" 
+                    <div
+                      className="bg-[#7A9A8A] h-1.5 rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -148,14 +152,14 @@ export default async function DashboardPage() {
                       </td>
                       <td className="px-6 py-4 flex items-center">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
-                          ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' : 
-                            req.status === 'PENDING' ? 'bg-[#A9ADA9]/30 text-[#6d716f]' : 
-                            req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' : 
-                            'bg-gray-100 text-gray-800'}`}>
-                          {req.status === 'APPROVED' ? '已核准' : 
-                           req.status === 'PENDING' ? '待審核' : 
-                           req.status === 'REJECTED' ? '已駁回' : 
-                           req.status === 'CANCELLED' ? '已撤銷' : req.status}
+                          ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' :
+                            req.status === 'PENDING' ? 'bg-[#A9ADA9]/30 text-[#6d716f]' :
+                              req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' :
+                                'bg-gray-100 text-gray-800'}`}>
+                          {req.status === 'APPROVED' ? '已核准' :
+                            req.status === 'PENDING' ? '待審核' :
+                              req.status === 'REJECTED' ? '已駁回' :
+                                req.status === 'CANCELLED' ? '已撤銷' : req.status}
                         </span>
                         {req.status === 'PENDING' && (
                           <CancelLeaveButton leaveId={req.id} />

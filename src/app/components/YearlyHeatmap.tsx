@@ -23,13 +23,20 @@ export function YearlyHeatmap({ leaves, year }: {
         status = "WEEKEND"
       }
       
-      for (const leave of leaves) {
+      const dayLeaves = leaves.filter(leave => {
         const s = new Date(leave.startDate).setHours(0,0,0,0)
         const e = new Date(leave.endDate).setHours(0,0,0,0)
         const c = new Date(current).setHours(0,0,0,0)
-        if (c >= s && c <= e) {
-          status = leave.status
-          break
+        return c >= s && c <= e
+      })
+
+      if (dayLeaves.length > 0) {
+        if (dayLeaves.some(l => l.status === "APPROVED")) {
+          status = "APPROVED"
+        } else if (dayLeaves.some(l => l.status === "PENDING")) {
+          status = "PENDING"
+        } else {
+          status = dayLeaves[0].status
         }
       }
       days.push({ date: new Date(current), status })

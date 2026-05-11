@@ -51,7 +51,7 @@ export default async function ApprovalsPage() {
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         {pendingRequests.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
-            目前沒有需要審核的假單 🎉
+            目前沒有需要審核的假單
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
