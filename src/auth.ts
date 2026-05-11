@@ -17,13 +17,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = user.email || profile?.email;
         if (!email) return false;
         
-        // 網域白名單檢查
-        if (email.endsWith("@popin.cc") || email.endsWith("@broadciel.com")) {
-          return true;
+        // 先檢查網域白名單
+        if (!email.endsWith("@popin.cc") && !email.endsWith("@broadciel.com")) {
+          return "/unauthorized"
         }
         
-        // 拒絕非白名單網域登入
-        return false;
+        // 檢查資料庫是否已經有這個員工
+        const dbUser = await prisma.user.findUnique({
+          where: { email: email }
+        })
+
+        if (!dbUser) {
+          // 如果沒有在系統中建檔，拒絕登入並導向未授權頁面
+          return "/unauthorized"
+        }
+        
+        return true;
       }
       return true;
     },

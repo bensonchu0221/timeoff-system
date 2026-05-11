@@ -5,6 +5,7 @@ import { auth } from "@/auth"
 import { calculateDurationDays, getUserLeaveBalance } from "@/lib/leave-utils"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
+import { sendLeaveApplicationEmail, sendLeaveResultEmail } from "@/lib/email"
 
 export async function applyLeave(data: {
   leaveTypeId: string,
@@ -50,7 +51,20 @@ export async function applyLeave(data: {
     }
   });
 
-  // TODO: Send Gmail notification to approver if approverId exists (Phase 6)
+  if (approverId) {
+    const manager = await prisma.user.findUnique({ where: { id: approverId } });
+    if (manager?.email) {
+      const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
+      const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
+      await sendLeaveApplicationEmail(
+        manager.email, 
+        user?.name || "員工", 
+        leaveTypeObj?.name || "假別", 
+        durationDays, 
+        `${siteUrl}/admin/approvals`
+      );
+    }
+  }
 
   revalidatePath("/dashboard")
   return { success: true, request: leaveRequest }
@@ -63,13 +77,11 @@ export async function cancelLeave(requestId: string) {
   const request = await prisma.leaveRequest.findUnique({ where: { id: requestId }});
   if (!request) throw new Error("Request not found");
 
-  // User can only cancel their own leaves or Admin can cancel any
   const isAdmin = (session.user as any).role === "ADMIN";
   if (request.userId !== session.user.id && !isAdmin) {
     throw new Error("Forbidden");
   }
 
-  // If approved, maybe it requires manager approval to cancel? We'll just cancel it for now (MVP rule: "若假單已核准，員工仍可申請撤回，但需經過主管同意（或自動退回假數）" -> Let's implement auto-return for MVP to keep it simple).
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: { status: "CANCELLED" }
@@ -84,7 +96,10 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId }});
+  const request = await prisma.leaveRequest.findUnique({ 
+    where: { id: requestId },
+    include: { user: true, leaveType: true }
+  });
   if (!request) throw new Error("Request not found");
 
   const isManager = request.approverId === session.user.id;
@@ -99,7 +114,9 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
     data: { status }
   });
 
-  // TODO: Send Gmail notification to applicant (Phase 6)
+  if (request.user?.email) {
+    await sendLeaveResultEmail(request.user.email, request.leaveType.name, status);
+  }
 
   revalidatePath("/admin/approvals")
   revalidatePath("/dashboard")
