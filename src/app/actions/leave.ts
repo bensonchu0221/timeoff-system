@@ -143,5 +143,6 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
 
   revalidatePath("/admin/approvals")
   revalidatePath("/dashboard")
+  revalidatePath("/admin/gantt")
   return { success: true }
 }

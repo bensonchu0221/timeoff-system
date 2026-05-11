@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 
 import { DragScrollContainer } from "@/app/components/DragScrollContainer"
+import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
 
 export const metadata = {
   title: "團隊請假甘特圖 | Timeoff",
@@ -39,9 +40,9 @@ export default async function GanttPage() {
   // 取得這些人最近前後一個月的假單 (已核准或審核中)
   const today = new Date()
   const startDate = new Date(today)
-  startDate.setDate(today.getDate() - 14) // 兩週前
+  startDate.setDate(today.getDate() - 30) // 一個月前
   const endDate = new Date(today)
-  endDate.setDate(today.getDate() + 14)   // 兩週後
+  endDate.setDate(today.getDate() + 30)   // 一個月後
 
   const leaves = await prisma.leaveRequest.findMany({
     where: {
@@ -132,17 +133,14 @@ export default async function GanttPage() {
 
                       if (leaveOnDay && !isWeekend) {
                         const isPending = leaveOnDay.status === 'PENDING'
-                        // 莫蘭迪色系：核准用 #7A9A8A，待審核用 #A9ADA9
-                        bgColorClass = isPending ? 'bg-[#A9ADA9]' : 'bg-[#7A9A8A]'
+                        bgColorClass = 'bg-white' // The cell component will render its own background via the element
                         
                         cellContent = (
-                          <div 
-                            className="w-full h-4 text-[9px] flex items-center justify-center text-white select-none shadow-sm"
-                            title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
-                          >
-                            {/* 只顯示首字以節省空間 */}
-                            {leaveOnDay.leaveType.name.substring(0,1)}
-                          </div>
+                          <GanttLeaveCell 
+                            leaveOnDay={leaveOnDay} 
+                            isPending={isPending} 
+                            userName={u.name || ''} 
+                          />
                         )
                       }
 
