@@ -23,6 +23,25 @@ export async function applyLeave(data: {
 
   if (start > end) throw new Error("Start date cannot be after end date");
 
+  // Check for overlapping leaves
+  const overlappingLeaves = await prisma.leaveRequest.findMany({
+    where: {
+      userId,
+      status: { in: ["PENDING", "APPROVED"] },
+      OR: [
+        // overlap condition: (new_start <= existing_end) AND (new_end >= existing_start)
+        {
+          startDate: { lte: end },
+          endDate: { gte: start }
+        }
+      ]
+    }
+  });
+
+  if (overlappingLeaves.length > 0) {
+    throw new Error("此時間區間您已經有申請過假單（待審核或已核准），請勿重複申請！");
+  }
+
   const durationDays = await calculateDurationDays(start, end, data.partOfDay);
   if (durationDays === 0) throw new Error("Duration cannot be 0 days (e.g., trying to take leave only on a weekend/holiday)");
 

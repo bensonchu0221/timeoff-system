@@ -22,3 +22,33 @@ export async function updateUserManager(userId: string, managerId: string | null
   })
   revalidatePath("/admin/users")
 }
+
+export async function createUser(data: FormData) {
+  const name = data.get("name") as string
+  const email = data.get("email") as string
+  const department = data.get("department") as string
+  const role = data.get("role") as Role
+
+  if (!name || !email) {
+    throw new Error("姓名與 Email 為必填欄位")
+  }
+
+  // Check if email already exists
+  const existingUser = await prisma.user.findUnique({
+    where: { email }
+  })
+  if (existingUser) {
+    throw new Error("此 Email 已經存在！")
+  }
+
+  await prisma.user.create({
+    data: {
+      name,
+      email,
+      department: department || null,
+      role: role || "EMPLOYEE",
+    }
+  })
+
+  revalidatePath("/admin/users")
+}
