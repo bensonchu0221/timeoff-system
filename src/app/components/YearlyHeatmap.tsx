@@ -1,4 +1,7 @@
+"use client"
+
 import { LeaveStatus } from "@prisma/client"
+import ScrollContainer from 'react-indiana-drag-scroll'
 
 type DayStatus = LeaveStatus | "NONE" | "WEEKEND"
 
@@ -37,62 +40,61 @@ export function YearlyHeatmap({ leaves, year }: {
 
   const getColor = (status: DayStatus) => {
     switch(status) {
-      case "APPROVED": return "bg-green-400"
-      case "PENDING": return "bg-gray-400"
-      case "REJECTED": return "bg-red-400"
-      case "WEEKEND": return "bg-gray-50"
-      case "NONE": return "bg-gray-100"
+      case "APPROVED": return "bg-[#7A9A8A]" // 莫蘭迪綠
+      case "PENDING": return "bg-[#A9ADA9]" // 莫蘭迪灰
+      case "REJECTED": return "bg-[#C48F8B]" // 莫蘭迪紅
+      case "WEEKEND": return "bg-[#f5f6f5]" // 極淺灰
+      case "NONE": return "bg-[#eaeaeb]" // 淺灰底色
       default: return "bg-transparent"
     }
   }
 
   return (
-    <div className="hidden sm:block bg-white p-6 rounded-lg shadow border border-gray-100 mb-8 overflow-x-auto">
-      <div className="flex gap-4" style={{ width: 'max-content' }}>
+    <div className="hidden sm:block bg-white p-6 rounded-lg shadow border border-gray-100 mb-8 overflow-hidden">
+      <ScrollContainer className="flex gap-0 cursor-grab active:cursor-grabbing w-full overflow-x-auto pb-4" hideScrollbars={false}>
         {months.map(month => {
           const days = getDaysInMonth(month)
           const firstDay = days[0].date.getDay() // 0 (Sun) to 6 (Sat)
-          // 假設以週日為第一天：
           const padding = firstDay
 
           return (
-            <div key={month} className="grid grid-cols-7 gap-1 h-fit">
+            <div key={month} className="grid grid-cols-7 gap-0 h-fit border-l border-white first:border-l-0">
               {/* 補足月份開頭的空白 */}
               {Array.from({ length: padding }).map((_, i) => (
-                <div key={`pad-${i}`} className="w-3 h-3 bg-transparent" />
+                <div key={`pad-${i}`} className="w-2.5 h-2.5 bg-transparent" />
               ))}
               {/* 渲染日期方格 */}
               {days.map((day, idx) => (
                 <div 
                   key={idx} 
-                  className={`w-3 h-3 rounded-sm border border-white/10 ${getColor(day.status)}`}
+                  className={`w-2.5 h-2.5 border-[0.5px] border-white ${getColor(day.status)}`}
                   title={`${day.date.toLocaleDateString('zh-TW')} - ${day.status}`}
                 />
               ))}
             </div>
           )
         })}
-      </div>
+      </ScrollContainer>
 
-      <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
+      <div className="mt-2 flex items-center gap-6 text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-gray-100"></div>
+          <div className="w-3 h-3 bg-[#eaeaeb]"></div>
           <span>一般日</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-gray-50"></div>
+          <div className="w-3 h-3 bg-[#f5f6f5]"></div>
           <span>週末</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-gray-400"></div>
+          <div className="w-3 h-3 bg-[#A9ADA9]"></div>
           <span>待審核</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-green-400"></div>
+          <div className="w-3 h-3 bg-[#7A9A8A]"></div>
           <span>已核准</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-red-400"></div>
+          <div className="w-3 h-3 bg-[#C48F8B]"></div>
           <span>已駁回</span>
         </div>
       </div>

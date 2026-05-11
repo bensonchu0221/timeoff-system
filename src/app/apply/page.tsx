@@ -13,7 +13,9 @@ export default async function ApplyLeavePage() {
   if (!session?.user) redirect("/")
 
   const year = new Date().getFullYear()
-  const leaveTypes = await prisma.leaveType.findMany()
+  const leaveTypes = await prisma.leaveType.findMany({
+    where: { isActive: true }
+  })
   
   // Fetch available balances to pass to the client form for validation
   const balances = await Promise.all(

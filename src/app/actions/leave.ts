@@ -101,6 +101,10 @@ export async function cancelLeave(requestId: string) {
     throw new Error("Forbidden");
   }
 
+  if (request.status !== "PENDING") {
+    throw new Error("只能撤銷「待審核」狀態的假單！");
+  }
+
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: { status: "CANCELLED" }

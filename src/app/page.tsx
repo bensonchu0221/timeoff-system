@@ -4,6 +4,7 @@ import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { Calendar } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
+import { CancelLeaveButton } from "./components/CancelLeaveButton"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
 
   if (!user) return null;
 
-  const leaveTypes = await prisma.leaveType.findMany()
+  const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
   
   const balances = await Promise.all(
     leaveTypes.map(async (lt) => {
@@ -87,29 +88,30 @@ export default async function DashboardPage() {
         {/* 左側：剩餘天數列表 */}
         <div className="lg:col-span-1 space-y-4">
           <h2 className="text-lg font-medium text-gray-900 mb-4">{year} 年假別額度</h2>
-          {balances.map(b => {
-            const percentage = b.total > 0 ? (b.remaining / b.total) * 100 : 0
-            
-            return (
-              <div key={b.type} className="bg-white p-5 rounded-lg shadow border border-gray-100">
-                <div className="flex justify-between items-end mb-2">
-                  <span className="font-medium text-gray-700">{b.type}</span>
-                  <div className="text-right">
-                    <span className="text-2xl font-bold text-[var(--brand-primary)]">{b.remaining}</span>
-                    <span className="text-sm text-gray-500 ml-1">/ {b.total} 天</span>
+          <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden divide-y divide-gray-100">
+            {balances.map(b => {
+              const percentage = b.total > 0 ? (b.remaining / b.total) * 100 : 0
+              
+              return (
+                <div key={b.type} className="p-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-medium text-gray-700 text-sm">{b.type}</span>
+                    <div className="text-right text-sm">
+                      <span className="font-bold text-gray-900">{b.remaining}</span>
+                      <span className="text-gray-400 ml-1">/ {b.total} 天</span>
+                    </div>
+                  </div>
+                  {/* 莫蘭迪色系進度條，高度變低 */}
+                  <div className="w-full bg-[#E5E7E5] rounded-full h-1.5 mt-2">
+                    <div 
+                      className="bg-[#7A9A8A] h-1.5 rounded-full transition-all duration-500" 
+                      style={{ width: `${percentage}%` }}
+                    ></div>
                   </div>
                 </div>
-                {/* 淺灰色底與主題色進度條 */}
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-[var(--brand-primary)] h-2.5 rounded-full transition-all duration-500" 
-                    style={{ width: `${percentage}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-400 mt-2 text-right">已請: {b.used} 天</p>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
 
         {/* 右側：請假紀錄 */}
@@ -126,7 +128,7 @@ export default async function DashboardPage() {
                   <tr>
                     <th className="px-6 py-3 text-left font-medium text-gray-500">假別 / 天數</th>
                     <th className="px-6 py-3 text-left font-medium text-gray-500">日期區間</th>
-                    <th className="px-6 py-3 text-left font-medium text-gray-500">狀態</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500">狀態與操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -144,16 +146,20 @@ export default async function DashboardPage() {
                           {req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天'}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 flex items-center">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
-                          ${req.status === 'APPROVED' ? 'bg-green-100 text-green-800' : 
-                            req.status === 'PENDING' ? 'bg-gray-200 text-gray-800' : 
-                            req.status === 'REJECTED' ? 'bg-red-100 text-red-800' : 
+                          ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' : 
+                            req.status === 'PENDING' ? 'bg-[#A9ADA9]/30 text-[#6d716f]' : 
+                            req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' : 
                             'bg-gray-100 text-gray-800'}`}>
                           {req.status === 'APPROVED' ? '已核准' : 
                            req.status === 'PENDING' ? '待審核' : 
-                           req.status === 'REJECTED' ? '已駁回' : req.status}
+                           req.status === 'REJECTED' ? '已駁回' : 
+                           req.status === 'CANCELLED' ? '已撤銷' : req.status}
                         </span>
+                        {req.status === 'PENDING' && (
+                          <CancelLeaveButton leaveId={req.id} />
+                        )}
                       </td>
                     </tr>
                   ))}

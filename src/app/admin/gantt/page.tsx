@@ -2,6 +2,8 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 
+import { DragScrollContainer } from "@/app/components/DragScrollContainer"
+
 export const metadata = {
   title: "團隊請假甘特圖 | Timeoff",
 }
@@ -77,82 +79,85 @@ export default async function GanttPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">團隊請假甘特圖</h1>
         <p className="mt-1 text-sm text-gray-500">
-          顯示前後兩週的請假狀況，避免多人同時休假。
+          顯示前後兩週的請假狀況，按住滑鼠左鍵可直接左右拖曳。
         </p>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto border border-gray-200">
-        <table className="min-w-max w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-gray-100 px-4 py-3 border-b border-r border-gray-200 text-left text-xs font-medium text-gray-600 uppercase w-48 shadow-[1px_0_0_0_#e5e7eb]">
-                成員
-              </th>
-              {days.map((day, idx) => {
-                const isWeekend = day.getDay() === 0 || day.getDay() === 6
-                const isToday = day.toDateString() === today.toDateString()
+      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+        <DragScrollContainer className="w-full">
+          <table className="min-w-max w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-gray-100 px-3 py-2 border-b border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
+                  成員 (部門)
+                </th>
+                {days.map((day, idx) => {
+                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
+                  const isToday = day.toDateString() === today.toDateString()
+                  return (
+                    <th key={idx} className={`px-1 py-1 border-b border-gray-200 text-center text-xs ${isWeekend ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-yellow-50 border-x-yellow-200' : ''}`}>
+                      <div className="flex flex-col items-center leading-none">
+                        <span className="font-semibold text-xs">{day.getDate()}</span>
+                        <span className="text-[9px] mt-0.5">{['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</span>
+                      </div>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {targetUsers.map(u => {
+                const userLeaves = leaves.filter(l => l.userId === u.id)
+                
                 return (
-                  <th key={idx} className={`px-2 py-3 border-b border-gray-200 text-center text-xs ${isWeekend ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-yellow-50 border-x-yellow-200' : ''}`}>
-                    <div className="flex flex-col items-center">
-                      <span className="font-semibold">{day.getDate()}</span>
-                      <span className="text-[10px]">{['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</span>
-                    </div>
-                  </th>
+                  <tr key={u.id} className="hover:bg-gray-50 group">
+                    <td className="sticky left-0 z-10 bg-white px-3 py-1.5 border-r border-gray-200 text-xs text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span className="font-medium">{u.name}</span>
+                        <span className="text-gray-400">({u.department || '未設定'})</span>
+                      </div>
+                    </td>
+                    
+                    {days.map((day, idx) => {
+                      const isWeekend = day.getDay() === 0 || day.getDay() === 6
+                      const isToday = day.toDateString() === today.toDateString()
+                      
+                      // Check if this user has a leave on this day
+                      const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
+                      
+                      let cellContent = null
+                      let bgColorClass = isWeekend ? 'bg-gray-50' : 'bg-white'
+                      
+                      if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
+
+                      if (leaveOnDay && !isWeekend) {
+                        const isPending = leaveOnDay.status === 'PENDING'
+                        // 莫蘭迪色系：核准用 #7A9A8A，待審核用 #A9ADA9
+                        bgColorClass = isPending ? 'bg-[#A9ADA9]' : 'bg-[#7A9A8A]'
+                        
+                        cellContent = (
+                          <div 
+                            className="w-full h-4 text-[9px] flex items-center justify-center text-white select-none shadow-sm"
+                            title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
+                          >
+                            {/* 只顯示首字以節省空間 */}
+                            {leaveOnDay.leaveType.name.substring(0,1)}
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <td key={idx} className={`border-r border-gray-100 p-0.5 min-w-[32px] ${bgColorClass}`}>
+                          {cellContent}
+                        </td>
+                      )
+                    })}
+                  </tr>
                 )
               })}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {targetUsers.map(u => {
-              const userLeaves = leaves.filter(l => l.userId === u.id)
-              
-              return (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-gray-200 text-sm font-medium text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50">
-                    <div className="flex flex-col">
-                      <span>{u.name}</span>
-                      <span className="text-[10px] text-gray-400 font-normal">{u.department || '未設定'}</span>
-                    </div>
-                  </td>
-                  
-                  {days.map((day, idx) => {
-                    const isWeekend = day.getDay() === 0 || day.getDay() === 6
-                    const isToday = day.toDateString() === today.toDateString()
-                    
-                    // Check if this user has a leave on this day
-                    const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
-                    
-                    let cellContent = null
-                    let bgColorClass = isWeekend ? 'bg-gray-50' : 'bg-white'
-                    
-                    if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
-
-                    if (leaveOnDay && !isWeekend) {
-                      const isPending = leaveOnDay.status === 'PENDING'
-                      bgColorClass = isPending ? 'bg-yellow-100' : 'bg-[var(--brand-primary)] opacity-80'
-                      
-                      cellContent = (
-                        <div 
-                          className={`w-full h-8 rounded text-xs flex items-center justify-center cursor-help
-                            ${isPending ? 'text-yellow-800 border border-yellow-200 border-dashed' : 'text-white shadow-sm'}`}
-                          title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
-                        >
-                          {leaveOnDay.leaveType.name.substring(0,1)}
-                        </div>
-                      )
-                    }
-
-                    return (
-                      <td key={idx} className={`border-r border-gray-100 p-1 min-w-[40px] ${bgColorClass}`}>
-                        {cellContent}
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </DragScrollContainer>
       </div>
     </div>
   )

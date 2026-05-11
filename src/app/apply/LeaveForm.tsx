@@ -7,6 +7,7 @@ import "react-day-picker/dist/style.css"
 import { PartOfDay } from "@prisma/client"
 import { applyLeave } from "@/app/actions/leave"
 import { useRouter } from "next/navigation"
+import toast from "react-hot-toast"
 
 type Balance = {
   id: string
@@ -88,8 +89,10 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           partOfDay,
           reason
         })
+        toast.success("送出假單成功！")
         router.push("/")
       } catch (err: any) {
+        toast.error(err.message || "送出失敗，請稍後再試")
         setErrorMsg(err.message || "送出失敗，請稍後再試")
       }
     })

@@ -21,9 +21,10 @@ export async function createLeaveType(data: FormData) {
   if (!name || isNaN(defaultDays)) throw new Error("Invalid input")
 
   await prisma.leaveType.create({
-    data: { name, defaultDays, isPaid }
+    data: { name, defaultDays, isPaid, isActive: true }
   })
   revalidatePath("/admin/leave-settings")
+  return { success: true, message: "已新增假別" }
 }
 
 export async function deleteLeaveType(data: FormData) {
@@ -31,11 +32,14 @@ export async function deleteLeaveType(data: FormData) {
   const id = data.get("id") as string
   if (!id) return
 
-  // Need to delete related balances first
-  await prisma.userLeaveBalance.deleteMany({ where: { leaveTypeId: id } })
-  await prisma.leaveType.delete({ where: { id } })
+  // Soft delete instead of hard delete
+  await prisma.leaveType.update({ 
+    where: { id },
+    data: { isActive: false }
+  })
   
   revalidatePath("/admin/leave-settings")
+  return { success: true, message: "已刪除假別" }
 }
 
 export async function updateUserTotalBalance(data: FormData) {
@@ -60,4 +64,5 @@ export async function updateUserTotalBalance(data: FormData) {
   })
 
   revalidatePath("/admin/leave-settings")
+  return { success: true, message: "已更新額度" }
 }

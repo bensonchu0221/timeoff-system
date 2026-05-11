@@ -62,6 +62,7 @@ model LeaveType {
   name           String    @unique // e.g., "特休", "病假", "事假"
   defaultDays    Float     @default(0) // Default quota (e.g., 14 for Personal leave)
   isPaid         Boolean   @default(true)
+  isActive       Boolean   @default(true) // For soft delete
   
   // Relations
   requests       LeaveRequest[]
