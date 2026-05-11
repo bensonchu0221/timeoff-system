@@ -51,23 +51,23 @@ export function YearlyHeatmap({ leaves, year }: {
 
   return (
     <div className="hidden sm:block bg-white p-6 rounded-lg shadow border border-gray-100 mb-8 overflow-hidden">
-      <ScrollContainer className="flex gap-0 cursor-grab active:cursor-grabbing w-full overflow-x-auto pb-4" hideScrollbars={false}>
+      <ScrollContainer className="flex justify-between w-full overflow-x-auto pb-4 gap-1 select-none" hideScrollbars={false}>
         {months.map(month => {
           const days = getDaysInMonth(month)
           const firstDay = days[0].date.getDay() // 0 (Sun) to 6 (Sat)
           const padding = firstDay
 
           return (
-            <div key={month} className="grid grid-cols-7 gap-0 h-fit border-l border-white first:border-l-0">
+            <div key={month} className="grid grid-cols-7 gap-0 h-fit border-l border-white first:border-l-0 flex-1 min-w-[60px]">
               {/* 補足月份開頭的空白 */}
               {Array.from({ length: padding }).map((_, i) => (
-                <div key={`pad-${i}`} className="w-2.5 h-2.5 bg-transparent" />
+                <div key={`pad-${i}`} className="w-full aspect-square bg-transparent" />
               ))}
               {/* 渲染日期方格 */}
               {days.map((day, idx) => (
                 <div 
                   key={idx} 
-                  className={`w-2.5 h-2.5 border-[0.5px] border-white ${getColor(day.status)}`}
+                  className={`w-full aspect-square border-[0.5px] border-white ${getColor(day.status)}`}
                   title={`${day.date.toLocaleDateString('zh-TW')} - ${day.status}`}
                 />
               ))}
