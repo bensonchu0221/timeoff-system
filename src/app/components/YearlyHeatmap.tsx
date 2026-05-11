@@ -6,59 +6,33 @@ export function YearlyHeatmap({ leaves, year }: {
   leaves: { startDate: Date, endDate: Date, status: LeaveStatus }[],
   year: number 
 }) {
-  const startDate = new Date(year, 0, 1)
-  const endDate = new Date(year, 11, 31)
+  const months = Array.from({ length: 12 }, (_, i) => i)
 
-  // Generate 365/366 days
-  const days: { date: Date, status: DayStatus }[] = []
-  
-  let current = new Date(startDate)
-  while (current <= endDate) {
-    let status: DayStatus = "NONE"
+  const getDaysInMonth = (month: number) => {
+    const startDate = new Date(year, month, 1)
+    const endDate = new Date(year, month + 1, 0)
+    const days: { date: Date, status: DayStatus }[] = []
     
-    // Check if weekend
-    if (current.getDay() === 0 || current.getDay() === 6) {
-      status = "WEEKEND"
-    }
-    
-    // Overwrite if there's a leave request
-    for (const leave of leaves) {
-      const s = new Date(leave.startDate).setHours(0,0,0,0)
-      const e = new Date(leave.endDate).setHours(0,0,0,0)
-      const c = new Date(current).setHours(0,0,0,0)
-      if (c >= s && c <= e) {
-        status = leave.status
-        break
+    let current = new Date(startDate)
+    while (current <= endDate) {
+      let status: DayStatus = "NONE"
+      if (current.getDay() === 0 || current.getDay() === 6) {
+        status = "WEEKEND"
       }
+      
+      for (const leave of leaves) {
+        const s = new Date(leave.startDate).setHours(0,0,0,0)
+        const e = new Date(leave.endDate).setHours(0,0,0,0)
+        const c = new Date(current).setHours(0,0,0,0)
+        if (c >= s && c <= e) {
+          status = leave.status
+          break
+        }
+      }
+      days.push({ date: new Date(current), status })
+      current.setDate(current.getDate() + 1)
     }
-
-    days.push({ date: new Date(current), status })
-    current.setDate(current.getDate() + 1)
-  }
-
-  // Group by weeks (columns)
-  const weeks: { date: Date, status: DayStatus }[][] = []
-  let currentWeek: { date: Date, status: DayStatus }[] = []
-  
-  // Pad the first week
-  const firstDayOfWeek = days[0].date.getDay()
-  for (let i = 0; i < firstDayOfWeek; i++) {
-    currentWeek.push({ date: new Date(0), status: "NONE" }) // dummy
-  }
-
-  for (const day of days) {
-    currentWeek.push(day)
-    if (currentWeek.length === 7) {
-      weeks.push(currentWeek)
-      currentWeek = []
-    }
-  }
-
-  if (currentWeek.length > 0) {
-    while (currentWeek.length < 7) {
-      currentWeek.push({ date: new Date(0), status: "NONE" }) // dummy pad
-    }
-    weeks.push(currentWeek)
+    return days
   }
 
   const getColor = (status: DayStatus) => {
@@ -74,18 +48,30 @@ export function YearlyHeatmap({ leaves, year }: {
 
   return (
     <div className="hidden sm:block bg-white p-6 rounded-lg shadow border border-gray-100 mb-8 overflow-x-auto">
-      <div className="flex gap-1" style={{ width: 'max-content' }}>
-        {weeks.map((week, wIdx) => (
-          <div key={wIdx} className="flex flex-col gap-1">
-            {week.map((day, dIdx) => (
-              <div 
-                key={dIdx} 
-                className={`w-3 h-3 rounded-sm border border-white/10 ${day.date.getTime() === 0 ? 'bg-transparent border-transparent' : getColor(day.status)}`}
-                title={day.date.getTime() !== 0 ? `${day.date.toLocaleDateString('zh-TW')} - ${day.status}` : ''}
-              />
-            ))}
-          </div>
-        ))}
+      <div className="flex gap-4" style={{ width: 'max-content' }}>
+        {months.map(month => {
+          const days = getDaysInMonth(month)
+          const firstDay = days[0].date.getDay() // 0 (Sun) to 6 (Sat)
+          // 假設以週日為第一天：
+          const padding = firstDay
+
+          return (
+            <div key={month} className="grid grid-cols-7 gap-1 h-fit">
+              {/* 補足月份開頭的空白 */}
+              {Array.from({ length: padding }).map((_, i) => (
+                <div key={`pad-${i}`} className="w-3 h-3 bg-transparent" />
+              ))}
+              {/* 渲染日期方格 */}
+              {days.map((day, idx) => (
+                <div 
+                  key={idx} 
+                  className={`w-3 h-3 rounded-sm border border-white/10 ${getColor(day.status)}`}
+                  title={`${day.date.toLocaleDateString('zh-TW')} - ${day.status}`}
+                />
+              ))}
+            </div>
+          )
+        })}
       </div>
 
       <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
