@@ -2,7 +2,7 @@
 
 import { useTransition } from "react"
 import toast from "react-hot-toast"
-import { createLeaveType, deleteLeaveType, updateUserTotalBalance } from "./actions"
+import { createLeaveType, deleteLeaveType, updateUserTotalBalance, syncHolidays } from "./actions"
 
 export function CreateLeaveTypeForm() {
   const [isPending, startTransition] = useTransition()
@@ -131,6 +131,50 @@ export function UpdateBalanceForm({
       <div className="flex items-center gap-2 mt-1">
         <span className="text-xs text-gray-500 w-16">目前可請:</span>
         <span className="text-xs font-bold text-[var(--brand-primary)]">{remaining} 天</span>
+      </div>
+    </form>
+  )
+}
+
+export function SyncHolidaysForm() {
+  const [isPending, startTransition] = useTransition()
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = e.currentTarget
+    const year = Number(new FormData(form).get("year"))
+
+    startTransition(async () => {
+      try {
+        const result = await syncHolidays(year)
+        if (result?.success) {
+          toast.success(result.message)
+        }
+      } catch (err: any) {
+        toast.error(err.message || "同步失敗")
+      }
+    })
+  }
+
+  const currentYear = new Date().getFullYear()
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-4 items-end bg-gray-50 p-4 rounded-md mt-6 border border-gray-100">
+      <div>
+        <label className="block text-xs font-medium text-gray-700">同步國定假日年份</label>
+        <input 
+          type="number" 
+          name="year" 
+          required 
+          className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-[var(--brand-primary)] focus:ring-[var(--brand-primary)] sm:text-sm px-3 py-2 border" 
+          defaultValue={currentYear} 
+        />
+      </div>
+      <button type="submit" disabled={isPending} className="bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400">
+        {isPending ? "同步中..." : "開始同步"}
+      </button>
+      <div className="text-xs text-gray-500 ml-2 mb-2">
+        從政府開放資料自動抓取該年度的國定假日與補班日
       </div>
     </form>
   )

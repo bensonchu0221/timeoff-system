@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { createLeaveType, deleteLeaveType, updateUserTotalBalance } from "./actions"
 
-import { CreateLeaveTypeForm, DeleteLeaveTypeButton, UpdateBalanceForm } from "./Forms"
+import { CreateLeaveTypeForm, DeleteLeaveTypeButton, UpdateBalanceForm, SyncHolidaysForm } from "./Forms"
 
 export const metadata = {
   title: "假別與額度設定 | Timeoff",
@@ -121,6 +121,15 @@ export default async function LeaveSettingsPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* 國定假日同步 */}
+      <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <h2 className="text-lg font-medium mb-4">3. 國定假日同步</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          新的一年開始前，您可以透過此功能自動從政府開放資料庫（人事行政總處）拉取該年度的國定假日與補班日，無須手動輸入。
+        </p>
+        <SyncHolidaysForm />
       </div>
     </div>
   )

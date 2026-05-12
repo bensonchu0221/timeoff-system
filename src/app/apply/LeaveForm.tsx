@@ -111,7 +111,7 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           disabled={[{ dayOfWeek: [0, 6] }, ...publicHolidays]}
           modifiers={{ holiday: publicHolidays }}
           modifiersStyles={{
-            holiday: { color: '#C48F8B', fontWeight: 'bold' }
+            holiday: { color: '#ac2318', fontWeight: 'bold' }
           }}
           className="bg-white p-4 rounded-xl shadow-sm border border-gray-100"
           styles={{

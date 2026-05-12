@@ -132,6 +132,14 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
     throw new Error("Forbidden");
   }
 
+  if (status === "APPROVED") {
+    const year = request.startDate.getFullYear();
+    const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
+    if (request.durationDays > balance.remaining) {
+      throw new Error(`剩餘假別不夠！您申請了 ${request.durationDays} 天${request.leaveType.name}，但僅剩餘 ${balance.remaining} 天，請確認再請假。`);
+    }
+  }
+
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: { status }
