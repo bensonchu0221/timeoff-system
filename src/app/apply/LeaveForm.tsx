@@ -56,6 +56,9 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
   const duration = calculateFrontendDays(range?.from, range?.to);
   const selectedBalance = balances.find(b => b.id === leaveTypeId);
 
+  const isAnnual = selectedBalance?.name.includes("特休");
+  const showWarning = isAnnual && duration >= 3;
+
   // If user selects multiple days, force ALL_DAY
   if (duration > 1 && partOfDay !== "ALL_DAY") {
     setPartOfDay("ALL_DAY");
@@ -108,6 +111,8 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           onSelect={setRange}
           locale={zhTW}
           numberOfMonths={2}
+          fromDate={new Date(new Date().getFullYear(), 0, 1)}
+          toDate={new Date(new Date().getFullYear() + 1, 0, 31)}
           disabled={[{ dayOfWeek: [0, 6] }, ...publicHolidays]}
           modifiers={{ holiday: publicHolidays }}
           modifiersStyles={{
@@ -118,9 +123,14 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
             day_selected: { backgroundColor: '#7A9A8A', color: 'white' }
           }}
         />
-        <p className="mt-4 text-sm text-gray-500">
-          * 灰色日期為週末，紅色為國定假日（皆不計入請假天數）
-        </p>
+        <div className="mt-4 space-y-1 text-center">
+          <p className="text-sm text-gray-500">
+            * 灰色日期為週末，紅色為國定假日（皆不計入請假天數）
+          </p>
+          <p className="text-xs text-gray-400">
+            日曆範圍限定為 {new Date().getFullYear()} 年 1 月至 {new Date().getFullYear() + 1} 年 1 月
+          </p>
+        </div>
       </div>
 
       {/* Right side: Form Details */}
@@ -171,10 +181,22 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           />
         </div>
 
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-          <div className="flex justify-between items-center text-lg">
-            <span className="font-medium text-gray-700">預計扣除天數：</span>
-            <span className="font-bold text-[var(--brand-primary)] text-2xl">{duration} 天</span>
+        {showWarning && (
+          <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-md text-sm font-bold animate-pulse">
+            ⚠️ 連休三天以上的年假，請先與 Connie 確定後再填寫
+          </div>
+        )}
+
+        <div className="bg-gray-50 p-5 rounded-xl border border-gray-100 shadow-inner">
+          <div className="flex flex-col space-y-2">
+            <div className="flex justify-between items-center text-sm text-gray-500">
+              <span>預計扣除假別：</span>
+              <span className="font-medium text-gray-900">{selectedBalance?.name || "-"}</span>
+            </div>
+            <div className="flex justify-between items-end">
+              <span className="text-lg font-medium text-gray-700">預計扣除總天數：</span>
+              <span className="font-black text-[var(--brand-primary)] text-3xl">{duration} <span className="text-lg font-normal">天</span></span>
+            </div>
           </div>
         </div>
 

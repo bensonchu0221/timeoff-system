@@ -101,8 +101,8 @@ export async function cancelLeave(requestId: string) {
     throw new Error("Forbidden");
   }
 
-  if (request.status !== "PENDING") {
-    throw new Error("只能撤銷「待審核」狀態的假單！");
+  if (request.status !== "PENDING" && request.status !== "APPROVED") {
+    throw new Error("只能撤銷「待審核」或「已核准」狀態的假單！");
   }
 
   await prisma.leaveRequest.update({
@@ -138,10 +138,12 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
   if (status === "APPROVED") {
     const year = request.startDate.getFullYear();
     const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
-    if (request.durationDays > balance.remaining) {
-      throw new Error(`剩餘假別不夠！您申請了 ${request.durationDays} 天${request.leaveType.name}，但僅剩餘 ${balance.remaining} 天，請確認再請假。`);
+    const actualAvailable = balance.total - balance.used;
+    if (request.durationDays > actualAvailable) {
+      throw new Error(`剩餘假別不夠！該假別目前剩餘可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
     }
   }
+
 
   await prisma.leaveRequest.update({
     where: { id: requestId },

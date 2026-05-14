@@ -1,15 +1,14 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
-
-import { DragScrollContainer } from "@/app/components/DragScrollContainer"
-import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
+import { GanttChart } from "./GanttChart"
 
 export const metadata = {
   title: "團隊請假甘特圖 | Timeoff",
 }
 
-export default async function GanttPage() {
+export default async function GanttPage(props: { searchParams: Promise<{ month?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await auth()
   if (!session?.user) redirect("/")
 
@@ -22,7 +21,6 @@ export default async function GanttPage() {
   }
 
   // 決定要顯示誰的資料
-  // 如果是 Admin，看全公司；如果是 Manager，看下屬 + 自己
   const targetUsers = await prisma.user.findMany({
     where: user.role === "ADMIN" ? {} : {
       OR: [
@@ -37,12 +35,20 @@ export default async function GanttPage() {
 
   const userIds = targetUsers.map(u => u.id)
 
-  // 取得這些人最近前後一個月的假單 (已核准或審核中)
+  // 根據搜尋參數決定起始與結束日期
   const today = new Date()
-  const startDate = new Date(today)
-  startDate.setDate(today.getDate() - 30) // 一個月前
-  const endDate = new Date(today)
-  endDate.setDate(today.getDate() + 30)   // 一個月後
+  let centerDate = new Date(today)
+  
+  if (searchParams.month) {
+    const [year, month] = searchParams.month.split("-").map(Number)
+    centerDate = new Date(year, month - 1, 15) // 置中於該月中間
+  }
+
+  // 顯示前後各 45 天 (共約三個月)
+  const startDate = new Date(centerDate)
+  startDate.setDate(centerDate.getDate() - 45)
+  const endDate = new Date(centerDate)
+  endDate.setDate(centerDate.getDate() + 45)
 
   const leaves = await prisma.leaveRequest.findMany({
     where: {
@@ -67,96 +73,21 @@ export default async function GanttPage() {
     current.setDate(current.getDate() + 1)
   }
 
-  // Helper to check if a specific date falls within a leave request
-  const isDateInLeave = (date: Date, leaveStart: Date, leaveEnd: Date) => {
-    const d = new Date(date).setHours(0,0,0,0)
-    const s = new Date(leaveStart).setHours(0,0,0,0)
-    const e = new Date(leaveEnd).setHours(0,0,0,0)
-    return d >= s && d <= e
-  }
-
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">團隊請假甘特圖</h1>
         <p className="mt-1 text-sm text-gray-500">
-          顯示前後兩週的請假狀況，按住滑鼠左鍵可直接左右拖曳。
+          顯示三個月內的請假狀況。按住滑鼠左鍵可左右拖曳，或使用上方按鈕切換月份。
         </p>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-        <DragScrollContainer className="w-full">
-          <table className="min-w-max w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-10 bg-gray-100 px-3 py-2 border-b border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
-                  成員 (部門)
-                </th>
-                {days.map((day, idx) => {
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
-                  const isToday = day.toDateString() === today.toDateString()
-                  return (
-                    <th key={idx} className={`px-1 py-1 border-b border-gray-200 text-center text-xs ${isWeekend ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-yellow-50 border-x-yellow-200' : ''}`}>
-                      <div className="flex flex-col items-center leading-none">
-                        <span className="font-semibold text-xs">{day.getDate()}</span>
-                        <span className="text-[9px] mt-0.5">{['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</span>
-                      </div>
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {targetUsers.map(u => {
-                const userLeaves = leaves.filter(l => l.userId === u.id)
-                
-                return (
-                  <tr key={u.id} className="hover:bg-gray-50 group">
-                    <td className="sticky left-0 z-10 bg-white px-3 py-1.5 border-r border-gray-200 text-xs text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50">
-                      <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        <span className="font-medium">{u.name}</span>
-                        <span className="text-gray-400">({u.department || '未設定'})</span>
-                      </div>
-                    </td>
-                    
-                    {days.map((day, idx) => {
-                      const isWeekend = day.getDay() === 0 || day.getDay() === 6
-                      const isToday = day.toDateString() === today.toDateString()
-                      
-                      // Check if this user has a leave on this day
-                      const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
-                      
-                      let cellContent = null
-                      let bgColorClass = isWeekend ? 'bg-gray-50' : 'bg-white'
-                      
-                      if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
-
-                      if (leaveOnDay && !isWeekend) {
-                        const isPending = leaveOnDay.status === 'PENDING'
-                        bgColorClass = 'bg-white' // The cell component will render its own background via the element
-                        
-                        cellContent = (
-                          <GanttLeaveCell 
-                            leaveOnDay={leaveOnDay} 
-                            isPending={isPending} 
-                            userName={u.name || ''} 
-                          />
-                        )
-                      }
-
-                      return (
-                        <td key={idx} className={`border-r border-gray-100 p-0.5 min-w-[32px] ${bgColorClass}`}>
-                          {cellContent}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </DragScrollContainer>
-      </div>
+      <GanttChart 
+        days={days} 
+        targetUsers={targetUsers} 
+        leaves={leaves} 
+        today={today} 
+      />
     </div>
   )
 }

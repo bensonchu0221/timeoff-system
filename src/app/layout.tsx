@@ -4,6 +4,8 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { UserAuth } from "@/components/UserAuth";
 import { Toaster } from "react-hot-toast";
+import { auth } from "@/auth";
+import { HelpDrawer } from "./components/HelpDrawer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,12 +21,17 @@ export const metadata: Metadata = {
   title: "Time Off System",
   description: "Internal Time Off Management System",
 };
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+  const userRole = (session?.user as any)?.role || "EMPLOYEE";
+
+  const isAdmin = userRole === "ADMIN";
+  const isManager = userRole === "MANAGER";
+
   return (
     <html
       lang="zh-TW"
@@ -39,21 +46,34 @@ export default function RootLayout({
           }}
         />
         <Providers>
-          <header className="bg-[var(--brand-primary)] text-white shadow-md">
+          <header className="bg-[var(--brand-primary)] text-white shadow-md sticky top-0 z-30">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <a href="/" className="font-bold text-xl tracking-tight">Timeoff</a>
-                <nav className="hidden sm:flex space-x-4">
-                  <a href="/" className="text-white/80 hover:text-white transition">首頁</a>
-                  <a href="/apply" className="text-white/80 hover:text-white transition">請假</a>
-                  <a href="/admin/approvals" className="text-white/80 hover:text-white transition">審核</a>
-                  <a href="/admin/gantt" className="text-white/80 hover:text-white transition">團隊甘特圖</a>
-                  <a href="/admin/users" className="text-white/80 hover:text-white transition">員工管理</a>
-                  <a href="/admin/leave-settings" className="text-white/80 hover:text-white transition">假別設定</a>
-                  <a href="/admin/reports" className="text-white/80 hover:text-white transition">報表</a>
+                <nav className="hidden md:flex space-x-1">
+                  <a href="/" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">首頁</a>
+                  <a href="/apply" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">請假</a>
+                  
+                  {(isAdmin || isManager) && (
+                    <>
+                      <a href="/admin/approvals" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">審核</a>
+                      <a href="/admin/gantt" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">團隊甘特圖</a>
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    <>
+                      <a href="/admin/users" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">員工管理</a>
+                      <a href="/admin/leave-settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">假別設定</a>
+                      <a href="/admin/reports" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">報表</a>
+                      <a href="/admin/qa" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">QA 編輯</a>
+                    </>
+                  )}
                 </nav>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <HelpDrawer />
+                <div className="h-6 w-px bg-white/20 mx-1 hidden sm:block" />
                 <UserAuth />
               </div>
             </div>

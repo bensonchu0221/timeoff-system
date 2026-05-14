@@ -5,6 +5,7 @@ import { Calendar } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
 import { CancelLeaveButton } from "./components/CancelLeaveButton"
+import { BalanceSummary } from "./components/BalanceSummary"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -90,32 +91,8 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
         {/* 左側：剩餘天數列表 */}
-        <div className="lg:col-span-1 space-y-4">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">{year} 年假別額度</h2>
-          <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden divide-y divide-gray-100">
-            {balances.map(b => {
-              const percentage = b.total > 0 ? (b.remaining / b.total) * 100 : 0
-
-              return (
-                <div key={b.type} className="p-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-medium text-gray-700 text-sm">{b.type}</span>
-                    <div className="text-right text-sm">
-                      <span className="font-bold text-gray-900">{b.remaining}</span>
-                      <span className="text-gray-400 ml-1">/ {b.total} 天</span>
-                    </div>
-                  </div>
-                  {/* 莫蘭迪色系進度條，高度變低 */}
-                  <div className="w-full bg-[#E5E7E5] rounded-full h-1.5 mt-2">
-                    <div
-                      className="bg-[#7A9A8A] h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+        <div className="lg:col-span-1">
+          <BalanceSummary balances={balances} year={year} />
         </div>
 
         {/* 右側：請假紀錄 */}
@@ -161,7 +138,7 @@ export default async function DashboardPage() {
                               req.status === 'REJECTED' ? '已駁回' :
                                 req.status === 'CANCELLED' ? '已銷假' : req.status}
                         </span>
-                        {req.status === 'PENDING' && (
+                        {(req.status === 'PENDING' || req.status === 'APPROVED') && (
                           <CancelLeaveButton leaveId={req.id} />
                         )}
                       </td>
