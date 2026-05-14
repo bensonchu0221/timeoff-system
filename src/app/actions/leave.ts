@@ -76,10 +76,10 @@ export async function applyLeave(data: {
       const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
       const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
       await sendLeaveApplicationEmail(
-        manager.email, 
-        user?.name || "員工", 
-        leaveTypeObj?.name || "假別", 
-        durationDays, 
+        manager.email,
+        user?.name || "員工",
+        leaveTypeObj?.name || "假別",
+        durationDays,
         `${siteUrl}/admin/approvals`
       );
     }
@@ -93,7 +93,7 @@ export async function cancelLeave(requestId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId }});
+  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new Error("Request not found");
 
   const isAdmin = (session.user as any).role === "ADMIN";
@@ -119,16 +119,19 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const request = await prisma.leaveRequest.findUnique({ 
+  const request = await prisma.leaveRequest.findUnique({
     where: { id: requestId },
     include: { user: true, leaveType: true }
   });
   if (!request) throw new Error("Request not found");
 
-  const isManager = request.approverId === session.user.id;
-  const isAdmin = (session.user as any).role === "ADMIN";
+  // Fetch user from DB to ensure we have the latest role/permissions
+  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  
+  const isAssignedManager = request.approverId === session.user.id;
+  const hasPrivilegedRole = dbUser?.role === "ADMIN" || dbUser?.role === "MANAGER";
 
-  if (!isManager && !isAdmin) {
+  if (!isAssignedManager && !hasPrivilegedRole) {
     throw new Error("Forbidden");
   }
 
