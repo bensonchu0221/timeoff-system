@@ -124,6 +124,8 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           onSelect={setRange}
           locale={zhTW}
           numberOfMonths={2}
+          fromMonth={new Date(new Date().getFullYear(), 0)}
+          toMonth={new Date(new Date().getFullYear() + 1, 0)}
           fromDate={new Date(new Date().getFullYear(), 0, 1)}
           toDate={new Date(new Date().getFullYear() + 1, 0, 31)}
           disabled={[{ dayOfWeek: [0, 6] }, ...publicHolidays]}

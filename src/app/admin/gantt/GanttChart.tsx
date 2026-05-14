@@ -35,10 +35,13 @@ export function GanttChart({
   }, [days])
 
   const navigateMonth = (direction: number) => {
-    const currentMonth = searchParams.get("month") || new Date().toISOString().slice(0, 7)
+    const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+    const currentMonth = searchParams.get("month") || todayStr
     const [year, month] = currentMonth.split("-").map(Number)
     const newDate = new Date(year, month - 1 + direction, 1)
-    router.push(`/admin/gantt?month=${newDate.toISOString().slice(0, 7)}`)
+    const y = newDate.getFullYear()
+    const m = String(newDate.getMonth() + 1).padStart(2, '0')
+    router.push(`/admin/gantt?month=${y}-${m}`)
   }
 
   const goToToday = () => {
@@ -52,7 +55,8 @@ export function GanttChart({
     return d >= s && d <= e
   }
 
-  const currentMonthLabel = searchParams.get("month") || today.toISOString().slice(0, 7)
+  const currentMonthStr = searchParams.get("month") || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+  const currentMonthLabel = currentMonthStr
 
   return (
     <div className="space-y-4">
