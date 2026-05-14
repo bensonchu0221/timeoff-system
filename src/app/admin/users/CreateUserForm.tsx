@@ -45,6 +45,10 @@ export function CreateUserForm() {
           <option value="ADMIN">管理員 (ADMIN)</option>
         </select>
       </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700">到職日</label>
+        <input type="date" name="hireDate" className="mt-1 block w-40 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" defaultValue="2026-01-01" />
+      </div>
       <button 
         type="submit" 
         disabled={isPending}

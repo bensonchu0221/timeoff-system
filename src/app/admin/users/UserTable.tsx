@@ -2,7 +2,7 @@
 
 import { Role } from "@prisma/client"
 import { useTransition } from "react"
-import { updateUserRole, updateUserManager } from "./actions"
+import { updateUserRole, updateUserManager, updateUserHireDate } from "./actions"
 import toast from "react-hot-toast"
 
 type UserNode = {
@@ -11,6 +11,7 @@ type UserNode = {
   email: string
   role: Role
   managerId: string | null
+  hireDate: Date | null
 }
 
 export function UserTable({ users }: { users: UserNode[] }) {
@@ -38,6 +39,17 @@ export function UserTable({ users }: { users: UserNode[] }) {
     })
   }
 
+  const handleHireDateChange = (userId: string, dateStr: string) => {
+    startTransition(async () => {
+      try {
+        const res = await updateUserHireDate(userId, dateStr)
+        if (res?.success) toast.success(res.message)
+      } catch (err: any) {
+        toast.error(err.message || "更新失敗")
+      }
+    })
+  }
+
   // Potential managers (anyone who is MANAGER or ADMIN)
   const managers = users.filter(u => u.role === "MANAGER" || u.role === "ADMIN")
 
@@ -49,6 +61,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">角色權限</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">直屬主管</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -88,6 +101,15 @@ export function UserTable({ users }: { users: UserNode[] }) {
                       </option>
                     ))}
                 </select>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <input
+                  type="date"
+                  disabled={isPending}
+                  value={user.hireDate ? user.hireDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleHireDateChange(user.id, e.target.value)}
+                  className="mt-1 block w-full pl-3 pr-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm rounded-md bg-gray-50"
+                />
               </td>
             </tr>
           ))}

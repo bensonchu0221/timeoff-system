@@ -2,8 +2,9 @@ import { prisma } from "@/lib/db"
 import { UserTable } from "./UserTable"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { createUser } from "./actions"
+import { forceSetAllHireDates } from "./actions"
 import { CreateUserForm } from "./CreateUserForm"
+import { BulkActions } from "./BulkActions"
 
 export const metadata = {
   title: "層級與角色設定 | Timeoff",
@@ -29,6 +30,7 @@ export default async function AdminUsersPage() {
       email: true,
       role: true,
       managerId: true,
+      hireDate: true,
     },
     orderBy: {
       name: 'asc'
@@ -44,6 +46,7 @@ export default async function AdminUsersPage() {
             設定每位員工的系統權限角色，並指定其直屬主管（用於請假簽核）。
           </p>
         </div>
+        <BulkActions />
       </div>
       
       {/* 新增員工表單 */}

@@ -21,10 +21,20 @@ export function GanttChart({
   const searchParams = useSearchParams()
   const scrollRef = useRef<any>(null)
   const todayRef = useRef<HTMLTableHeaderCellElement>(null)
+  const firstOfMonthRef = useRef<HTMLTableHeaderCellElement>(null)
 
   useEffect(() => {
-    // Scroll to today on load
-    if (todayRef.current && scrollRef.current) {
+    // Scroll to 1st of month on load or month change
+    if (firstOfMonthRef.current && scrollRef.current) {
+      const container = scrollRef.current.getElement ? scrollRef.current.getElement() : scrollRef.current
+      if (container) {
+        // Find the offset of the first day of the selected month
+        const firstDayPos = firstOfMonthRef.current.offsetLeft
+        container.scrollLeft = firstDayPos - 20 // 20px padding
+      }
+    } else if (todayRef.current && scrollRef.current && !searchParams.get("month")) {
+      // If no month selected (viewing today's month) and 1st of month is not rendered?
+      // (Wait, days always includes the 1st of the month if we are in this month)
       const container = scrollRef.current.getElement ? scrollRef.current.getElement() : scrollRef.current
       if (container) {
         const todayPos = todayRef.current.offsetLeft
@@ -32,7 +42,7 @@ export function GanttChart({
         container.scrollLeft = todayPos - containerWidth / 2
       }
     }
-  }, [days])
+  }, [days, searchParams])
 
   const navigateMonth = (direction: number) => {
     const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
@@ -85,7 +95,7 @@ export function GanttChart({
         <div className="flex items-center gap-2">
           <button 
             onClick={goToToday}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--brand-primary)] text-white font-medium rounded-md hover:bg-[var(--brand-primary-dark)] transition shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-medium rounded-md hover:bg-gray-50 border border-gray-200 transition shadow-sm"
           >
             <Calendar className="w-4 h-4" />
             回今天
@@ -106,10 +116,16 @@ export function GanttChart({
                   const isToday = day.toDateString() === today.toDateString()
                   const isFirstOfMonth = day.getDate() === 1
                   
+                  const selectedMonth = currentMonthStr.split("-").map(Number)[1]
+                  const isTargetFirstOfMonth = day.getDate() === 1 && (day.getMonth() + 1) === selectedMonth
+
                   return (
                     <th 
                       key={idx} 
-                      ref={isToday ? todayRef : null}
+                      ref={(el) => {
+                        if (isToday) todayRef.current = el
+                        if (isTargetFirstOfMonth) firstOfMonthRef.current = el
+                      }}
                       className={`px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px] 
                         ${isWeekend ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} 
                         ${isToday ? 'bg-yellow-50 ring-2 ring-yellow-400 ring-inset z-10' : ''}

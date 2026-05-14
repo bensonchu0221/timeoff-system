@@ -60,7 +60,11 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
     return days;
   }
 
-  const duration = calculateFrontendDays(range?.from, range?.to);
+  // Calculate base days (always assuming ALL_DAY) to determine if we should show the half-day selector
+  const baseDays = calculateFrontendDays(range?.from, range?.to);
+  // Calculate actual duration (which might be 0.5) based on the user's selected partOfDay
+  const duration = (baseDays === 1 && partOfDay !== "ALL_DAY") ? 0.5 : baseDays;
+
   const selectedBalance = balances.find(b => b.id === leaveTypeId);
 
   const isAnnual = selectedBalance?.name.includes("特休");
@@ -165,7 +169,7 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
           </select>
         </div>
 
-        {duration === 1 && (
+        {baseDays === 1 && (
           <div>
             <label className="block text-sm font-medium text-gray-700">時段 (僅限單日請假)</label>
             <div className="mt-2 flex gap-4">
