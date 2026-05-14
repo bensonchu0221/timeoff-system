@@ -25,7 +25,12 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
   const [reason, setReason] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
 
-  const publicHolidays = holidayDates.map(d => new Date(d))
+  // holidayDates are now YYYY-MM-DD strings
+  const publicHolidays = holidayDates.map(d => {
+    // Parse as local midnight to match DayPicker's dates
+    const [year, month, day] = d.split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  });
 
   // Custom frontend calculation for days to show user before submit
   const calculateFrontendDays = (start?: Date, end?: Date) => {
@@ -39,7 +44,9 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
 
     while (current <= target) {
       const isWeekend = current.getDay() === 0 || current.getDay() === 6;
-      const isHoliday = publicHolidays.some(h => h.getTime() === current.getTime());
+      // Compare by date string to avoid timezone mismatch
+      const currentDateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+      const isHoliday = holidayDates.includes(currentDateStr);
       
       if (!isWeekend && !isHoliday) {
         days++;
@@ -85,18 +92,24 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
 
     startTransition(async () => {
       try {
-        await applyLeave({
+        const result = await applyLeave({
           leaveTypeId,
           startDate: range.from!.toISOString(),
           endDate: (range.to || range.from!).toISOString(),
           partOfDay,
           reason
         })
-        toast.success("送出假單成功！")
-        router.push("/")
+
+        if (result && result.error) {
+          toast.error(result.error)
+          setErrorMsg(result.error)
+        } else {
+          toast.success("送出假單成功！")
+          router.push("/")
+        }
       } catch (err: any) {
-        toast.error(err.message || "送出失敗，請稍後再試")
-        setErrorMsg(err.message || "送出失敗，請稍後再試")
+        toast.error("伺服器發生未知的錯誤，請稍後再試")
+        setErrorMsg("伺服器發生未知的錯誤，請稍後再試")
       }
     })
   }

@@ -15,13 +15,13 @@ export async function applyLeave(data: {
   reason?: string
 }) {
   const session = await auth();
-  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (!session?.user?.id) return { error: "Unauthorized" };
 
   const userId = session.user.id;
   const start = new Date(data.startDate);
   const end = new Date(data.endDate);
 
-  if (start > end) throw new Error("Start date cannot be after end date");
+  if (start > end) return { error: "Start date cannot be after end date" };
 
   // Check for overlapping leaves
   const overlappingLeaves = await prisma.leaveRequest.findMany({
@@ -39,17 +39,17 @@ export async function applyLeave(data: {
   });
 
   if (overlappingLeaves.length > 0) {
-    throw new Error("此時間區間您已經有申請過假單（待審核或已核准），請勿重複申請！");
+    return { error: "此時間區間您已經有申請過假單（待審核或已核准），請勿重複申請！" };
   }
 
   const durationDays = await calculateDurationDays(start, end, data.partOfDay);
-  if (durationDays === 0) throw new Error("Duration cannot be 0 days (e.g., trying to take leave only on a weekend/holiday)");
+  if (durationDays === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
   const year = start.getFullYear();
   const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
 
   if (durationDays > balance.remaining) {
-    throw new Error(`Insufficient leave balance. You are trying to take ${durationDays} days, but only have ${balance.remaining} days remaining.`);
+    return { error: `假數不足！您嘗試申請 ${durationDays} 天，但僅剩餘 ${balance.remaining} 天（包含審核中假單）。` };
   }
 
   // Get user's manager to assign approver

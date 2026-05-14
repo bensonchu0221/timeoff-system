@@ -48,7 +48,7 @@ export default async function ApplyLeavePage() {
   // isWorkDay = false means it's a public holiday (should be disabled or shown differently)
   const holidayDates = holidays
     .filter(h => !h.isWorkDay)
-    .map(h => h.date.toISOString())
+    .map(h => h.date.toISOString().split('T')[0])
 
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">

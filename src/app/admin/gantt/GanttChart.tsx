@@ -25,10 +25,12 @@ export function GanttChart({
   useEffect(() => {
     // Scroll to today on load
     if (todayRef.current && scrollRef.current) {
-      const container = scrollRef.current.getElement()
-      const todayPos = todayRef.current.offsetLeft
-      const containerWidth = container.offsetWidth
-      container.scrollLeft = todayPos - containerWidth / 2
+      const container = scrollRef.current.getElement ? scrollRef.current.getElement() : scrollRef.current
+      if (container) {
+        const todayPos = todayRef.current.offsetLeft
+        const containerWidth = container.offsetWidth
+        container.scrollLeft = todayPos - containerWidth / 2
+      }
     }
   }, [days])
 
