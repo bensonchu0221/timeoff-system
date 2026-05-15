@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
-import { formatTaipeiDate } from "@/lib/date-format"
+import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
 import ExcelJS from "exceljs"
 import JSZip from "jszip"
 
@@ -67,8 +67,8 @@ export async function GET(req: NextRequest) {
         where: {
           userId: user.id,
           startDate: {
-            gte: new Date(year, 0, 1),
-            lt: new Date(year + 1, 0, 1)
+            gte: startOfYearUTC(year),
+            lt: startOfYearUTC(year + 1)
           }
         },
         include: { leaveType: true },

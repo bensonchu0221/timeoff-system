@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
-import { formatTaipeiDate } from "@/lib/date-format"
+import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
 import { Calendar } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
@@ -60,8 +60,8 @@ export default async function DashboardPage() {
       userId: user.id,
       status: { not: "CANCELLED" },
       startDate: {
-        gte: new Date(year, 0, 1),
-        lt: new Date(year + 1, 0, 1)
+        gte: startOfYearUTC(year),
+        lt: startOfYearUTC(year + 1)
       }
     },
     select: { startDate: true, endDate: true, status: true }

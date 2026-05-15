@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { DayPicker, DateRange } from "react-day-picker"
 import { zhTW } from "date-fns/locale"
 import "react-day-picker/dist/style.css"
@@ -70,10 +70,12 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
   const isAnnual = selectedBalance?.name.includes("特休");
   const showWarning = isAnnual && duration >= 3;
 
-  // If user selects multiple days, force ALL_DAY
-  if (duration > 1 && partOfDay !== "ALL_DAY") {
-    setPartOfDay("ALL_DAY");
-  }
+  // 多日請假時自動強制為全天；放在 effect 中避免 render 期間 setState
+  useEffect(() => {
+    if (duration > 1 && partOfDay !== "ALL_DAY") {
+      setPartOfDay("ALL_DAY")
+    }
+  }, [duration, partOfDay])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

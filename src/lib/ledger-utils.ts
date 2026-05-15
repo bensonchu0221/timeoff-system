@@ -1,6 +1,6 @@
 import { prisma } from "./db"
 import { LeaveType } from "@prisma/client"
-import { formatTaipeiDate, formatTaipeiDateISO } from "./date-format"
+import { formatTaipeiDate, formatTaipeiDateISO, startOfYearUTC } from "./date-format"
 
 export type LedgerEvent = {
   id: string
@@ -35,7 +35,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
 
     // 首年比例折算（與 leave-utils.proRataFirstYear 同邏輯）
     const proRata = (fullQuota: number, y: number) => {
-      const hireDayOfYear = Math.floor((hireDate.getTime() - new Date(y, 0, 1).getTime()) / (1000 * 60 * 60 * 24))
+      const hireDayOfYear = Math.floor((hireDate.getTime() - startOfYearUTC(y).getTime()) / (1000 * 60 * 60 * 24))
       const daysInYear = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365
       const daysWorked = daysInYear - hireDayOfYear
       return Math.round((fullQuota * (daysWorked / daysInYear)) * 2) / 2
@@ -60,7 +60,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
       if (grantAmount > 0) {
         events.push({
           id: `grant-${y}`,
-          date: new Date(y, 0, 1),
+          date: startOfYearUTC(y),
           type: "GRANT",
           leaveTypeName: leaveType.name,
           description: `${y}年度額度發放`,
@@ -93,7 +93,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
     
     events.push({
       id: `grant-${currentYear}`,
-      date: new Date(currentYear, 0, 1),
+      date: startOfYearUTC(currentYear),
       type: "GRANT",
       leaveTypeName: leaveType.name,
       description: `${currentYear}年度額度發放`,
@@ -101,13 +101,13 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
     })
 
     const usages = await prisma.leaveRequest.findMany({
-      where: { 
-        userId, 
-        leaveTypeId, 
+      where: {
+        userId,
+        leaveTypeId,
         status: { in: ["APPROVED", "PENDING"] },
         startDate: {
-          gte: new Date(currentYear, 0, 1),
-          lt: new Date(currentYear + 1, 0, 1)
+          gte: startOfYearUTC(currentYear),
+          lt: startOfYearUTC(currentYear + 1)
         }
       }
     })

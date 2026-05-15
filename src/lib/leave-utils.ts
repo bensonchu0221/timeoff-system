@@ -1,5 +1,6 @@
 import { prisma } from "./db"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
+import { startOfYearUTC } from "./date-format"
 
 // 一律以 UTC 解讀日期，避免伺服器時區（UTC vs UTC+8）造成國定假日比對位移
 function formatUTCDate(d: Date): string {
@@ -59,7 +60,7 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
 // 例：6/1 到職、全年額度 14 → 大約 14 * (214/365) ≈ 8 天，四捨五入到 0.5
 function proRataFirstYear(fullQuota: number, hireDate: Date, year: number): number {
   const hireDayOfYear = Math.floor(
-    (hireDate.getTime() - new Date(year, 0, 1).getTime()) / (1000 * 60 * 60 * 24)
+    (hireDate.getTime() - startOfYearUTC(year).getTime()) / (1000 * 60 * 60 * 24)
   )
   const daysInYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 366 : 365
   const daysWorked = daysInYear - hireDayOfYear
@@ -130,7 +131,7 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
         userId,
         leaveTypeId,
         status: "APPROVED",
-        startDate: { lt: new Date(year + 1, 0, 1) }
+        startDate: { lt: startOfYearUTC(year + 1) }
       }
     });
 
@@ -140,7 +141,7 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
         userId,
         leaveTypeId,
         status: "PENDING",
-        startDate: { lt: new Date(year + 1, 0, 1) }
+        startDate: { lt: startOfYearUTC(year + 1) }
       }
     });
 
@@ -176,8 +177,8 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
       leaveTypeId,
       status: "APPROVED",
       startDate: {
-        gte: new Date(year, 0, 1),
-        lt: new Date(year + 1, 0, 1)
+        gte: startOfYearUTC(year),
+        lt: startOfYearUTC(year + 1)
       }
     }
   });
@@ -189,8 +190,8 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
       leaveTypeId,
       status: "PENDING",
       startDate: {
-        gte: new Date(year, 0, 1),
-        lt: new Date(year + 1, 0, 1)
+        gte: startOfYearUTC(year),
+        lt: startOfYearUTC(year + 1)
       }
     }
   });

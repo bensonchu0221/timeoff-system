@@ -1,6 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
+import { startOfYearUTC } from "@/lib/date-format"
 import { redirect } from "next/navigation"
 import { LeaveForm } from "./LeaveForm"
 import { BalanceSummary } from "@/app/components/BalanceSummary"
@@ -43,8 +44,8 @@ export default async function ApplyLeavePage() {
   const holidays = await prisma.holiday.findMany({
     where: {
       date: {
-        gte: new Date(year, 0, 1),
-        lt: new Date(year + 1, 0, 1)
+        gte: startOfYearUTC(year),
+        lt: startOfYearUTC(year + 1)
       }
     }
   })

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { calculateDurationDays, getUserLeaveBalance } from "@/lib/leave-utils"
+import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { sendLeaveApplicationEmail, sendLeaveResultEmail } from "@/lib/email"
@@ -96,13 +97,20 @@ export async function cancelLeave(requestId: string) {
   const request = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new Error("Request not found");
 
-  const isAdmin = (session.user as any).role === "ADMIN";
+  // 從 DB 抓最新 role，避免 session 中的 role 過時或被竄改
+  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
+  const isAdmin = dbUser?.role === "ADMIN";
   if (request.userId !== session.user.id && !isAdmin) {
     throw new Error("Forbidden");
   }
 
   if (request.status !== "PENDING" && request.status !== "APPROVED") {
     throw new Error("只能撤銷「待審核」或「已核准」狀態的假單！");
+  }
+
+  // 已過開始日的假單不可撤銷（員工實際已經請過，撤銷會憑空退回額度造成補請假漏洞）
+  if (request.startDate < todayStartUTCFromTaipei()) {
+    throw new Error("此假單的開始日期已過，無法撤銷！如需修正請聯絡管理員。");
   }
 
   await prisma.leaveRequest.update({
@@ -144,19 +152,26 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
     ) + "」，無法再次審核！");
   }
 
-  if (status === "APPROVED") {
-    const year = request.startDate.getFullYear();
-    const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
-    const actualAvailable = balance.total - balance.used;
-    if (request.durationDays > actualAvailable) {
-      throw new Error(`剩餘假別不夠！該假別目前剩餘可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
+  // 用 transaction 確保「讀取餘額 → 檢查額度 → 更新狀態」是原子操作，
+  // 避免兩位主管同時審核兩張單時各自讀到舊餘額，雙雙通過導致超支。
+  // updateMany 加上 status: PENDING 的條件，若已被別人改掉會回 count=0 並中止。
+  await prisma.$transaction(async (tx) => {
+    if (status === "APPROVED") {
+      const year = request.startDate.getFullYear();
+      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
+      const actualAvailable = balance.total - balance.used;
+      if (request.durationDays > actualAvailable) {
+        throw new Error(`剩餘假別不夠！該假別目前剩餘可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
+      }
     }
-  }
 
-
-  await prisma.leaveRequest.update({
-    where: { id: requestId },
-    data: { status }
+    const result = await tx.leaveRequest.updateMany({
+      where: { id: requestId, status: "PENDING" },
+      data: { status }
+    });
+    if (result.count === 0) {
+      throw new Error("此假單已被其他人處理過，請重新整理頁面！");
+    }
   });
 
   if (request.user?.email) {

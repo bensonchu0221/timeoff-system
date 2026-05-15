@@ -43,40 +43,6 @@ export async function updateUserGender(userId: string, gender: string) {
   return { success: true, message: "已更新性別" }
 }
 
-export async function forceSetAllHireDates() {
-  const result = await prisma.user.updateMany({
-    data: { hireDate: new Date('2026-01-01T00:00:00Z') }
-  })
-  revalidatePath("/admin/users")
-  return { success: true, message: `已將 ${result.count} 位使用者的到職日設為 2026/01/01` }
-}
-
-export async function forceSetMaleGenders() {
-  const maleEmails = [
-    "benson@popin.cc",
-    "daniel@popin.cc",
-    "jasper@broadciel.com",
-    "kalvin@broadciel.com",
-    "leo@popin.cc",
-    "ringokwcheung@gmail.com",
-    "ted@popin.cc"
-  ]
-
-  const result = await prisma.user.updateMany({
-    where: { email: { in: maleEmails } },
-    data: { gender: "MALE" }
-  })
-  
-  // Set others to FEMALE just in case
-  await prisma.user.updateMany({
-    where: { email: { notIn: maleEmails } },
-    data: { gender: "FEMALE" }
-  })
-
-  revalidatePath("/admin/users")
-  return { success: true, message: `已將 ${result.count} 位指定使用者的性別設為男性` }
-}
-
 export async function createUser(data: FormData) {
   const name = data.get("name") as string
   const email = data.get("email") as string
