@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { X, CalendarDays, TrendingUp, TrendingDown } from "lucide-react"
 import { fetchUserLeaveLedger } from "@/app/actions/ledger"
 import { LedgerEvent } from "@/lib/ledger-utils"
@@ -16,17 +16,31 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
   
   const [ledger, setLedger] = useState<LedgerEvent[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Use a ref to scroll to the bottom of the timeline
+  const timelineEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen && activeTypeId) {
       setIsLoading(true)
       fetchUserLeaveLedger(activeTypeId).then(res => {
-        if (res.success && res.data) setLedger(res.data)
-        else setLedger([])
+        if (res.success && res.data) {
+          setLedger(res.data)
+        } else {
+          setLedger([])
+        }
         setIsLoading(false)
       })
     }
   }, [isOpen, activeTypeId])
+
+  useEffect(() => {
+    if (isOpen && !isLoading && ledger.length > 0) {
+      setTimeout(() => {
+        timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
+    }
+  }, [isOpen, isLoading, ledger])
 
   return (
     <>
@@ -35,7 +49,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
         className="text-sm font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary-dark)] underline transition flex items-center gap-1"
       >
         <CalendarDays className="w-4 h-4" />
-        歷史紀錄 (存摺)
+        個人歷史假表
       </button>
 
       {/* Backdrop */}
@@ -56,7 +70,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-[var(--brand-primary)]" />
-            個人歷史假表存摺
+            個人歷史假表
           </h2>
           <button 
             onClick={() => setIsOpen(false)}
@@ -87,53 +101,75 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
           {isLoading ? (
             <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-primary)]"></div>
+              <span className="loading loading-spinner text-[var(--brand-primary)]"></span>
             </div>
           ) : ledger.length === 0 ? (
             <div className="text-center text-gray-500 mt-10">尚無任何歷史紀錄。</div>
           ) : (
-            <div className="relative border-l-2 border-gray-200 ml-4 space-y-6">
-              {ledger.map(event => {
+            <ul className="timeline timeline-vertical">
+              {/* Start element */}
+              <li>
+                <div className="timeline-start text-xs font-bold text-gray-400 mb-2">系統建檔 / 到職日</div>
+                <div className="timeline-middle">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-300"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                </div>
+                <hr className="bg-gray-200" />
+              </li>
+
+              {ledger.map((event, idx) => {
                 const isGrant = event.type === 'GRANT'
+                const isLast = idx === ledger.length - 1
                 return (
-                  <div key={event.id} className="relative pl-6">
-                    {/* Timeline dot */}
-                    <div className={`absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-2 border-white ${isGrant ? 'bg-[#7A9A8A]' : 'bg-[#C48F8B]'}`} />
+                  <li key={event.id}>
+                    <hr className="bg-gray-200" />
                     
-                    {/* Card */}
-                    <div className="bg-white border border-gray-100 p-4 rounded-lg shadow-sm hover:shadow-md transition">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs font-bold text-gray-400">
-                          {new Date(event.date).toLocaleDateString('zh-TW')}
-                        </span>
-                        <div className={`flex items-center gap-1 font-bold text-base ${isGrant ? 'text-[#7A9A8A]' : 'text-[#C48F8B]'}`}>
-                          {isGrant ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                          {isGrant ? '+' : ''}{event.amount} 天
+                    {isGrant ? (
+                      // Grant items on the left side
+                      <div className="timeline-start mb-6">
+                        <div className="bg-white border border-[#7A9A8A]/30 p-3 rounded-lg shadow-sm w-48 relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-1 h-full bg-[#7A9A8A]"></div>
+                          <div className="text-[10px] font-bold text-gray-400 mb-1">
+                            {new Date(event.date).toLocaleDateString('zh-TW')}
+                          </div>
+                          <div className="font-bold text-[#7A9A8A] flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" /> +{event.amount} 天
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">{event.description}</div>
+                          <div className="text-right text-[10px] text-gray-500 mt-2 pt-1 border-t border-gray-100">
+                            結餘: <span className="font-bold text-gray-900">{event.runningBalance}</span> 天
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="text-sm font-medium text-gray-800 mb-4">
-                        {event.description}
+                    ) : (
+                      // Usage items on the right side
+                      <div className="timeline-end mb-6">
+                        <div className="bg-white border border-[#C48F8B]/30 p-3 rounded-lg shadow-sm w-48 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-1 h-full bg-[#C48F8B]"></div>
+                          <div className="text-[10px] font-bold text-gray-400 mb-1 text-right">
+                            {new Date(event.date).toLocaleDateString('zh-TW')}
+                          </div>
+                          <div className="font-bold text-[#C48F8B] flex items-center justify-end gap-1">
+                            <TrendingDown className="w-3 h-3" /> {event.amount} 天
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1 text-right">{event.description}</div>
+                          <div className="text-left text-[10px] text-gray-500 mt-2 pt-1 border-t border-gray-100">
+                            結餘: <span className="font-bold text-gray-900">{event.runningBalance}</span> 天
+                          </div>
+                        </div>
                       </div>
-                      
-                      <div className="flex justify-end items-center pt-3 border-t border-gray-50 text-sm">
-                        <span className="text-gray-500 mr-2">結餘：</span>
-                        <span className="font-black text-gray-900 text-lg">
-                          {event.runningBalance} <span className="text-xs font-normal text-gray-500">天</span>
-                        </span>
-                      </div>
+                    )}
+                    
+                    <div className="timeline-middle">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${isGrant ? 'text-[#7A9A8A]' : 'text-[#C48F8B]'}`}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
                     </div>
-                  </div>
+                    {!isLast && <hr className="bg-gray-200" />}
+                  </li>
                 )
               })}
-              
-              {/* Start dot */}
-              <div className="relative pl-6 pt-4">
-                <div className="absolute -left-[9px] top-5 w-4 h-4 rounded-full border-2 border-white bg-gray-300" />
-                <div className="text-xs font-bold text-gray-400">系統建檔 / 到職日</div>
-              </div>
-            </div>
+            </ul>
           )}
+          {/* Invisible element to scroll to */}
+          <div ref={timelineEndRef} className="h-4"></div>
         </div>
       </div>
     </>

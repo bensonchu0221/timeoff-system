@@ -27,7 +27,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
 
   if (isAnnualLeave) {
     let lastKnownOverride: number | null = null;
-    for (let y = startYear; y <= currentYear + 1; y++) {
+    for (let y = startYear; y <= currentYear; y++) {
       const override = await prisma.userLeaveBalance.findUnique({
         where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: y } }
       })

@@ -13,24 +13,30 @@ export default async function ApplyLeavePage() {
   const session = await auth()
   if (!session?.user) redirect("/")
 
+  const user = await prisma.user.findUnique({ where: { id: session.user.id! } })
+  if (!user) redirect("/")
+
   const year = new Date().getFullYear()
   const leaveTypes = await prisma.leaveType.findMany({
     where: { isActive: true }
   })
   
   // Fetch available balances to pass to the client form for validation
+  // Filter out Menstrual Leave (生理假) if the user is MALE
   const balances = await Promise.all(
-    leaveTypes.map(async (lt) => {
-      const bal = await getUserLeaveBalance(session.user!.id!, lt.id, year)
-      return { 
-        id: lt.id,
-        name: lt.name,
-        type: lt.name,
-        total: bal.total,
-        used: bal.used,
-        remaining: bal.remaining
-      }
-    })
+    leaveTypes
+      .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
+      .map(async (lt) => {
+        const bal = await getUserLeaveBalance(user.id, lt.id, year)
+        return { 
+          id: lt.id,
+          name: lt.name,
+          type: lt.name,
+          total: bal.total,
+          used: bal.used,
+          remaining: bal.remaining
+        }
+      })
   )
 
   // Fetch holidays to pass to client to highlight/disable in calendar

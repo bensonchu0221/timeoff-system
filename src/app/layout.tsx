@@ -6,6 +6,7 @@ import { UserAuth } from "@/components/UserAuth";
 import { Toaster } from "react-hot-toast";
 import { auth } from "@/auth";
 import { HelpDrawer } from "./components/HelpDrawer";
+import { prisma } from "@/lib/db";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,11 +33,18 @@ export default async function RootLayout({
   const isAdmin = userRole === "ADMIN";
   const isManager = userRole === "MANAGER";
 
+  let pendingCount = 0;
+  if (session?.user?.id && (isAdmin || isManager)) {
+    pendingCount = await prisma.leaveRequest.count({
+      where: {
+        approverId: session.user.id,
+        status: "PENDING"
+      }
+    });
+  }
+
   return (
-    <html
-      lang="zh-TW"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="zh-TW" className={`${geistSans.variable} ${geistMono.variable} antialiased h-full bg-gray-50`} data-theme="light">
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
         <Toaster 
           position="top-right" 
@@ -56,7 +64,12 @@ export default async function RootLayout({
                   
                   {(isAdmin || isManager) && (
                     <>
-                      <a href="/admin/approvals" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">審核</a>
+                      <a href="/admin/approvals" className="indicator px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">
+                        審核
+                        {pendingCount > 0 && (
+                          <span className="indicator-item badge badge-secondary badge-xs bg-red-500 border-red-500"></span>
+                        )}
+                      </a>
                       <a href="/admin/gantt" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">團隊甘特圖</a>
                     </>
                   )}

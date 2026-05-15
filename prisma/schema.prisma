@@ -16,6 +16,11 @@ enum Role {
   ADMIN
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum LeaveStatus {
   PENDING
   APPROVED
@@ -38,6 +43,7 @@ model User {
   role           Role      @default(EMPLOYEE)
   department     String?
   hireDate       DateTime?
+  gender         Gender    @default(FEMALE)
   
   // NextAuth
   accounts       Account[]

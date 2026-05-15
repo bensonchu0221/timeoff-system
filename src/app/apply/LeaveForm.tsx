@@ -33,7 +33,7 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
   });
 
   // Custom frontend calculation for days to show user before submit
-  const calculateFrontendDays = (start?: Date, end?: Date) => {
+  const calculateFrontendDays = (start?: Date, end?: Date, ignorePartOfDay = false) => {
     if (!start) return 0;
     const endDate = end || start;
     let days = 0;
@@ -54,16 +54,16 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
       current.setDate(current.getDate() + 1);
     }
 
-    if (days === 1 && partOfDay !== "ALL_DAY") {
+    if (days === 1 && !ignorePartOfDay && partOfDay !== "ALL_DAY") {
       return 0.5;
     }
     return days;
   }
 
   // Calculate base days (always assuming ALL_DAY) to determine if we should show the half-day selector
-  const baseDays = calculateFrontendDays(range?.from, range?.to);
+  const baseDays = calculateFrontendDays(range?.from, range?.to, true);
   // Calculate actual duration (which might be 0.5) based on the user's selected partOfDay
-  const duration = (baseDays === 1 && partOfDay !== "ALL_DAY") ? 0.5 : baseDays;
+  const duration = calculateFrontendDays(range?.from, range?.to, false);
 
   const selectedBalance = balances.find(b => b.id === leaveTypeId);
 
@@ -91,6 +91,9 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
 
     if (selectedBalance && duration > selectedBalance.remaining) {
       setErrorMsg(`假數不足！您選了 ${duration} 天，但 ${selectedBalance.name} 只剩 ${selectedBalance.remaining} 天`)
+      // Show daisyui modal
+      const modal = document.getElementById('insufficient_balance_modal') as HTMLDialogElement
+      if (modal) modal.showModal()
       return
     }
 
@@ -154,85 +157,112 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
 
       {/* Right side: Form Details */}
       <div className="p-6 flex-1 space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">選擇假別</label>
-          <select
-            value={leaveTypeId}
-            onChange={(e) => setLeaveTypeId(e.target.value)}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm rounded-md"
-          >
-            {balances.map(b => (
-              <option key={b.id} value={b.id} disabled={b.remaining <= 0}>
-                {b.name} (剩餘 {b.remaining} 天)
-              </option>
-            ))}
-          </select>
-        </div>
+        <fieldset className="fieldset bg-base-100 border border-base-300 p-6 rounded-box shadow-sm">
+          <legend className="fieldset-legend font-bold text-lg px-2">填寫假單內容</legend>
 
-        {baseDays === 1 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700">時段 (僅限單日請假)</label>
-            <div className="mt-2 flex gap-4">
-              <label className="inline-flex items-center">
-                <input type="radio" className="text-[var(--brand-primary)]" name="partOfDay" value="ALL_DAY" checked={partOfDay === "ALL_DAY"} onChange={() => setPartOfDay("ALL_DAY")} />
-                <span className="ml-2">全天</span>
-              </label>
-              <label className="inline-flex items-center">
-                <input type="radio" className="text-[var(--brand-primary)]" name="partOfDay" value="MORNING" checked={partOfDay === "MORNING"} onChange={() => setPartOfDay("MORNING")} />
-                <span className="ml-2">上半天</span>
-              </label>
-              <label className="inline-flex items-center">
-                <input type="radio" className="text-[var(--brand-primary)]" name="partOfDay" value="AFTERNOON" checked={partOfDay === "AFTERNOON"} onChange={() => setPartOfDay("AFTERNOON")} />
-                <span className="ml-2">下半天</span>
-              </label>
+          <label className="fieldset-label font-medium mt-2">選擇假別</label>
+          <details className="dropdown w-full">
+            <summary className="btn w-full justify-between bg-white border-gray-300">
+              {selectedBalance ? `${selectedBalance.name} (剩餘 ${selectedBalance.remaining} 天)` : "請選擇假別"}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </summary>
+            <ul className="menu dropdown-content bg-base-100 rounded-box z-[1] w-full p-2 shadow-xl border border-gray-100 mt-1">
+              {balances.map(b => (
+                <li key={b.id}>
+                  <a 
+                    className={b.remaining <= 0 ? "opacity-50 pointer-events-none" : ""} 
+                    onClick={() => {
+                      if (b.remaining > 0) setLeaveTypeId(b.id);
+                      // Close dropdown
+                      const details = document.querySelector('details.dropdown[open]');
+                      if (details) details.removeAttribute('open');
+                    }}
+                  >
+                    {b.name} <span className="text-xs text-gray-500 ml-auto">剩餘 {b.remaining} 天</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+
+          {baseDays === 1 && (
+            <div className="mt-4">
+              <label className="fieldset-label font-medium">時段 (僅限單日請假)</label>
+              <div className="mt-2 flex gap-6 px-2">
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="partOfDay" value="ALL_DAY" checked={partOfDay === "ALL_DAY"} onChange={() => setPartOfDay("ALL_DAY")} />
+                  <span className="label-text">全天</span>
+                </label>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="partOfDay" value="MORNING" checked={partOfDay === "MORNING"} onChange={() => setPartOfDay("MORNING")} />
+                  <span className="label-text">上半天</span>
+                </label>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="partOfDay" value="AFTERNOON" checked={partOfDay === "AFTERNOON"} onChange={() => setPartOfDay("AFTERNOON")} />
+                  <span className="label-text">下半天</span>
+                </label>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">事由說明 (選填)</label>
+          <label className="fieldset-label font-medium mt-4">事由說明 (選填)</label>
           <textarea
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm"
+            className="textarea textarea-ghost w-full bg-gray-50 focus:bg-white"
             placeholder="請輸入請假事由..."
           />
-        </div>
 
-        {showWarning && (
-          <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-md text-sm font-bold animate-pulse">
-            ⚠️ 連休三天以上的年假，請先與 Connie 確定後再填寫
-          </div>
-        )}
-
-        <div className="bg-gray-50 p-5 rounded-xl border border-gray-100 shadow-inner">
-          <div className="flex flex-col space-y-2">
-            <div className="flex justify-between items-center text-sm text-gray-500">
-              <span>預計扣除假別：</span>
-              <span className="font-medium text-gray-900">{selectedBalance?.name || "-"}</span>
+          {showWarning && (
+            <div role="alert" className="alert alert-warning alert-outline mt-4 bg-yellow-50/50">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <span>連休三天以上的年假，請先與 Connie 確定後再填寫</span>
             </div>
-            <div className="flex justify-between items-end">
-              <span className="text-lg font-medium text-gray-700">預計扣除總天數：</span>
-              <span className="font-black text-[var(--brand-primary)] text-3xl">{duration} <span className="text-lg font-normal">天</span></span>
+          )}
+
+          <div className="stats shadow w-full mt-6 bg-gray-50 border border-gray-100">
+            <div className="stat">
+              <div className="stat-title text-xs">預計扣除假別</div>
+              <div className="stat-value text-lg mt-1">{selectedBalance?.name || "-"}</div>
+            </div>
+            
+            <div className="stat text-right">
+              <div className="stat-title text-xs">預計扣除總天數</div>
+              <div className="stat-value text-3xl text-[var(--brand-primary)]">
+                {duration} <span className="text-sm font-normal text-gray-500">天</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {errorMsg && (
-          <div className="p-3 bg-red-50 text-red-700 rounded text-sm font-medium">
-            {errorMsg}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={isPending || duration <= 0}
-          className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-dark)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--brand-primary)] disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          {isPending ? "處理中..." : "送出假單"}
-        </button>
+          <button
+            type="submit"
+            disabled={isPending || duration <= 0}
+            className="btn btn-primary w-full mt-6 text-white"
+          >
+            {isPending ? <span className="loading loading-spinner"></span> : "送出假單"}
+          </button>
+        </fieldset>
       </div>
+
+      {/* DaisyUI Modal for Insufficient Balance */}
+      <dialog id="insufficient_balance_modal" className="modal modal-bottom sm:modal-middle">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg text-red-600 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            餘額不足！
+          </h3>
+          <p className="py-4 text-gray-700">{errorMsg}</p>
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn">了解</button>
+            </form>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </form>
   )
 }
