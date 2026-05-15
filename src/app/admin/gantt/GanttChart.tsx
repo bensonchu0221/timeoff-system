@@ -162,22 +162,52 @@ export function GanttChart({
                       const isWeekend = day.getDay() === 0 || day.getDay() === 6
                       const isToday = day.toDateString() === today.toDateString()
                       const isFirstOfMonth = day.getDate() === 1
-                      
+
                       const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
-                      
+
+                      // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨週末時仍是方角，
+                      // 象徵「邏輯上還在同一張假單，只是被假日切開」
+                      // 延伸規則：相鄰那格也是同色塊才向外延伸 -1px 蓋過 td border；
+                      // 接到空白格時不延伸，避免色塊邊緣突出
+                      let roundedLeft = true
+                      let roundedRight = true
+                      let extendLeft = false
+                      let extendRight = false
+                      if (leaveOnDay && !isWeekend) {
+                        const dayMs = new Date(day).setHours(0, 0, 0, 0)
+                        const startMs = new Date(leaveOnDay.startDate).setHours(0, 0, 0, 0)
+                        const endMs = new Date(leaveOnDay.endDate).setHours(0, 0, 0, 0)
+                        roundedLeft = dayMs <= startMs
+                        roundedRight = dayMs >= endMs
+
+                        const prevDay = new Date(day)
+                        prevDay.setDate(day.getDate() - 1)
+                        const prevIsWeekend = prevDay.getDay() === 0 || prevDay.getDay() === 6
+                        extendLeft = !prevIsWeekend && isDateInLeave(prevDay, leaveOnDay.startDate, leaveOnDay.endDate)
+
+                        const nextDay = new Date(day)
+                        nextDay.setDate(day.getDate() + 1)
+                        const nextIsWeekend = nextDay.getDay() === 0 || nextDay.getDay() === 6
+                        extendRight = !nextIsWeekend && isDateInLeave(nextDay, leaveOnDay.startDate, leaveOnDay.endDate)
+                      }
+
                       let cellContent = null
                       let bgColorClass = isWeekend ? 'bg-gray-50/50' : 'bg-white'
-                      
+
                       if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
                       if (isFirstOfMonth) bgColorClass += ' border-l-2 border-l-gray-50'
 
                       if (leaveOnDay && !isWeekend) {
                         const isPending = leaveOnDay.status === 'PENDING'
                         cellContent = (
-                          <GanttLeaveCell 
-                            leaveOnDay={leaveOnDay} 
-                            isPending={isPending} 
-                            userName={u.name || ''} 
+                          <GanttLeaveCell
+                            leaveOnDay={leaveOnDay}
+                            isPending={isPending}
+                            userName={u.name || ''}
+                            roundedLeft={roundedLeft}
+                            roundedRight={roundedRight}
+                            extendLeft={extendLeft}
+                            extendRight={extendRight}
                           />
                         )
                       }

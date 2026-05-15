@@ -10,14 +10,22 @@ type LeaveWithRelations = LeaveRequest & {
   leaveType: LeaveType
 }
 
-export function GanttLeaveCell({ 
-  leaveOnDay, 
+export function GanttLeaveCell({
+  leaveOnDay,
   isPending,
-  userName
-}: { 
-  leaveOnDay: LeaveWithRelations, 
+  userName,
+  roundedLeft = true,
+  roundedRight = true,
+  extendLeft = false,
+  extendRight = false,
+}: {
+  leaveOnDay: LeaveWithRelations,
   isPending: boolean,
-  userName: string
+  userName: string,
+  roundedLeft?: boolean,
+  roundedRight?: boolean,
+  extendLeft?: boolean,
+  extendRight?: boolean,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isPendingAction, startTransition] = useTransition()
@@ -37,11 +45,21 @@ export function GanttLeaveCell({
   // 莫蘭迪色系：核准用 #7A9A8A，待審核用 #A9ADA9
   const bgColorClass = isPending ? 'bg-[#A9ADA9]' : 'bg-[#7A9A8A]'
 
+  // 圓角規則：只有假單真正端點（startDate/endDate）才用圓角；中間（含跨假日的兩側）為方角
+  // 延伸規則：相鄰那格是同色塊才向外延伸 -1px 蓋過 td border；接空白格則不延伸
+  const roundedClass =
+    roundedLeft && roundedRight ? "rounded-md" :
+    roundedLeft ? "rounded-l-md" :
+    roundedRight ? "rounded-r-md" :
+    ""
+  const leftClass = extendLeft ? "-left-px" : "left-0"
+  const rightClass = extendRight ? "-right-px" : "right-0"
+
   return (
     <>
       <div
         onClick={() => { if (isPending) setIsOpen(true) }}
-        className={`absolute inset-0 text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
+        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
         title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
       >
         {leaveOnDay.leaveType.name.substring(0,1)}
