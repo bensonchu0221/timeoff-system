@@ -26,7 +26,7 @@ export function CancelLeaveButton({ leaveId }: { leaveId: string }) {
     <button
       onClick={handleCancel}
       disabled={isPending}
-      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 font-medium ml-4"
+      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 font-medium ml-4 cursor-pointer"
     >
       {isPending ? "銷假中..." : "銷假"}
     </button>

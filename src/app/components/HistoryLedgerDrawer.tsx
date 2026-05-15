@@ -15,6 +15,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
   const [activeTypeId, setActiveTypeId] = useState<string>(annualLeave?.id || leaveTypes[0]?.id || "")
   
   const [ledger, setLedger] = useState<LedgerEvent[]>([])
+  const [hireDate, setHireDate] = useState<Date | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   
   // Use a ref to scroll to the bottom of the timeline
@@ -26,8 +27,10 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
       fetchUserLeaveLedger(activeTypeId).then(res => {
         if (res.success && res.data) {
           setLedger(res.data)
+          setHireDate(res.hireDate ? new Date(res.hireDate) : null)
         } else {
           setLedger([])
+          setHireDate(null)
         }
         setIsLoading(false)
       })
@@ -49,7 +52,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
         className="text-sm font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary-dark)] underline transition flex items-center gap-1"
       >
         <CalendarDays className="w-4 h-4" />
-        個人歷史假表
+        歷史假單
       </button>
 
       {/* Backdrop */}
@@ -70,7 +73,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-[var(--brand-primary)]" />
-            個人歷史假表
+            歷史假單
           </h2>
           <button 
             onClick={() => setIsOpen(false)}
@@ -109,7 +112,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
             <ul className="timeline timeline-vertical">
               {/* Start element */}
               <li>
-                <div className="timeline-start text-xs font-bold text-gray-400 mb-2">系統建檔 / 到職日</div>
+                <div className="timeline-start text-xs font-bold text-gray-400 mb-2">今日</div>
                 <div className="timeline-middle">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-300"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
                 </div>
@@ -118,7 +121,6 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
 
               {ledger.map((event, idx) => {
                 const isGrant = event.type === 'GRANT'
-                const isLast = idx === ledger.length - 1
                 return (
                   <li key={event.id}>
                     <hr className="bg-gray-200" />
@@ -162,10 +164,19 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                     <div className="timeline-middle">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${isGrant ? 'text-[#7A9A8A]' : 'text-[#C48F8B]'}`}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
                     </div>
-                    {!isLast && <hr className="bg-gray-200" />}
+                    <hr className="bg-gray-200" />
                   </li>
                 )
               })}
+
+              {/* End element */}
+              <li>
+                <hr className="bg-gray-200" />
+                <div className="timeline-middle">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-300"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                </div>
+                <div className="timeline-end text-xs font-bold text-gray-400 mt-2">系統建檔 / 到職日 {hireDate ? `(${hireDate.toLocaleDateString('zh-TW')})` : ''}</div>
+              </li>
             </ul>
           )}
           {/* Invisible element to scroll to */}
