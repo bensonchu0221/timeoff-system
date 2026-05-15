@@ -1,6 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
+import { formatTaipeiDate } from "@/lib/date-format"
 import { Calendar } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
@@ -127,7 +128,7 @@ export default async function DashboardPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-gray-900">
-                          {req.startDate.toLocaleDateString('zh-TW')} - {req.endDate.toLocaleDateString('zh-TW')}
+                          {formatTaipeiDate(req.startDate)} - {formatTaipeiDate(req.endDate)}
                         </div>
                         <div className="text-gray-500 text-xs">
                           {req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天'}

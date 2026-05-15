@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { reviewLeave } from "@/app/actions/leave"
 import toast from "react-hot-toast"
 import { LeaveRequest, LeaveType, User } from "@prisma/client"
+import { formatTaipeiDate } from "@/lib/date-format"
 
 type LeaveWithRelations = LeaveRequest & {
   leaveType: LeaveType
@@ -38,9 +39,9 @@ export function GanttLeaveCell({
 
   return (
     <>
-      <div 
+      <div
         onClick={() => { if (isPending) setIsOpen(true) }}
-        className={`w-full h-4 text-[9px] flex items-center justify-center text-white select-none shadow-sm ${bgColorClass} ${isPending ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
+        className={`absolute inset-0 text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
         title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
       >
         {leaveOnDay.leaveType.name.substring(0,1)}
@@ -58,7 +59,7 @@ export function GanttLeaveCell({
             <h3 className="text-lg font-medium text-gray-900">審核假單 - {userName}</h3>
             <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-100">
               <p className="mb-1"><strong>假別：</strong>{leaveOnDay.leaveType.name} ({leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'})</p>
-              <p className="mb-1"><strong>期間：</strong>{new Date(leaveOnDay.startDate).toLocaleDateString('zh-TW')} ~ {new Date(leaveOnDay.endDate).toLocaleDateString('zh-TW')}</p>
+              <p className="mb-1"><strong>期間：</strong>{formatTaipeiDate(leaveOnDay.startDate)} ~ {formatTaipeiDate(leaveOnDay.endDate)}</p>
               <p><strong>天數：</strong>{leaveOnDay.durationDays} 天</p>
               {leaveOnDay.reason && <p className="mt-2 text-gray-500 italic">"{leaveOnDay.reason}"</p>}
             </div>

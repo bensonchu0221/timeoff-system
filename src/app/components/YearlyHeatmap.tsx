@@ -2,6 +2,7 @@
 
 import { LeaveStatus } from "@prisma/client"
 import ScrollContainer from 'react-indiana-drag-scroll'
+import { formatTaipeiDate } from "@/lib/date-format"
 
 type DayStatus = LeaveStatus | "NONE" | "WEEKEND"
 
@@ -75,7 +76,7 @@ export function YearlyHeatmap({ leaves, year }: {
                 <div 
                   key={idx} 
                   className={`w-full aspect-square border-[0.5px] border-white ${getColor(day.status)}`}
-                  title={`${day.date.toLocaleDateString('zh-TW')} - ${day.status}`}
+                  title={`${formatTaipeiDate(day.date)} - ${day.status}`}
                 />
               ))}
             </div>

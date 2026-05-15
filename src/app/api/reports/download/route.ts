@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
+import { formatTaipeiDate } from "@/lib/date-format"
 import ExcelJS from "exceljs"
 import JSZip from "jszip"
 
@@ -78,8 +79,8 @@ export async function GET(req: NextRequest) {
         sheet.addRow([
           req.createdAt.toLocaleString('zh-TW'),
           req.leaveType.name,
-          req.startDate.toLocaleDateString('zh-TW'),
-          req.endDate.toLocaleDateString('zh-TW'),
+          formatTaipeiDate(req.startDate),
+          formatTaipeiDate(req.endDate),
           req.durationDays,
           req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天',
           req.reason || "",

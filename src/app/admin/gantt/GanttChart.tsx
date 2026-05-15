@@ -183,7 +183,7 @@ export function GanttChart({
                       }
 
                       return (
-                        <td key={idx} className={`border-r border-gray-100 p-0.5 min-w-[40px] relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
+                        <td key={idx} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
                           {cellContent}
                         </td>
                       )

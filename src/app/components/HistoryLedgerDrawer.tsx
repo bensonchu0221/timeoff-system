@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { formatTaipeiDate } from "@/lib/date-format"
 import { X, CalendarDays, TrendingUp, TrendingDown } from "lucide-react"
 import { fetchUserLeaveLedger } from "@/app/actions/ledger"
 import { LedgerEvent } from "@/lib/ledger-utils"
@@ -131,7 +132,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                         <div className="bg-white border border-[#7A9A8A]/30 p-3 rounded-lg shadow-sm w-48 relative overflow-hidden">
                           <div className="absolute top-0 left-0 w-1 h-full bg-[#7A9A8A]"></div>
                           <div className="text-[10px] font-bold text-gray-400 mb-1">
-                            {new Date(event.date).toLocaleDateString('zh-TW')}
+                            {formatTaipeiDate(event.date)}
                           </div>
                           <div className="font-bold text-[#7A9A8A] flex items-center gap-1">
                             <TrendingUp className="w-3 h-3" /> +{event.amount} 天
@@ -148,7 +149,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                         <div className="bg-white border border-[#C48F8B]/30 p-3 rounded-lg shadow-sm w-48 relative overflow-hidden">
                           <div className="absolute top-0 right-0 w-1 h-full bg-[#C48F8B]"></div>
                           <div className="text-[10px] font-bold text-gray-400 mb-1 text-right">
-                            {new Date(event.date).toLocaleDateString('zh-TW')}
+                            {formatTaipeiDate(event.date)}
                           </div>
                           <div className="font-bold text-[#C48F8B] flex items-center justify-end gap-1">
                             <TrendingDown className="w-3 h-3" /> {event.amount} 天
@@ -175,7 +176,7 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                 <div className="timeline-middle">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-300"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
                 </div>
-                <div className="timeline-end text-xs font-bold text-gray-400 mt-2">系統建檔 / 到職日 {hireDate ? `(${hireDate.toLocaleDateString('zh-TW')})` : ''}</div>
+                <div className="timeline-end text-xs font-bold text-gray-400 mt-2">系統建檔 / 到職日 {hireDate ? `(${formatTaipeiDate(hireDate)})` : ''}</div>
               </li>
             </ul>
           )}

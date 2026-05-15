@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { reviewLeave } from "@/app/actions/leave"
+import { formatTaipeiDate } from "@/lib/date-format"
 
 export const metadata = {
   title: "審核假單 | Timeoff",
@@ -86,7 +87,7 @@ export default async function ApprovalsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {req.startDate.toLocaleDateString('zh-TW')} - {req.endDate.toLocaleDateString('zh-TW')}
+                      {formatTaipeiDate(req.startDate)} - {formatTaipeiDate(req.endDate)}
                     </div>
                     <div className="text-xs text-gray-500">
                       時段: {req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天'}

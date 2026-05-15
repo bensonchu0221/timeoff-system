@@ -97,12 +97,16 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
       return
     }
 
+    // 用本地年月日輸出純日期字串，避免 toISOString() 把本地 00:00 轉成 UTC 後跨日
+    const toLocalDateStr = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
     startTransition(async () => {
       try {
         const result = await applyLeave({
           leaveTypeId,
-          startDate: range.from!.toISOString(),
-          endDate: (range.to || range.from!).toISOString(),
+          startDate: toLocalDateStr(range.from!),
+          endDate: toLocalDateStr(range.to || range.from!),
           partOfDay,
           reason
         })
