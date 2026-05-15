@@ -128,7 +128,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
                     checked={user.gender === "MALE"}
                     onChange={() => handleGenderChange(user.id, "MALE")}
                     disabled={isPending}
-                    className="join-item btn btn-sm"
+                    className="join-item btn btn-sm checked:bg-gray-300 checked:text-gray-800 checked:border-gray-400 hover:checked:bg-gray-400"
                   />
                   <input
                     type="radio"
@@ -138,7 +138,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
                     checked={user.gender === "FEMALE"}
                     onChange={() => handleGenderChange(user.id, "FEMALE")}
                     disabled={isPending}
-                    className="join-item btn btn-sm"
+                    className="join-item btn btn-sm checked:bg-gray-300 checked:text-gray-800 checked:border-gray-400 hover:checked:bg-gray-400"
                   />
                 </div>
               </td>

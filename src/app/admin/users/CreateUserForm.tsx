@@ -47,15 +47,22 @@ export function CreateUserForm() {
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">性別</label>
-        <div className="flex gap-4 mt-2">
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="radio" name="gender" value="MALE" className="radio radio-primary radio-sm bg-white" />
-            <span className="text-sm">男</span>
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="radio" name="gender" value="FEMALE" className="radio radio-primary radio-sm bg-white" defaultChecked />
-            <span className="text-sm">女</span>
-          </label>
+        <div className="join mt-2">
+          <input
+            type="radio"
+            name="gender"
+            value="MALE"
+            aria-label="男"
+            className="join-item btn btn-sm checked:bg-gray-300 checked:text-gray-800 checked:border-gray-400 hover:checked:bg-gray-400"
+          />
+          <input
+            type="radio"
+            name="gender"
+            value="FEMALE"
+            aria-label="女"
+            defaultChecked
+            className="join-item btn btn-sm checked:bg-gray-300 checked:text-gray-800 checked:border-gray-400 hover:checked:bg-gray-400"
+          />
         </div>
       </div>
       <div>
