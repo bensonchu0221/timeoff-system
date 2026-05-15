@@ -31,6 +31,7 @@ export default async function AdminUsersPage() {
       role: true,
       managerId: true,
       hireDate: true,
+      gender: true,
     },
     orderBy: {
       name: 'asc'

@@ -2,7 +2,7 @@
 
 import { Role } from "@prisma/client"
 import { useTransition } from "react"
-import { updateUserRole, updateUserManager, updateUserHireDate } from "./actions"
+import { updateUserRole, updateUserManager, updateUserHireDate, updateUserGender } from "./actions"
 import toast from "react-hot-toast"
 
 type UserNode = {
@@ -12,6 +12,7 @@ type UserNode = {
   role: Role
   managerId: string | null
   hireDate: Date | null
+  gender: string
 }
 
 export function UserTable({ users }: { users: UserNode[] }) {
@@ -50,6 +51,17 @@ export function UserTable({ users }: { users: UserNode[] }) {
     })
   }
 
+  const handleGenderChange = (userId: string, newGender: string) => {
+    startTransition(async () => {
+      try {
+        const res = await updateUserGender(userId, newGender)
+        if (res?.success) toast.success(res.message)
+      } catch (err: any) {
+        toast.error(err.message || "更新失敗")
+      }
+    })
+  }
+
   // Potential managers (anyone who is MANAGER or ADMIN)
   const managers = users.filter(u => u.role === "MANAGER" || u.role === "ADMIN")
 
@@ -60,6 +72,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
           <tr>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">角色權限</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">性別</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">直屬主管</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
           </tr>
@@ -84,6 +97,34 @@ export function UserTable({ users }: { users: UserNode[] }) {
                   <option value="MANAGER">主管</option>
                   <option value="ADMIN">管理員</option>
                 </select>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex gap-4 items-center h-full">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name={`gender-${user.id}`} 
+                      value="MALE" 
+                      checked={user.gender === "MALE"} 
+                      onChange={() => handleGenderChange(user.id, "MALE")}
+                      className="radio radio-primary radio-sm bg-white" 
+                      disabled={isPending}
+                    />
+                    <span className="text-sm">男</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name={`gender-${user.id}`} 
+                      value="FEMALE" 
+                      checked={user.gender === "FEMALE"} 
+                      onChange={() => handleGenderChange(user.id, "FEMALE")}
+                      className="radio radio-primary radio-sm bg-white" 
+                      disabled={isPending}
+                    />
+                    <span className="text-sm">女</span>
+                  </label>
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <select

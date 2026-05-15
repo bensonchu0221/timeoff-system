@@ -46,6 +46,19 @@ export function CreateUserForm() {
         </select>
       </div>
       <div>
+        <label className="block text-xs font-medium text-gray-700">性別</label>
+        <div className="flex gap-4 mt-2">
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="gender" value="MALE" className="radio radio-primary radio-sm bg-white" />
+            <span className="text-sm">男</span>
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="gender" value="FEMALE" className="radio radio-primary radio-sm bg-white" defaultChecked />
+            <span className="text-sm">女</span>
+          </label>
+        </div>
+      </div>
+      <div>
         <label className="block text-xs font-medium text-gray-700">到職日</label>
         <input type="date" name="hireDate" className="input input-bordered input-sm mt-1 w-40 bg-white" />
       </div>

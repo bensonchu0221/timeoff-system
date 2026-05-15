@@ -34,6 +34,15 @@ export async function updateUserHireDate(userId: string, hireDate: string) {
   return { success: true, message: "已更新到職日" }
 }
 
+export async function updateUserGender(userId: string, gender: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { gender: gender as any },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: "已更新性別" }
+}
+
 export async function forceSetAllHireDates() {
   const result = await prisma.user.updateMany({
     data: { hireDate: new Date('2026-01-01T00:00:00Z') }
