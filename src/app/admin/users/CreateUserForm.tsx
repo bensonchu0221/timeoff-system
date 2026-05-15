@@ -27,27 +27,27 @@ export function CreateUserForm() {
     <form onSubmit={handleSubmit} className="flex flex-wrap gap-4 items-end bg-gray-50 p-4 rounded-md">
       <div>
         <label className="block text-xs font-medium text-gray-700">姓名</label>
-        <input type="text" name="name" required className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" placeholder="王小明" />
+        <input type="text" name="name" required className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="王小明" />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">Email</label>
-        <input type="email" name="email" required className="mt-1 block w-48 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" placeholder="ming@popin.cc" />
+        <input type="email" name="email" required className="input input-bordered input-sm mt-1 w-48 bg-white" placeholder="ming@popin.cc" />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">部門 (選填)</label>
-        <input type="text" name="department" className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" placeholder="產品部" />
+        <input type="text" name="department" className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="產品部" />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">角色</label>
-        <select name="role" className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border">
-          <option value="EMPLOYEE">員工 (EMPLOYEE)</option>
-          <option value="MANAGER">主管 (MANAGER)</option>
-          <option value="ADMIN">管理員 (ADMIN)</option>
+        <select name="role" className="select select-bordered select-sm mt-1 w-32 bg-white">
+          <option value="EMPLOYEE">員工</option>
+          <option value="MANAGER">主管</option>
+          <option value="ADMIN">管理員</option>
         </select>
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">到職日</label>
-        <input type="date" name="hireDate" className="mt-1 block w-40 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" defaultValue="2026-01-01" />
+        <input type="date" name="hireDate" className="input input-bordered input-sm mt-1 w-40 bg-white" />
       </div>
       <button 
         type="submit" 

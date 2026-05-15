@@ -30,7 +30,7 @@ export function GanttChart({
       if (container) {
         // Find the offset of the first day of the selected month
         const firstDayPos = firstOfMonthRef.current.offsetLeft
-        container.scrollLeft = firstDayPos - 20 // 20px padding
+        container.scrollLeft = firstDayPos - 212 // offset the 192px sticky column + 20px padding
       }
     } else if (todayRef.current && scrollRef.current && !searchParams.get("month")) {
       // If no month selected (viewing today's month) and 1st of month is not rendered?

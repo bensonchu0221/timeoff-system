@@ -78,11 +78,11 @@ export function UserTable({ users }: { users: UserNode[] }) {
                   disabled={isPending}
                   value={user.role}
                   onChange={(e) => handleRoleChange(user.id, e.target.value as Role)}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm rounded-md bg-gray-50"
+                  className="select select-bordered select-sm w-full bg-gray-50"
                 >
-                  <option value="EMPLOYEE">員工 (Employee)</option>
-                  <option value="MANAGER">主管 (Manager)</option>
-                  <option value="ADMIN">管理員 (Admin)</option>
+                  <option value="EMPLOYEE">員工</option>
+                  <option value="MANAGER">主管</option>
+                  <option value="ADMIN">管理員</option>
                 </select>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
@@ -90,7 +90,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
                   disabled={isPending}
                   value={user.managerId || "none"}
                   onChange={(e) => handleManagerChange(user.id, e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm rounded-md bg-gray-50"
+                  className="select select-bordered select-sm w-full bg-gray-50"
                 >
                   <option value="none">無直屬主管</option>
                   {managers
@@ -108,7 +108,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
                   disabled={isPending}
                   value={user.hireDate ? user.hireDate.toISOString().split('T')[0] : ''}
                   onChange={(e) => handleHireDateChange(user.id, e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--brand-primary)] focus:border-[var(--brand-primary)] sm:text-sm rounded-md bg-gray-50"
+                  className="input input-bordered input-sm w-full bg-gray-50"
                 />
               </td>
             </tr>

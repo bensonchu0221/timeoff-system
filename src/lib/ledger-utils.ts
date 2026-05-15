@@ -110,7 +110,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
         date: req.startDate,
         type: "USAGE",
         leaveTypeName: leaveType.name,
-        description: `請假 (${req.startDate.toLocaleDateString('en-CA')}~${req.endDate.toLocaleDateString('en-CA')}) ${req.status === 'PENDING' ? '[待審核]' : ''}`,
+        description: `請假\n${req.startDate.toLocaleDateString('zh-TW')} ~ ${req.endDate.toLocaleDateString('zh-TW')} ${req.status === 'PENDING' ? '[待審核]' : ''}`,
         amount: -req.durationDays
       })
     }

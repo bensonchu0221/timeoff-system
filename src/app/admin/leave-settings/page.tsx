@@ -51,8 +51,16 @@ export default async function LeaveSettingsPage() {
         </p>
       </div>
 
+      <div className="sticky top-[64px] z-40 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-sm border border-gray-200 mb-6 flex justify-center">
+        <ul className="menu menu-horizontal bg-base-200 rounded-box p-1">
+          <li><a href="#section-types" className="font-medium">1. 假別管理</a></li>
+          <li><a href="#section-balances" className="font-medium">2. 額度覆寫</a></li>
+          <li><a href="#section-sync" className="font-medium">3. 國定假日同步</a></li>
+        </ul>
+      </div>
+
       {/* 全域假別管理 */}
-      <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+      <div id="section-types" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
         <h2 className="text-lg font-medium mb-4">1. 全域假別管理</h2>
         
         <CreateLeaveTypeForm />
@@ -82,7 +90,7 @@ export default async function LeaveSettingsPage() {
       </div>
 
       {/* 個人額度調整 */}
-      <div className="bg-white rounded-lg shadow border border-gray-200 p-6 overflow-x-auto">
+      <div id="section-balances" className="bg-white rounded-lg shadow border border-gray-200 p-6 overflow-x-auto scroll-mt-32">
         <h2 className="text-lg font-medium mb-4">2. 員工假數額度覆寫 ({year}年)</h2>
         <p className="text-sm text-gray-500 mb-4">
           如果您手動修改了「全年總天數」，系統會自動扣除該員工「已請天數」來算出「目前可請的剩餘天數」。
@@ -124,7 +132,7 @@ export default async function LeaveSettingsPage() {
       </div>
 
       {/* 國定假日同步 */}
-      <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+      <div id="section-sync" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
         <h2 className="text-lg font-medium mb-4">3. 國定假日同步</h2>
         <p className="text-sm text-gray-500 mb-4">
           新的一年開始前，您可以透過此功能自動從政府開放資料庫（人事行政總處）拉取該年度的國定假日與補班日，無須手動輸入。

@@ -101,7 +101,11 @@ export default async function DashboardPage() {
           <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-100 h-full">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
               <h2 className="text-lg font-medium text-gray-900">最近休假紀錄</h2>
-              <HistoryLedgerDrawer leaveTypes={leaveTypes.map(lt => ({ id: lt.id, name: lt.name }))} />
+              <HistoryLedgerDrawer leaveTypes={
+                leaveTypes
+                  .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
+                  .map(lt => ({ id: lt.id, name: lt.name }))
+              } />
             </div>
             {history.length === 0 ? (
               <div className="p-12 text-center text-gray-500 text-sm">目前尚無請假紀錄</div>
