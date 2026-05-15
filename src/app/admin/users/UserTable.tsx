@@ -119,31 +119,27 @@ export function UserTable({ users }: { users: UserNode[] }) {
                 </select>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex gap-4 items-center h-full">
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name={`gender-${user.id}`} 
-                      value="MALE" 
-                      checked={user.gender === "MALE"} 
-                      onChange={() => handleGenderChange(user.id, "MALE")}
-                      className="radio radio-primary radio-sm bg-white" 
-                      disabled={isPending}
-                    />
-                    <span className="text-sm">男</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name={`gender-${user.id}`} 
-                      value="FEMALE" 
-                      checked={user.gender === "FEMALE"} 
-                      onChange={() => handleGenderChange(user.id, "FEMALE")}
-                      className="radio radio-primary radio-sm bg-white" 
-                      disabled={isPending}
-                    />
-                    <span className="text-sm">女</span>
-                  </label>
+                <div className="join">
+                  <input
+                    type="radio"
+                    name={`gender-${user.id}`}
+                    value="MALE"
+                    aria-label="男"
+                    checked={user.gender === "MALE"}
+                    onChange={() => handleGenderChange(user.id, "MALE")}
+                    disabled={isPending}
+                    className="join-item btn btn-sm"
+                  />
+                  <input
+                    type="radio"
+                    name={`gender-${user.id}`}
+                    value="FEMALE"
+                    aria-label="女"
+                    checked={user.gender === "FEMALE"}
+                    onChange={() => handleGenderChange(user.id, "FEMALE")}
+                    disabled={isPending}
+                    className="join-item btn btn-sm"
+                  />
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
