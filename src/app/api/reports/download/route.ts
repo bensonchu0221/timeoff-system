@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid year parameter" }, { status: 400 })
     }
 
-    const users = await prisma.user.findMany({ orderBy: { name: "asc" } })
+    // 報表只列在職員工，離職者另需手動查詢歷史
+    const users = await prisma.user.findMany({ where: { terminatedDate: null }, orderBy: { name: "asc" } })
     const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
 
     const zip = new JSZip()

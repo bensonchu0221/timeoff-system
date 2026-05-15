@@ -34,6 +34,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return "/unauthorized"
         }
 
+        // 離職員工不可再登入系統
+        if (dbUser.terminatedDate) {
+          return "/unauthorized"
+        }
+
         return true;
       }
       return true;

@@ -20,13 +20,16 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
     return <div className="p-6 text-red-500">權限不足：您必須是主管或管理員。</div>
   }
 
-  // 決定要顯示誰的資料
+  // 決定要顯示誰的資料；離職者不出現在甘特圖
   const targetUsers = await prisma.user.findMany({
-    where: user.role === "ADMIN" ? {} : {
-      OR: [
-        { id: user.id },
-        { managerId: user.id }
-      ]
+    where: {
+      terminatedDate: null,
+      ...(user.role === "ADMIN" ? {} : {
+        OR: [
+          { id: user.id },
+          { managerId: user.id }
+        ]
+      })
     },
     orderBy: {
       department: 'asc'

@@ -21,6 +21,7 @@ export default async function AdminUsersPage() {
     // redirect("/")
   }
 
+  // admin 頁面同時顯示在職與離職者（離職者會被前端打灰並標籤），方便 HR 還能進行設定/復職
   const users = await prisma.user.findMany({
     select: {
       id: true,
@@ -30,10 +31,12 @@ export default async function AdminUsersPage() {
       managerId: true,
       hireDate: true,
       gender: true,
+      terminatedDate: true,
     },
-    orderBy: {
-      name: 'asc'
-    }
+    orderBy: [
+      { terminatedDate: 'asc' }, // 在職在上（null 排前）
+      { name: 'asc' }
+    ]
   })
 
   return (

@@ -26,7 +26,8 @@ export default async function LeaveSettingsPage() {
     where: { isActive: true },
     orderBy: { createdAt: 'asc' }
   })
-  const users = await prisma.user.findMany({ orderBy: { name: "asc" } })
+  // 額度設定只列在職員工，避免畫面被歷年離職者塞滿
+  const users = await prisma.user.findMany({ where: { terminatedDate: null }, orderBy: { name: "asc" } })
   const year = new Date().getFullYear()
 
   // 取得每個使用者的假別額度明細

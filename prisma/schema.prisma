@@ -44,7 +44,9 @@ model User {
   department     String?
   hireDate       DateTime?
   gender         Gender    @default(FEMALE)
-  
+  // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
+  terminatedDate DateTime?
+
   // NextAuth
   accounts       Account[]
   sessions       Session[]

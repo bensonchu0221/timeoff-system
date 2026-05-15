@@ -43,6 +43,37 @@ export async function updateUserGender(userId: string, gender: string) {
   return { success: true, message: "已更新性別" }
 }
 
+export async function updateUserTerminatedDate(userId: string, terminatedDate: string) {
+  // 清空 = 復職
+  if (!terminatedDate) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { terminatedDate: null },
+    })
+    revalidatePath("/admin/users")
+    return { success: true, message: "已標記為在職" }
+  }
+
+  // 標記離職前，必須先把該員工底下的所有下屬重指派；否則下屬會卡死無法簽核
+  const subordinates = await prisma.user.findMany({
+    where: { managerId: userId, terminatedDate: null },
+    select: { id: true, name: true, email: true },
+  })
+  if (subordinates.length > 0) {
+    const names = subordinates.map((s) => s.name || s.email).join("、")
+    throw new Error(
+      `此員工底下還有 ${subordinates.length} 位在職下屬（${names}），請先將下屬的直屬主管改派給其他人再標記離職。`
+    )
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { terminatedDate: new Date(terminatedDate) },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: "已標記離職" }
+}
+
 export async function createUser(data: FormData) {
   const name = data.get("name") as string
   const email = data.get("email") as string
