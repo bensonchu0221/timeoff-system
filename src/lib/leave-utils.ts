@@ -1,6 +1,14 @@
 import { prisma } from "./db"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 
+// 一律以 UTC 解讀日期，避免伺服器時區（UTC vs UTC+8）造成國定假日比對位移
+function formatUTCDate(d: Date): string {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(d.getUTCDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
 export async function calculateDurationDays(startDate: Date, endDate: Date, partOfDay: PartOfDay): Promise<number> {
   // Get all holidays between startDate and endDate
   const holidays = await prisma.holiday.findMany({
@@ -12,17 +20,17 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
     }
   });
 
-  const holidayMap = new Map(holidays.map(h => [h.date.toISOString().split('T')[0], h.isWorkDay]));
+  const holidayMap = new Map(holidays.map(h => [formatUTCDate(h.date), h.isWorkDay]));
 
   let workDays = 0;
   let currentDate = new Date(startDate);
-  currentDate.setHours(0, 0, 0, 0);
+  currentDate.setUTCHours(0, 0, 0, 0);
   const end = new Date(endDate);
-  end.setHours(0, 0, 0, 0);
+  end.setUTCHours(0, 0, 0, 0);
 
   while (currentDate <= end) {
-    const dateStr = currentDate.toISOString().split('T')[0];
-    const dayOfWeek = currentDate.getDay(); // 0 is Sunday, 6 is Saturday
+    const dateStr = formatUTCDate(currentDate);
+    const dayOfWeek = currentDate.getUTCDay(); // 0 is Sunday, 6 is Saturday
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
     let isWorkDayThisDay = !isWeekend;
@@ -35,16 +43,27 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
       workDays++;
     }
 
-    currentDate.setDate(currentDate.getDate() + 1);
+    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
   }
 
   if (workDays === 0) return 0;
-  
+
   if (partOfDay !== "ALL_DAY" && workDays === 1) {
     return 0.5;
   }
 
   return workDays;
+}
+
+// 將完整年度額度依到職日比例折算（首年使用）
+// 例：6/1 到職、全年額度 14 → 大約 14 * (214/365) ≈ 8 天，四捨五入到 0.5
+function proRataFirstYear(fullQuota: number, hireDate: Date, year: number): number {
+  const hireDayOfYear = Math.floor(
+    (hireDate.getTime() - new Date(year, 0, 1).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  const daysInYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 366 : 365
+  const daysWorked = daysInYear - hireDayOfYear
+  return Math.round((fullQuota * (daysWorked / daysInYear)) * 2) / 2
 }
 
 export async function getUserLeaveBalance(userId: string, leaveTypeId: string, year: number): Promise<{ total: number, used: number, pending: number, remaining: number }> {
@@ -57,10 +76,16 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
   if (isAnnualLeave) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("User not found");
-    
-    const hireDate = user.hireDate || user.createdAt;
-    const startYear = hireDate.getFullYear();
-    
+
+    // 特休一定要有到職日才能算（不可 fallback 到 createdAt，避免老員工被誤算）
+    if (!user.hireDate) {
+      return { total: 0, used: 0, pending: 0, remaining: 0 };
+    }
+
+    const hireDate = user.hireDate;
+    const hireYear = hireDate.getFullYear();
+    const startYear = hireYear;
+
     let totalQuotaCumulative = 0;
     let lastKnownOverride: number | null = null;
 
@@ -77,24 +102,22 @@ export async function getUserLeaveBalance(userId: string, leaveTypeId: string, y
       });
 
       if (override) {
-        totalQuotaCumulative += override.totalQuota;
+        // override.totalQuota 代表「個人完整年度應有天數」
+        // 若該年正好是到職年，由系統自動套首年比例；sticky 仍以原值往後沿用
+        let yearQuota = override.totalQuota;
+        if (y === hireYear) {
+          yearQuota = proRataFirstYear(override.totalQuota, hireDate, y);
+        }
+        totalQuotaCumulative += yearQuota;
         lastKnownOverride = override.totalQuota;
       } else if (lastKnownOverride !== null) {
-        // Sticky logic: use the last set personal quota
+        // Sticky：沿用最近一次設定的個人完整額度（已過到職年，無需再比例）
         totalQuotaCumulative += lastKnownOverride;
       } else {
-        // Default logic
+        // Default：未曾設定個人額度，使用 LeaveType.defaultDays
         let yearQuota = leaveType.defaultDays;
-        
-        // Handle proportional for first year
-        if (y === startYear && user.hireDate) {
-          const hireYear = user.hireDate.getFullYear();
-          if (hireYear === y) {
-            const hireDayOfYear = Math.floor((user.hireDate.getTime() - new Date(y, 0, 1).getTime()) / (1000 * 60 * 60 * 24));
-            const daysInYear = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365;
-            const daysWorked = daysInYear - hireDayOfYear;
-            yearQuota = Math.round((yearQuota * (daysWorked / daysInYear)) * 2) / 2;
-          }
+        if (y === hireYear) {
+          yearQuota = proRataFirstYear(yearQuota, hireDate, y);
         }
         totalQuotaCumulative += yearQuota;
       }

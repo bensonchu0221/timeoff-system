@@ -19,14 +19,28 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
   if (!user) throw new Error("User not found")
 
   const isAnnualLeave = leaveType.name.includes("特休") || leaveType.name.toLowerCase().includes("annual")
-  const hireDate = user.hireDate || user.createdAt
-  const startYear = hireDate.getFullYear()
   const currentYear = new Date().getFullYear()
 
   let events: Omit<LedgerEvent, "runningBalance">[] = []
 
   if (isAnnualLeave) {
-    let lastKnownOverride: number | null = null;
+    // 特休必須有到職日才能畫 ledger
+    if (!user.hireDate) {
+      return []
+    }
+    const hireDate = user.hireDate
+    const hireYear = hireDate.getFullYear()
+    const startYear = hireYear
+
+    // 首年比例折算（與 leave-utils.proRataFirstYear 同邏輯）
+    const proRata = (fullQuota: number, y: number) => {
+      const hireDayOfYear = Math.floor((hireDate.getTime() - new Date(y, 0, 1).getTime()) / (1000 * 60 * 60 * 24))
+      const daysInYear = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365
+      const daysWorked = daysInYear - hireDayOfYear
+      return Math.round((fullQuota * (daysWorked / daysInYear)) * 2) / 2
+    }
+
+    let lastKnownOverride: number | null = null
     for (let y = startYear; y <= currentYear; y++) {
       const override = await prisma.userLeaveBalance.findUnique({
         where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: y } }
@@ -34,19 +48,12 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
 
       let grantAmount = 0
       if (override) {
-        grantAmount = override.totalQuota
+        grantAmount = y === hireYear ? proRata(override.totalQuota, y) : override.totalQuota
         lastKnownOverride = override.totalQuota
       } else if (lastKnownOverride !== null) {
         grantAmount = lastKnownOverride
       } else {
-        grantAmount = leaveType.defaultDays
-        // Proportional logic for the first year
-        if (y === startYear) {
-          const hireDayOfYear = Math.floor((hireDate.getTime() - new Date(y, 0, 1).getTime()) / (1000 * 60 * 60 * 24))
-          const daysInYear = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365
-          const daysWorked = daysInYear - hireDayOfYear
-          grantAmount = Math.round((grantAmount * (daysWorked / daysInYear)) * 2) / 2
-        }
+        grantAmount = y === hireYear ? proRata(leaveType.defaultDays, y) : leaveType.defaultDays
       }
 
       if (grantAmount > 0) {

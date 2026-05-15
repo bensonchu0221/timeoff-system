@@ -135,6 +135,15 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
     throw new Error("Forbidden");
   }
 
+  // 只能審核「待審核」狀態的假單，避免對已核准/已駁回/已銷假的單再次審核
+  if (request.status !== "PENDING") {
+    throw new Error("此假單目前狀態為「" + (
+      request.status === "APPROVED" ? "已核准" :
+      request.status === "REJECTED" ? "已駁回" :
+      request.status === "CANCELLED" ? "已銷假" : request.status
+    ) + "」，無法再次審核！");
+  }
+
   if (status === "APPROVED") {
     const year = request.startDate.getFullYear();
     const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
