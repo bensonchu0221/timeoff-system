@@ -78,8 +78,8 @@ export function UserTable({ users }: { users: UserNode[] }) {
   const managers = users.filter(u => (u.role === "MANAGER" || u.role === "ADMIN") && !u.terminatedDate)
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-      <table className="min-w-full divide-y divide-gray-200 text-sm">
+    <div className="bg-white rounded-lg shadow overflow-x-auto border border-gray-200">
+      <table className="min-w-max w-full divide-y divide-gray-200 text-sm">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
