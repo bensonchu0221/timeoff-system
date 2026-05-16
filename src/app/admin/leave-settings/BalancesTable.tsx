@@ -49,7 +49,7 @@ export function BalancesTable({ leaveTypes, userBalances }: Props) {
                 <div className="font-medium text-gray-900 whitespace-nowrap">{user.name || "未設定"}</div>
                 <div
                   className={`text-xs text-gray-500 overflow-hidden transition-all duration-300 ease-out whitespace-nowrap ${
-                    collapsed ? "max-h-0 opacity-0 mt-0" : "max-h-6 opacity-100 mt-0.5"
+                    collapsed ? "max-h-0 max-w-0 opacity-0 mt-0" : "max-h-6 max-w-xs opacity-100 mt-0.5"
                   }`}
                 >
                   {user.email}
