@@ -149,15 +149,15 @@ export default async function DashboardPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 flex items-center">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap
                           ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' :
                             req.status === 'PENDING' ? 'border border-[#A9ADA9] text-[#6d716f]' :
                               req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' :
                                 'bg-gray-100 text-gray-800'}`}>
-                          {req.status === 'APPROVED' ? '已核准' :
-                            req.status === 'PENDING' ? '待審核' :
-                              req.status === 'REJECTED' ? '已駁回' :
-                                req.status === 'CANCELLED' ? '已銷假' : req.status}
+                          {req.status === 'APPROVED' ? '核准' :
+                            req.status === 'PENDING' ? '待審' :
+                              req.status === 'REJECTED' ? '駁回' :
+                                req.status === 'CANCELLED' ? '銷假' : req.status}
                         </span>
                         {/* 桌機版：原本的 inline 操作；md 以下隱藏 */}
                         <div className="hidden md:flex md:items-center">
