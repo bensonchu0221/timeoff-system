@@ -53,7 +53,7 @@ export default async function LeaveSettingsPage() {
         </p>
       </div>
 
-      <div className="sticky top-[64px] z-40 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-sm border border-gray-200 mb-6 flex justify-center">
+      <div className="sticky top-[64px] z-20 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-sm border border-gray-200 mb-6 flex justify-center">
         <ul className="menu menu-horizontal bg-base-200 rounded-box p-1">
           <li><a href="#section-types" className="font-medium">1. 假別管理</a></li>
           <li><a href="#section-balances" className="font-medium">2. 額度覆寫</a></li>
