@@ -88,7 +88,7 @@ export default async function RootLayout({
                   <summary className="cursor-pointer list-none p-2 -m-2 rounded hover:bg-white/10 transition" aria-label="開啟選單">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                   </summary>
-                  <ul className="absolute right-0 mt-2 w-56 bg-[var(--brand-primary)] rounded-md shadow-xl z-50 py-2 border border-white/10 text-sm">
+                  <ul className="absolute left-0 mt-2 w-48 bg-[var(--brand-primary)] rounded-md shadow-xl z-50 py-2 border border-white/10 text-sm">
                     <li><a href="/" className="block px-4 py-2 text-white/90 hover:bg-white/10">首頁</a></li>
                     <li><a href="/apply" className="block px-4 py-2 text-white/90 hover:bg-white/10">請假</a></li>
                     {(isAdmin || isManager) && (
