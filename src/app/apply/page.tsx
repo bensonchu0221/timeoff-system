@@ -1,21 +1,39 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
-import { startOfYearUTC } from "@/lib/date-format"
+import { startOfYearUTC, formatTaipeiDateISO } from "@/lib/date-format"
 import { redirect } from "next/navigation"
-import { LeaveForm } from "./LeaveForm"
+import { LeaveForm, EditTarget } from "./LeaveForm"
 import { BalanceSummary } from "@/app/components/BalanceSummary"
 
 export const metadata = {
   title: "申請休假 | Timeoff",
 }
 
-export default async function ApplyLeavePage() {
+export default async function ApplyLeavePage(props: { searchParams: Promise<{ edit?: string }> }) {
+  const searchParams = await props.searchParams
   const session = await auth()
   if (!session?.user) redirect("/")
 
   const user = await prisma.user.findUnique({ where: { id: session.user.id! } })
   if (!user) redirect("/")
+
+  // 修改模式：?edit={leaveRequestId}；只允許本人 + PENDING + 未過 startDate 的單
+  let editTarget: EditTarget | undefined = undefined
+  if (searchParams.edit) {
+    const target = await prisma.leaveRequest.findUnique({ where: { id: searchParams.edit } })
+    if (target && target.userId === user.id && target.status === "PENDING") {
+      editTarget = {
+        id: target.id,
+        leaveTypeId: target.leaveTypeId,
+        startDate: formatTaipeiDateISO(target.startDate),
+        endDate: formatTaipeiDateISO(target.endDate),
+        partOfDay: target.partOfDay,
+        reason: target.reason,
+        oldDuration: target.durationDays,
+      }
+    }
+  }
 
   const year = new Date().getFullYear()
   const leaveTypes = await prisma.leaveType.findMany({
@@ -61,14 +79,16 @@ export default async function ApplyLeavePage() {
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">申請休假</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{editTarget ? "修改假單" : "申請休假"}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            請選擇您要請假的日期區間，系統會自動排除週末與國定假日。
+            {editTarget
+              ? "您正在修改一張待審核的假單，更新後仍維持「待審核」狀態。"
+              : "請選擇您要請假的日期區間，系統會自動排除週末與國定假日。"}
           </p>
         </div>
 
         <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-          <LeaveForm balances={balances} holidayDates={holidayDates} />
+          <LeaveForm balances={balances} holidayDates={holidayDates} editTarget={editTarget} />
         </div>
       </div>
 

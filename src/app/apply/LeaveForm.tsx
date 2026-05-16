@@ -5,7 +5,7 @@ import { DayPicker, DateRange } from "react-day-picker"
 import { zhTW } from "date-fns/locale"
 import "react-day-picker/dist/style.css"
 import { PartOfDay } from "@prisma/client"
-import { applyLeave } from "@/app/actions/leave"
+import { applyLeave, updateLeave } from "@/app/actions/leave"
 import { useRouter } from "next/navigation"
 import toast from "react-hot-toast"
 
@@ -15,14 +15,38 @@ type Balance = {
   remaining: number
 }
 
-export function LeaveForm({ balances, holidayDates }: { balances: Balance[], holidayDates: string[] }) {
+// 修改既有假單時傳入：表單會用這些值初始化，並改走 updateLeave
+export type EditTarget = {
+  id: string
+  leaveTypeId: string
+  startDate: string  // YYYY-MM-DD
+  endDate: string    // YYYY-MM-DD
+  partOfDay: PartOfDay
+  reason: string | null
+  oldDuration: number  // 舊的 durationDays，用於前端餘額預檢時加回
+}
+
+// 將後端傳入的 YYYY-MM-DD 字串解析為「本地時區午夜」的 Date，與 DayPicker 行為一致
+function parseDateString(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Balance[], holidayDates: string[], editTarget?: EditTarget }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  
-  const [range, setRange] = useState<DateRange | undefined>()
-  const [leaveTypeId, setLeaveTypeId] = useState<string>(balances[0]?.id || "")
-  const [partOfDay, setPartOfDay] = useState<PartOfDay>("ALL_DAY")
-  const [reason, setReason] = useState("")
+
+  const [range, setRange] = useState<DateRange | undefined>(
+    editTarget
+      ? {
+          from: parseDateString(editTarget.startDate),
+          to: parseDateString(editTarget.endDate),
+        }
+      : undefined
+  )
+  const [leaveTypeId, setLeaveTypeId] = useState<string>(editTarget?.leaveTypeId || balances[0]?.id || "")
+  const [partOfDay, setPartOfDay] = useState<PartOfDay>(editTarget?.partOfDay || "ALL_DAY")
+  const [reason, setReason] = useState(editTarget?.reason || "")
   const [errorMsg, setErrorMsg] = useState("")
 
   // holidayDates are now YYYY-MM-DD strings
@@ -91,9 +115,14 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
       return
     }
 
-    if (selectedBalance && duration > selectedBalance.remaining) {
-      setErrorMsg(`假數不足！您選了 ${duration} 天，但 ${selectedBalance.name} 只剩 ${selectedBalance.remaining} 天`)
-      // Show daisyui modal
+    // 修改模式下，舊單的天數已算在 selectedBalance.remaining 之外（屬於 pending），
+    // 因此計算可用天數時要加回來；只在「同一個假別」時加回，換假別則不加
+    const sameLeaveTypeAsEdit = editTarget && editTarget.leaveTypeId === leaveTypeId
+    const oldDurationCredit = sameLeaveTypeAsEdit ? editTarget.oldDuration : 0
+
+    if (selectedBalance && duration > selectedBalance.remaining + oldDurationCredit) {
+      const available = selectedBalance.remaining + oldDurationCredit
+      setErrorMsg(`假數不足！您選了 ${duration} 天，但 ${selectedBalance.name} 目前最多只能 ${available} 天`)
       const modal = document.getElementById('insufficient_balance_modal') as HTMLDialogElement
       if (modal) modal.showModal()
       return
@@ -105,19 +134,27 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
 
     startTransition(async () => {
       try {
-        const result = await applyLeave({
+        const payload = {
           leaveTypeId,
           startDate: toLocalDateStr(range.from!),
           endDate: toLocalDateStr(range.to || range.from!),
           partOfDay,
-          reason
-        })
+          reason,
+        }
+        const result = editTarget
+          ? await updateLeave(editTarget.id, {
+              startDate: payload.startDate,
+              endDate: payload.endDate,
+              partOfDay: payload.partOfDay,
+              reason: payload.reason,
+            })
+          : await applyLeave(payload)
 
         if (result && result.error) {
           toast.error(result.error)
           setErrorMsg(result.error)
         } else {
-          toast.success("送出假單成功！")
+          toast.success(editTarget ? "假單已更新！" : "送出假單成功！")
           router.push("/")
         }
       } catch (err: any) {
@@ -246,7 +283,7 @@ export function LeaveForm({ balances, holidayDates }: { balances: Balance[], hol
             disabled={isPending || duration <= 0}
             className="btn btn-primary w-full mt-6 text-white"
           >
-            {isPending ? <span className="loading loading-spinner"></span> : "送出假單"}
+            {isPending ? <span className="loading loading-spinner"></span> : (editTarget ? "更新假單" : "送出假單")}
           </button>
         </fieldset>
       </div>

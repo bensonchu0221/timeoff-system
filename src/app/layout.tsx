@@ -80,6 +80,7 @@ export default async function RootLayout({
                       <a href="/admin/leave-settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">假別設定</a>
                       <a href="/admin/reports" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">報表</a>
                       <a href="/admin/qa" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">QA 編輯</a>
+                      <a href="/admin/audit" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">稽核日誌</a>
                     </>
                   )}
                 </nav>

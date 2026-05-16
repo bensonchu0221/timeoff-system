@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { calculateDurationDays, getUserLeaveBalance } from "@/lib/leave-utils"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
+import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { sendLeaveApplicationEmail, sendLeaveResultEmail } from "@/lib/email"
@@ -71,6 +72,19 @@ export async function applyLeave(data: {
     }
   });
 
+  await logAudit({
+    actorId: userId,
+    action: "LEAVE_APPLY",
+    targetType: "LeaveRequest",
+    targetId: leaveRequest.id,
+    payload: {
+      leaveTypeId: data.leaveTypeId,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      durationDays,
+    },
+  })
+
   if (approverId) {
     const manager = await prisma.user.findUnique({ where: { id: approverId } });
     if (manager?.email) {
@@ -118,14 +132,125 @@ export async function cancelLeave(requestId: string) {
     data: { status: "CANCELLED" }
   });
 
+  await logAudit({
+    actorId: session.user.id,
+    action: "LEAVE_CANCEL",
+    targetType: "LeaveRequest",
+    targetId: requestId,
+    payload: { previousStatus: request.status },
+  })
+
   revalidatePath("/dashboard")
   revalidatePath("/admin/approvals")
   return { success: true }
 }
 
-export async function reviewLeave(requestId: string, status: "APPROVED" | "REJECTED") {
+export async function updateLeave(requestId: string, data: {
+  startDate: string,
+  endDate: string,
+  partOfDay: PartOfDay,
+  reason?: string
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Unauthorized" };
+
+  const userId = session.user.id;
+  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
+  if (!request) return { error: "Request not found" };
+
+  // 權限：只有本人可以修改自己的單
+  if (request.userId !== userId) return { error: "Forbidden" };
+
+  // 狀態：只能修改 PENDING；已核准的請走「撤銷後重申」
+  if (request.status !== "PENDING") {
+    return { error: "只能修改「待審核」狀態的假單；已核准請先撤銷再重新申請。" };
+  }
+
+  // 時間：startDate 已過去的不能改（避免事後竄改歷史）
+  if (request.startDate < todayStartUTCFromTaipei()) {
+    return { error: "此假單的開始日期已過，無法修改。" };
+  }
+
+  const start = new Date(data.startDate);
+  const end = new Date(data.endDate);
+  if (start > end) return { error: "Start date cannot be after end date" };
+  if (start < todayStartUTCFromTaipei()) {
+    return { error: "請假開始日期不可早於今天。" };
+  }
+
+  // 排除自己這張，重新檢查是否與其他單重疊
+  const overlappingLeaves = await prisma.leaveRequest.findMany({
+    where: {
+      userId,
+      id: { not: requestId },
+      status: { in: ["PENDING", "APPROVED"] },
+      startDate: { lte: end },
+      endDate: { gte: start }
+    }
+  });
+  if (overlappingLeaves.length > 0) {
+    return { error: "此時間區間您已經有另一張假單，請避開重疊區間。" };
+  }
+
+  const newDuration = await calculateDurationDays(start, end, data.partOfDay);
+  if (newDuration === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
+
+  // 餘額檢查：原本這張單的天數會被計入 pending；計算「新天數能否塞下」要把舊的扣回來
+  const year = start.getFullYear();
+  const balance = await getUserLeaveBalance(userId, request.leaveTypeId, year);
+  const allowedNewDuration = balance.remaining + request.durationDays;
+  if (newDuration > allowedNewDuration) {
+    return { error: `假數不足！修改後需要 ${newDuration} 天，但目前最多可改為 ${allowedNewDuration} 天。` };
+  }
+
+  await prisma.leaveRequest.update({
+    where: { id: requestId },
+    data: {
+      startDate: start,
+      endDate: end,
+      partOfDay: data.partOfDay,
+      reason: data.reason,
+      durationDays: newDuration,
+    }
+  });
+
+  await logAudit({
+    actorId: userId,
+    action: "LEAVE_UPDATE",
+    targetType: "LeaveRequest",
+    targetId: requestId,
+    payload: {
+      before: {
+        startDate: request.startDate.toISOString(),
+        endDate: request.endDate.toISOString(),
+        partOfDay: request.partOfDay,
+        durationDays: request.durationDays,
+        reason: request.reason,
+      },
+      after: {
+        startDate: data.startDate,
+        endDate: data.endDate,
+        partOfDay: data.partOfDay,
+        durationDays: newDuration,
+        reason: data.reason ?? null,
+      },
+    },
+  })
+
+  revalidatePath("/dashboard")
+  revalidatePath("/admin/approvals")
+  return { success: true }
+}
+
+export async function reviewLeave(requestId: string, status: "APPROVED" | "REJECTED", message?: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+
+  // 駁回必填理由（員工知道為什麼被駁，後續才能調整重申）
+  const trimmedMessage = message?.trim() || undefined
+  if (status === "REJECTED" && !trimmedMessage) {
+    throw new Error("駁回假單時必須填寫理由！");
+  }
 
   const request = await prisma.leaveRequest.findUnique({
     where: { id: requestId },
@@ -167,19 +292,47 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
 
     const result = await tx.leaveRequest.updateMany({
       where: { id: requestId, status: "PENDING" },
-      data: { status }
+      data: { status, reviewMessage: trimmedMessage ?? null }
     });
     if (result.count === 0) {
       throw new Error("此假單已被其他人處理過，請重新整理頁面！");
     }
   });
 
+  await logAudit({
+    actorId: session.user.id,
+    action: status === "APPROVED" ? "LEAVE_APPROVE" : "LEAVE_REJECT",
+    targetType: "LeaveRequest",
+    targetId: requestId,
+    payload: trimmedMessage ? { message: trimmedMessage } : undefined,
+  })
+
   if (request.user?.email) {
-    await sendLeaveResultEmail(request.user.email, request.leaveType.name, status);
+    await sendLeaveResultEmail(request.user.email, request.leaveType.name, status, trimmedMessage);
   }
 
   revalidatePath("/admin/approvals")
   revalidatePath("/dashboard")
   revalidatePath("/admin/gantt")
   return { success: true }
+}
+
+// 批次審核：對每張單獨立呼叫 reviewLeave，失敗（如已被別人改、額度不足）獨立回報但不中止整批
+export async function batchReviewLeave(ids: string[], status: "APPROVED" | "REJECTED", message?: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const successes: string[] = []
+  const failures: { id: string; error: string }[] = []
+
+  for (const id of ids) {
+    try {
+      await reviewLeave(id, status, message)
+      successes.push(id)
+    } catch (err: any) {
+      failures.push({ id, error: err.message || "未知錯誤" })
+    }
+  }
+
+  return { successes, failures }
 }

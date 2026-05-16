@@ -2,26 +2,29 @@
 
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
+import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 
-async function verifyAdmin() {
+async function verifyAdmin(): Promise<string> {
   const session = await auth()
   if (!session?.user?.email) throw new Error("Unauthorized")
-  
+
   const user = await prisma.user.findUnique({ where: { email: session.user.email } })
   if (user?.role !== "ADMIN") throw new Error("Forbidden")
+  return user.id
 }
 
 export async function createLeaveType(data: FormData) {
-  await verifyAdmin()
+  const actorId = await verifyAdmin()
   const name = data.get("name") as string
   const defaultDays = Number(data.get("defaultDays"))
   const isPaid = data.get("isPaid") === "true"
 
   if (!name || isNaN(defaultDays)) throw new Error("Invalid input")
 
+  let created
   try {
-    await prisma.leaveType.create({
+    created = await prisma.leaveType.create({
       data: { name, defaultDays, isPaid, isActive: true }
     })
   } catch (error: any) {
@@ -30,33 +33,51 @@ export async function createLeaveType(data: FormData) {
     }
     throw error
   }
+  await logAudit({
+    actorId,
+    action: "LEAVE_TYPE_CREATE",
+    targetType: "LeaveType",
+    targetId: created.id,
+    payload: { name, defaultDays, isPaid },
+  })
   revalidatePath("/admin/leave-settings")
   return { success: true, message: "已新增假別" }
 }
 
 export async function deleteLeaveType(data: FormData) {
-  await verifyAdmin()
+  const actorId = await verifyAdmin()
   const id = data.get("id") as string
   if (!id) return
 
   // Soft delete instead of hard delete
-  await prisma.leaveType.update({ 
+  await prisma.leaveType.update({
     where: { id },
     data: { isActive: false }
   })
-  
+  await logAudit({
+    actorId,
+    action: "LEAVE_TYPE_DELETE",
+    targetType: "LeaveType",
+    targetId: id,
+  })
+
   revalidatePath("/admin/leave-settings")
   return { success: true, message: "已刪除假別" }
 }
 
 export async function updateUserTotalBalance(data: FormData) {
-  await verifyAdmin()
+  const actorId = await verifyAdmin()
   const userId = data.get("userId") as string
   const leaveTypeId = data.get("leaveTypeId") as string
   const totalQuota = Number(data.get("totalQuota"))
   const year = new Date().getFullYear()
 
   if (!userId || !leaveTypeId || isNaN(totalQuota)) throw new Error("Invalid input")
+
+  const before = await prisma.userLeaveBalance.findUnique({
+    where: { userId_leaveTypeId_year: { userId, leaveTypeId, year } },
+    select: { totalQuota: true },
+  })
 
   await prisma.userLeaveBalance.upsert({
     where: {
@@ -70,13 +91,21 @@ export async function updateUserTotalBalance(data: FormData) {
     create: { userId, leaveTypeId, year, totalQuota }
   })
 
+  await logAudit({
+    actorId,
+    action: "BALANCE_UPDATE",
+    targetType: "UserLeaveBalance",
+    targetId: `${userId}:${leaveTypeId}:${year}`,
+    payload: { userId, leaveTypeId, year, from: before?.totalQuota ?? null, to: totalQuota },
+  })
+
   revalidatePath("/admin/leave-settings")
   return { success: true, message: "已更新額度" }
 }
 
 export async function syncHolidays(year: number) {
-  await verifyAdmin()
-  
+  const actorId = await verifyAdmin()
+
   try {
     const res = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`)
     if (!res.ok) {
@@ -112,6 +141,14 @@ export async function syncHolidays(year: number) {
       }
     }
     
+    await logAudit({
+      actorId,
+      action: "HOLIDAY_SYNC",
+      targetType: "Holiday",
+      targetId: String(year),
+      payload: { year, addedCount },
+    })
+
     revalidatePath("/admin/leave-settings")
     revalidatePath("/apply")
     return { success: true, message: `已成功同步 ${year} 年共 ${addedCount} 筆國定假日/補班日` }

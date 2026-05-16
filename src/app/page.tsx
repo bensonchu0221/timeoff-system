@@ -8,6 +8,7 @@ import { YearlyHeatmap } from "./components/YearlyHeatmap"
 import { CancelLeaveButton } from "./components/CancelLeaveButton"
 import { BalanceSummary } from "./components/BalanceSummary"
 import { HistoryLedgerDrawer } from "./components/HistoryLedgerDrawer"
+import { CalendarSubscribeButton } from "./components/CalendarSubscribeButton"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -79,12 +80,15 @@ export default async function DashboardPage() {
             部門：{user.department || '未設定'} | 直屬主管：{user.manager?.name || '無'}
           </p>
         </div>
-        <Link
-          href="/apply"
-          className="px-6 py-2 bg-[var(--brand-primary)] text-white font-medium rounded-md shadow hover:bg-[var(--brand-primary-dark)] transition whitespace-nowrap"
-        >
-          申請休假
-        </Link>
+        <div className="flex items-center gap-2">
+          <CalendarSubscribeButton showTeam={user.role === "MANAGER" || user.role === "ADMIN"} />
+          <Link
+            href="/apply"
+            className="px-6 py-2 bg-[var(--brand-primary)] text-white font-medium rounded-md shadow hover:bg-[var(--brand-primary-dark)] transition whitespace-nowrap"
+          >
+            申請休假
+          </Link>
+        </div>
       </div>
 
       {/* 年度熱圖 (手機版隱藏) */}
@@ -133,9 +137,18 @@ export default async function DashboardPage() {
                         <div className="text-gray-500 text-xs">
                           {req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天'}
                         </div>
+                        {req.reviewMessage && (
+                          <div className={`mt-2 text-xs px-2 py-1 rounded border-l-2 max-w-xs whitespace-pre-wrap ${
+                            req.status === 'REJECTED'
+                              ? 'bg-[#C48F8B]/10 border-l-[#C48F8B] text-[#a36863]'
+                              : 'bg-[#7A9A8A]/10 border-l-[#7A9A8A] text-[#5c7a6b]'
+                          }`}>
+                            <span className="font-semibold">主管留言：</span>{req.reviewMessage}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 flex items-center">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
                           ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' :
                             req.status === 'PENDING' ? 'border border-[#A9ADA9] text-[#6d716f]' :
                               req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' :
@@ -145,6 +158,14 @@ export default async function DashboardPage() {
                               req.status === 'REJECTED' ? '已駁回' :
                                 req.status === 'CANCELLED' ? '已銷假' : req.status}
                         </span>
+                        {req.status === 'PENDING' && (
+                          <Link
+                            href={`/apply?edit=${req.id}`}
+                            className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                          >
+                            修改
+                          </Link>
+                        )}
                         {(req.status === 'PENDING' || req.status === 'APPROVED') && (
                           <CancelLeaveButton leaveId={req.id} />
                         )}
