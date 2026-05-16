@@ -9,6 +9,7 @@ import { CancelLeaveButton } from "./components/CancelLeaveButton"
 import { BalanceSummary } from "./components/BalanceSummary"
 import { HistoryLedgerDrawer } from "./components/HistoryLedgerDrawer"
 import { CalendarSubscribeButton } from "./components/CalendarSubscribeButton"
+import { MobileLeaveActions } from "./components/MobileLeaveActions"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -158,17 +159,24 @@ export default async function DashboardPage() {
                               req.status === 'REJECTED' ? '已駁回' :
                                 req.status === 'CANCELLED' ? '已銷假' : req.status}
                         </span>
-                        {req.status === 'PENDING' && (
-                          <Link
-                            href={`/apply?edit=${req.id}`}
-                            className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
-                          >
-                            修改
-                          </Link>
-                        )}
-                        {(req.status === 'PENDING' || req.status === 'APPROVED') && (
-                          <CancelLeaveButton leaveId={req.id} />
-                        )}
+                        {/* 桌機版：原本的 inline 操作；md 以下隱藏 */}
+                        <div className="hidden md:flex md:items-center">
+                          {req.status === 'PENDING' && (
+                            <Link
+                              href={`/apply?edit=${req.id}`}
+                              className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                            >
+                              修改
+                            </Link>
+                          )}
+                          {(req.status === 'PENDING' || req.status === 'APPROVED') && (
+                            <CancelLeaveButton leaveId={req.id} />
+                          )}
+                        </div>
+                        {/* 手機版：⋯ menu 收折，避免文字換行 */}
+                        <div className="md:hidden ml-2">
+                          <MobileLeaveActions leaveId={req.id} status={req.status} />
+                        </div>
                       </td>
                     </tr>
                   ))}
