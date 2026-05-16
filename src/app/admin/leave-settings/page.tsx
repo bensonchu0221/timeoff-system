@@ -5,6 +5,7 @@ import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { createLeaveType, deleteLeaveType, updateUserTotalBalance } from "./actions"
 
 import { CreateLeaveTypeForm, DeleteLeaveTypeButton, UpdateBalanceForm, SyncHolidaysForm } from "./Forms"
+import { BalancesTable } from "./BalancesTable"
 
 export const metadata = {
   title: "假別與額度設定 | Timeoff",
@@ -80,7 +81,7 @@ export default async function LeaveSettingsPage() {
               <tr key={lt.id}>
                 <td className="px-4 py-3 font-medium">{lt.name}</td>
                 <td className="px-4 py-3">{lt.defaultDays} 天</td>
-                <td className="px-4 py-3">{lt.isPaid ? '✅ 有薪' : '❌ 無薪'}</td>
+                <td className="px-4 py-3">{lt.isPaid ? '有' : '無'}</td>
                 <td className="px-4 py-3">
                   <DeleteLeaveTypeButton id={lt.id} />
                 </td>
@@ -91,45 +92,18 @@ export default async function LeaveSettingsPage() {
       </div>
 
       {/* 個人額度調整 */}
-      <div id="section-balances" className="bg-white rounded-lg shadow border border-gray-200 p-6 overflow-x-auto scroll-mt-32">
+      <div id="section-balances" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
         <h2 className="text-lg font-medium mb-4">2. 員工假數額度覆寫 ({year}年)</h2>
         <p className="text-sm text-gray-500 mb-4">
           如果您手動修改了「全年總天數」，系統會自動扣除該員工「已請天數」來算出「目前可請的剩餘天數」。
         </p>
-
-        <table className="min-w-max w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10">員工</th>
-              {leaveTypes.map(lt => (
-                <th key={lt.id} className="px-4 py-3 text-left font-medium text-gray-500 border-l border-gray-200 min-w-[200px]">
-                  {lt.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {userBalances.map(({ user, balances }) => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="px-4 py-4 sticky left-0 bg-white group-hover:bg-gray-50 z-10">
-                  <div className="font-medium text-gray-900">{user.name || '未設定'}</div>
-                  <div className="text-xs text-gray-500">{user.email}</div>
-                </td>
-                
-                {balances.map(b => (
-                  <td key={b.id} className="px-4 py-4 border-l border-gray-100">
-                    <UpdateBalanceForm 
-                      userId={user.id} 
-                      leaveTypeId={b.id} 
-                      defaultTotal={b.balance.total} 
-                      remaining={b.balance.remaining} 
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <BalancesTable
+          leaveTypes={leaveTypes.map(lt => ({ id: lt.id, name: lt.name }))}
+          userBalances={userBalances.map(({ user, balances }) => ({
+            user: { id: user.id, name: user.name, email: user.email },
+            balances: balances.map(b => ({ id: b.id, total: b.balance.total, remaining: b.balance.remaining })),
+          }))}
+        />
       </div>
 
       {/* 國定假日同步 */}

@@ -26,24 +26,24 @@ export function CreateLeaveTypeForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-4 items-end mb-6 bg-gray-50 p-4 rounded-md">
-      <div>
+    <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-3 md:gap-4 mb-6 bg-gray-50 p-4 rounded-md">
+      <div className="w-full md:w-auto">
         <label className="block text-xs font-medium text-gray-700">假別名稱</label>
-        <input type="text" name="name" required className="mt-1 block w-40 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" placeholder="例如：生日假" />
+        <input type="text" name="name" required className="mt-1 block w-full md:w-40 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" placeholder="例如：生日假" />
       </div>
-      <div>
+      <div className="w-full md:w-auto">
         <label className="block text-xs font-medium text-gray-700">全域預設天數</label>
-        <input type="number" step="0.5" name="defaultDays" required className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" defaultValue="0" />
+        <input type="number" step="0.5" name="defaultDays" required className="mt-1 block w-full md:w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2 border" defaultValue="0" />
       </div>
-      <div className="mb-2">
+      <div className="flex items-center gap-4 md:mb-2 whitespace-nowrap">
         <label className="inline-flex items-center text-sm">
           <input type="radio" name="isPaid" value="true" defaultChecked className="mr-1" /> 有薪
         </label>
-        <label className="inline-flex items-center text-sm ml-3">
+        <label className="inline-flex items-center text-sm">
           <input type="radio" name="isPaid" value="false" className="mr-1" /> 無薪
         </label>
       </div>
-      <button type="submit" disabled={isPending} className="bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400">
+      <button type="submit" disabled={isPending} className="w-full md:w-auto bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400">
         {isPending ? "新增中..." : "+ 新增假別"}
       </button>
     </form>

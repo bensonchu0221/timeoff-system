@@ -19,13 +19,11 @@ export default async function ApprovalsPage() {
     return <div className="p-6 text-red-500">權限不足：您必須是主管或管理員才能審核假單。</div>
   }
 
-  // Find all pending leave requests for users managed by this manager
+  // ADMIN 看全公司所有 PENDING，方便代為審核；MANAGER 只看自己下屬
   const pendingRequests = await prisma.leaveRequest.findMany({
     where: {
       status: "PENDING",
-      user: {
-        managerId: user.id
-      }
+      ...(user.role === "ADMIN" ? {} : { user: { managerId: user.id } })
     },
     include: {
       user: true,
