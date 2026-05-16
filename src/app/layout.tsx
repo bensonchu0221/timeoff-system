@@ -84,6 +84,34 @@ export default async function RootLayout({
                     </>
                   )}
                 </nav>
+                <details className="md:hidden relative ml-2">
+                  <summary className="cursor-pointer list-none p-2 -m-2 rounded hover:bg-white/10 transition" aria-label="開啟選單">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  </summary>
+                  <ul className="absolute right-0 mt-2 w-56 bg-[var(--brand-primary)] rounded-md shadow-xl z-50 py-2 border border-white/10 text-sm">
+                    <li><a href="/" className="block px-4 py-2 text-white/90 hover:bg-white/10">首頁</a></li>
+                    <li><a href="/apply" className="block px-4 py-2 text-white/90 hover:bg-white/10">請假</a></li>
+                    {(isAdmin || isManager) && (
+                      <>
+                        <li>
+                          <a href="/admin/approvals" className="block px-4 py-2 text-white/90 hover:bg-white/10">
+                            審核 {pendingCount > 0 && <span className="ml-2 inline-block w-2 h-2 bg-red-500 rounded-full align-middle" />}
+                          </a>
+                        </li>
+                        <li><a href="/admin/gantt" className="block px-4 py-2 text-white/90 hover:bg-white/10">團隊甘特圖</a></li>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <li><a href="/admin/users" className="block px-4 py-2 text-white/90 hover:bg-white/10">員工管理</a></li>
+                        <li><a href="/admin/leave-settings" className="block px-4 py-2 text-white/90 hover:bg-white/10">假別設定</a></li>
+                        <li><a href="/admin/reports" className="block px-4 py-2 text-white/90 hover:bg-white/10">報表</a></li>
+                        <li><a href="/admin/qa" className="block px-4 py-2 text-white/90 hover:bg-white/10">QA 編輯</a></li>
+                        <li><a href="/admin/audit" className="block px-4 py-2 text-white/90 hover:bg-white/10">稽核日誌</a></li>
+                      </>
+                    )}
+                  </ul>
+                </details>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <HelpDrawer />

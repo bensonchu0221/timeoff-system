@@ -146,6 +146,7 @@ export async function cancelLeave(requestId: string) {
 }
 
 export async function updateLeave(requestId: string, data: {
+  leaveTypeId: string,
   startDate: string,
   endDate: string,
   partOfDay: PartOfDay,
@@ -195,10 +196,11 @@ export async function updateLeave(requestId: string, data: {
   const newDuration = await calculateDurationDays(start, end, data.partOfDay);
   if (newDuration === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
-  // 餘額檢查：原本這張單的天數會被計入 pending；計算「新天數能否塞下」要把舊的扣回來
+  // 餘額檢查：若假別未變，舊單的天數已計入 pending、需加回；若假別改了，新假別的 pending 不含本單
+  const leaveTypeChanged = data.leaveTypeId !== request.leaveTypeId;
   const year = start.getFullYear();
-  const balance = await getUserLeaveBalance(userId, request.leaveTypeId, year);
-  const allowedNewDuration = balance.remaining + request.durationDays;
+  const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
+  const allowedNewDuration = leaveTypeChanged ? balance.remaining : balance.remaining + request.durationDays;
   if (newDuration > allowedNewDuration) {
     return { error: `假數不足！修改後需要 ${newDuration} 天，但目前最多可改為 ${allowedNewDuration} 天。` };
   }
@@ -206,6 +208,7 @@ export async function updateLeave(requestId: string, data: {
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: {
+      leaveTypeId: data.leaveTypeId,
       startDate: start,
       endDate: end,
       partOfDay: data.partOfDay,
@@ -221,6 +224,7 @@ export async function updateLeave(requestId: string, data: {
     targetId: requestId,
     payload: {
       before: {
+        leaveTypeId: request.leaveTypeId,
         startDate: request.startDate.toISOString(),
         endDate: request.endDate.toISOString(),
         partOfDay: request.partOfDay,
@@ -228,6 +232,7 @@ export async function updateLeave(requestId: string, data: {
         reason: request.reason,
       },
       after: {
+        leaveTypeId: data.leaveTypeId,
         startDate: data.startDate,
         endDate: data.endDate,
         partOfDay: data.partOfDay,

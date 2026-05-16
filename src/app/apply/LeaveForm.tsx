@@ -143,6 +143,7 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
         }
         const result = editTarget
           ? await updateLeave(editTarget.id, {
+              leaveTypeId: payload.leaveTypeId,
               startDate: payload.startDate,
               endDate: payload.endDate,
               partOfDay: payload.partOfDay,
