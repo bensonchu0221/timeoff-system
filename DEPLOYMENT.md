@@ -142,6 +142,15 @@ curl -sS -H "x-cron-secret: $CRON_SECRET" \
   https://timeoff.pacnexus.net/api/cron/daily-leave-roster
 ```
 
+### 跑單元測試
+```bash
+npm test              # 一次性跑完所有測試
+npm run test:watch    # watch 模式，改檔自動重跑
+npm run test:coverage # 跑完顯示 coverage 報表
+```
+
+測試檔放在 `src/**/*.test.ts`，跟原始碼同層。目前範圍：純邏輯函式（`date-format.ts` / `line.ts` / `leave-utils.calculateDurationDays`）。整合測試（DB / 外部 API）尚未涵蓋。
+
 ### 跑 Prisma migration（這個系統用 db push，沒有 migrations 目錄）
 ```bash
 # 改完 prisma/schema.prisma 後：
