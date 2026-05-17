@@ -11,6 +11,7 @@ import {
   buildFollowGreeting,
   buildUnboundReply,
   buildHelpReply,
+  buildRejectReasonFlex,
 } from "@/lib/line"
 
 // LINE Webhook：接收 follow / message / postback 事件
@@ -89,24 +90,37 @@ async function handlePostback(
     return
   }
 
-  if (action === "reject") {
-    // 駁回必填理由，LINE 兩段式互動體驗差，導回網頁完成
-    const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
-    await lineReply(replyToken, [
-      {
-        type: "text",
-        text: `駁回需填寫理由，請至網頁完成：\n${siteUrl}/admin/approvals`,
-      },
-    ])
-    return
-  }
-
   if (action === "approve") {
     try {
       await reviewLeaveAsUser(actor.id, requestId, "APPROVED")
       await lineReply(replyToken, [{ type: "text", text: "✅ 已核准。" }])
     } catch (err: any) {
       const msg = err?.message || "核准失敗"
+      await lineReply(replyToken, [{ type: "text", text: `❌ ${msg}` }])
+    }
+    return
+  }
+
+  // 第一階段：按下「駁回」→ 回第二層 Flex 讓主管選預設理由
+  if (action === "reject") {
+    const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
+    const link = `${siteUrl}/admin/approvals`
+    const flex = buildRejectReasonFlex(requestId, link)
+    await lineReply(replyToken, [
+      { type: "flex", altText: "請選擇駁回理由", contents: flex },
+    ])
+    return
+  }
+
+  // 第二階段：主管選了某個預設理由（或選「直接駁回不附理由」）→ 完成駁回
+  if (action === "reject_with_reason") {
+    const reason = params.get("reason") || "" // 空字串代表沒理由
+    try {
+      await reviewLeaveAsUser(actor.id, requestId, "REJECTED", reason || undefined)
+      const tail = reason ? `\n理由：${reason}` : "（未附理由）"
+      await lineReply(replyToken, [{ type: "text", text: `❌ 已駁回。${tail}` }])
+    } catch (err: any) {
+      const msg = err?.message || "駁回失敗"
       await lineReply(replyToken, [{ type: "text", text: `❌ ${msg}` }])
     }
     return

@@ -5,6 +5,7 @@ import {
   isBalanceQuery,
   verifyLineSignature,
   generateBindingCode,
+  PRESET_REJECT_REASONS,
 } from "./line"
 
 describe("shouldSendLine", () => {
@@ -131,5 +132,31 @@ describe("generateBindingCode", () => {
     }
     // 字元集有 32 種，100 次至少該有 5 種不同開頭（若 < 5 表示 random 壞掉）
     expect(firstChars.size).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe("PRESET_REJECT_REASONS", () => {
+  it("第一個一定是「直接駁回（不附理由）」對應空字串", () => {
+    expect(PRESET_REJECT_REASONS[0].reason).toBe("")
+  })
+
+  it("每筆都有 label + reason 兩個欄位", () => {
+    for (const r of PRESET_REJECT_REASONS) {
+      expect(typeof r.label).toBe("string")
+      expect(r.label.length).toBeGreaterThan(0)
+      expect(typeof r.reason).toBe("string")
+    }
+  })
+
+  it("除了「不附理由」外，其餘 reason 都不能是空字串", () => {
+    for (let i = 1; i < PRESET_REJECT_REASONS.length; i++) {
+      expect(PRESET_REJECT_REASONS[i].reason.length).toBeGreaterThan(0)
+    }
+  })
+
+  it("reason 不含 & 或 = 等會破壞 postback data 解析的字元", () => {
+    for (const r of PRESET_REJECT_REASONS) {
+      expect(r.reason).not.toMatch(/[&=]/)
+    }
   })
 })

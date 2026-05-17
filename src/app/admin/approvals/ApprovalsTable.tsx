@@ -88,10 +88,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
 
   const submitReject = () => {
     if (!rejectingId) return
-    if (!rejectMessage.trim()) {
-      toast.error("駁回必須填寫理由")
-      return
-    }
+    // 理由為選填，沒填也可以送出（讓員工自己問或回看單）
     if (rejectingId === "BATCH") {
       runBatch("REJECTED", rejectMessage)
     } else {
@@ -250,8 +247,8 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
             </h3>
             <p className="text-sm text-gray-600">
               {rejectingId === "BATCH"
-                ? "以下理由將套用到所有勾選的假單，員工會收到通知信與系統內訊息："
-                : "請填寫駁回理由，員工會在通知信與系統內看到這段訊息："}
+                ? "以下理由將套用到所有勾選的假單（選填，若有填員工會收到通知）："
+                : "駁回理由（選填，若有填員工會在通知信與系統內看到）："}
             </p>
             <textarea
               value={rejectMessage}
@@ -259,7 +256,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               disabled={isPending}
               rows={4}
               autoFocus
-              placeholder="例如：該週為部門大型發布期，請改期再申請。"
+              placeholder="（選填）例如：該週為部門大型發布期，請改期再申請。"
               className="textarea textarea-bordered w-full bg-white text-sm"
             />
             <div className="flex gap-3 justify-end mt-2">
@@ -272,7 +269,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               </button>
               <button
                 onClick={submitReject}
-                disabled={isPending || !rejectMessage.trim()}
+                disabled={isPending}
                 className="px-4 py-2 bg-[#C48F8B] text-white rounded-md text-sm hover:bg-[#b0807c] transition font-medium shadow-sm disabled:opacity-50"
               >
                 {isPending ? "送出中..." : "確認駁回"}

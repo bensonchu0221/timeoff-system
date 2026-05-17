@@ -469,11 +469,8 @@ export async function reviewLeaveAsUser(
   status: "APPROVED" | "REJECTED",
   message?: string
 ) {
-  // 駁回必填理由（員工知道為什麼被駁，後續才能調整重申）
+  // 駁回理由為選填：員工最好知道為什麼被駁、但主管沒寫也允許
   const trimmedMessage = message?.trim() || undefined
-  if (status === "REJECTED" && !trimmedMessage) {
-    throw new Error("駁回假單時必須填寫理由！");
-  }
 
   const request = await prisma.leaveRequest.findUnique({
     where: { id: requestId },

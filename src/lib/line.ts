@@ -137,7 +137,7 @@ export async function sendLineLeaveApplication(
   await linePush(toLineUserId, [{ type: "flex", altText, contents: flex }])
 }
 
-// Flex Message bubble：含申請資訊 + 「快速核准」postback 按鈕 + 「前往網頁」URI 按鈕
+// Flex Message bubble：含申請資訊 + 「快速核准」+「駁回」+「前往網頁」三顆 button
 function buildLeaveApplicationFlex(
   applicantName: string,
   leaveType: string,
@@ -191,9 +191,82 @@ function buildLeaveApplicationFlex(
         {
           type: "button",
           style: "secondary",
+          color: "#C48F8B",
+          action: {
+            type: "postback",
+            label: "❌ 駁回",
+            data: `action=reject&requestId=${requestId}`,
+            displayText: "我要駁回這張假單",
+          },
+        },
+        {
+          type: "button",
+          style: "link",
           action: {
             type: "uri",
-            label: "前往網頁（含駁回）",
+            label: "前往網頁查看完整資訊",
+            uri: link,
+          },
+        },
+      ],
+    },
+  }
+}
+
+// 第二層 Flex：按駁回後問主管要用什麼理由
+// 預設清單寫死在這（量少、不常變、放 DB 太重）
+export const PRESET_REJECT_REASONS = [
+  { label: "📭 直接駁回（不附理由）", reason: "" },           // 空字串 = 沒理由
+  { label: "📊 假別額度不足", reason: "假別額度不足" },
+  { label: "👥 該期間人力不足", reason: "該期間人力不足，請改期" },
+  { label: "📎 請補附證明文件", reason: "請補附證明文件後重新申請" },
+  { label: "📅 期程需要調整", reason: "請與主管確認後改期再申請" },
+]
+
+export function buildRejectReasonFlex(requestId: string, link: string) {
+  return {
+    type: "bubble",
+    header: {
+      type: "box",
+      layout: "vertical",
+      contents: [
+        { type: "text", text: "請選擇駁回方式", weight: "bold", size: "md", color: "#ffffff" },
+      ],
+      backgroundColor: "#C48F8B",
+      paddingAll: "12px",
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      contents: [
+        { type: "text", text: "員工會收到含此理由的通知", size: "xs", color: "#888888" },
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      contents: [
+        ...PRESET_REJECT_REASONS.map((r) => ({
+          type: "button",
+          style: "secondary",
+          height: "sm",
+          action: {
+            type: "postback",
+            label: r.label,
+            // 把 reason 包進 postback data；空字串代表「不附理由」
+            data: `action=reject_with_reason&requestId=${requestId}&reason=${encodeURIComponent(r.reason)}`,
+            displayText: r.reason ? `駁回理由：${r.reason}` : "直接駁回（無理由）",
+          },
+        })),
+        {
+          type: "button",
+          style: "link",
+          height: "sm",
+          action: {
+            type: "uri",
+            label: "其他理由 → 開網頁填寫",
             uri: link,
           },
         },
