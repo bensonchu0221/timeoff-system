@@ -81,8 +81,14 @@ export default async function DashboardPage() {
             部門：{user.department || '未設定'} | 直屬主管：{user.manager?.name || '無'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <CalendarSubscribeButton showTeam={user.role === "MANAGER" || user.role === "ADMIN"} />
+          <Link
+            href="/flow"
+            className="px-4 py-2 text-sm border border-[var(--brand-primary)] text-[var(--brand-primary)] font-medium rounded-md hover:bg-[var(--brand-primary)]/10 transition whitespace-nowrap"
+          >
+            請假審核流程圖
+          </Link>
           <Link
             href="/apply"
             className="px-6 py-2 bg-[var(--brand-primary)] text-white font-medium rounded-md shadow hover:bg-[var(--brand-primary-dark)] transition whitespace-nowrap"
