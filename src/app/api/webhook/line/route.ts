@@ -93,10 +93,10 @@ async function handlePostback(
   if (action === "approve") {
     try {
       await reviewLeaveAsUser(actor.id, requestId, "APPROVED")
-      await lineReply(replyToken, [{ type: "text", text: "✅ 已核准。" }])
+      await lineReply(replyToken, [{ type: "text", text: "已核准。" }])
     } catch (err: any) {
       const msg = err?.message || "核准失敗"
-      await lineReply(replyToken, [{ type: "text", text: `❌ ${msg}` }])
+      await lineReply(replyToken, [{ type: "text", text: msg }])
     }
     return
   }
@@ -118,10 +118,10 @@ async function handlePostback(
     try {
       await reviewLeaveAsUser(actor.id, requestId, "REJECTED", reason || undefined)
       const tail = reason ? `\n理由：${reason}` : "（未附理由）"
-      await lineReply(replyToken, [{ type: "text", text: `❌ 已駁回。${tail}` }])
+      await lineReply(replyToken, [{ type: "text", text: `已駁回。${tail}` }])
     } catch (err: any) {
       const msg = err?.message || "駁回失敗"
-      await lineReply(replyToken, [{ type: "text", text: `❌ ${msg}` }])
+      await lineReply(replyToken, [{ type: "text", text: msg }])
     }
     return
   }

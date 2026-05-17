@@ -183,7 +183,7 @@ function buildLeaveApplicationFlex(
           color: "#7A9A8A",
           action: {
             type: "postback",
-            label: "✅ 快速核准",
+            label: "快速核准",
             data: `action=approve&requestId=${requestId}`,
             displayText: "我要核准這張假單",
           },
@@ -194,7 +194,7 @@ function buildLeaveApplicationFlex(
           color: "#C48F8B",
           action: {
             type: "postback",
-            label: "❌ 駁回",
+            label: "駁回",
             data: `action=reject&requestId=${requestId}`,
             displayText: "我要駁回這張假單",
           },
@@ -216,11 +216,11 @@ function buildLeaveApplicationFlex(
 // 第二層 Flex：按駁回後問主管要用什麼理由
 // 預設清單寫死在這（量少、不常變、放 DB 太重）
 export const PRESET_REJECT_REASONS = [
-  { label: "📭 直接駁回（不附理由）", reason: "" },           // 空字串 = 沒理由
-  { label: "📊 假別額度不足", reason: "假別額度不足" },
-  { label: "👥 該期間人力不足", reason: "該期間人力不足，請改期" },
-  { label: "📎 請補附證明文件", reason: "請補附證明文件後重新申請" },
-  { label: "📅 期程需要調整", reason: "請與主管確認後改期再申請" },
+  { label: "直接駁回（不附理由）", reason: "" },           // 空字串 = 沒理由
+  { label: "假別額度不足", reason: "假別額度不足" },
+  { label: "該期間人力不足", reason: "該期間人力不足，請改期" },
+  { label: "請補附證明文件", reason: "請補附證明文件後重新申請" },
+  { label: "期程需要調整", reason: "請與主管確認後改期再申請" },
 ]
 
 export function buildRejectReasonFlex(requestId: string, link: string) {
