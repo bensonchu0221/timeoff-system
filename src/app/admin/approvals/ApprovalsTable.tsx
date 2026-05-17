@@ -16,6 +16,17 @@ type PendingRequest = {
   leaveType: { name: string }
 }
 
+// 單日就只秀一個日期，多日才顯示區間（與 LINE / email 通知的格式一致）
+function formatLeaveRange(start: Date, end: Date): string {
+  const s = formatTaipeiDate(start)
+  const e = formatTaipeiDate(end)
+  return s === e ? s : `${s} - ${e}`
+}
+
+function partOfDayLabel(p: string): string {
+  return p === "ALL_DAY" ? "全天" : p === "MORNING" ? "上半天" : "下半天"
+}
+
 export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRequest[] }) {
   const [isPending, startTransition] = useTransition()
   // 駁回 modal 狀態：rejectingId = "BATCH" 表示批次駁回（所有勾選的單）
@@ -134,7 +145,8 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+      {/* ===== 桌機表格（md 以上） ===== */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -186,10 +198,10 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">
-                    {formatTaipeiDate(req.startDate)} - {formatTaipeiDate(req.endDate)}
+                    {formatLeaveRange(req.startDate, req.endDate)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    時段: {req.partOfDay === "ALL_DAY" ? "全天" : req.partOfDay === "MORNING" ? "上半天" : "下半天"}
+                    時段: {partOfDayLabel(req.partOfDay)}
                   </div>
                 </td>
                 <td className="px-6 py-4">
@@ -230,6 +242,90 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* ===== 手機卡片版（md 以下） ===== */}
+      <div className="md:hidden space-y-3">
+        {pendingRequests.map((req) => (
+          <div
+            key={req.id}
+            className={`bg-white rounded-lg shadow border ${selectedIds.has(req.id) ? "border-blue-300 bg-blue-50/30" : "border-gray-200"} p-4`}
+          >
+            {/* 第一列：勾選 + 申請人 + 部門 */}
+            <div className="flex items-center gap-3 mb-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(req.id)}
+                onChange={() => toggleOne(req.id)}
+                disabled={isPending}
+                className="checkbox checkbox-sm"
+              />
+              {req.user.image ? (
+                <img className="h-9 w-9 rounded-full" src={req.user.image} alt="" />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-gray-200" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900 truncate">{req.user.name}</div>
+                <div className="text-xs text-gray-500 truncate">{req.user.department || "未設定部門"}</div>
+              </div>
+            </div>
+
+            {/* 第二列：假別 / 天數 / 時段 / 區間 */}
+            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+              <div>
+                <div className="text-xs text-gray-500">假別 / 天數</div>
+                <div className="text-gray-900">
+                  {req.leaveType.name} <span className="font-bold text-[var(--brand-primary)]">{req.durationDays} 天</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">期間 / 時段</div>
+                <div className="text-gray-900">{formatLeaveRange(req.startDate, req.endDate)}</div>
+                <div className="text-xs text-gray-500">{partOfDayLabel(req.partOfDay)}</div>
+              </div>
+            </div>
+
+            {/* 事由 */}
+            {req.reason && (
+              <div className="mb-3 text-sm">
+                <div className="text-xs text-gray-500 mb-1">事由</div>
+                <div className="text-gray-700 whitespace-pre-wrap break-words">{req.reason}</div>
+              </div>
+            )}
+
+            {/* 核准留言（選填） */}
+            <input
+              type="text"
+              placeholder="核准留言（選填）"
+              value={approveNotes[req.id] ?? ""}
+              onChange={(e) => setApproveNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
+              disabled={isPending}
+              className="input input-bordered input-sm w-full bg-white mb-3"
+            />
+
+            {/* 操作按鈕 */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => runReview(req.id, "APPROVED", approveNotes[req.id])}
+                disabled={isPending}
+                className="flex-1 bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-md transition disabled:opacity-50 text-sm font-medium"
+              >
+                核准
+              </button>
+              <button
+                onClick={() => {
+                  setRejectingId(req.id)
+                  setRejectMessage("")
+                }}
+                disabled={isPending}
+                className="flex-1 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-2 rounded-md transition disabled:opacity-50 text-sm font-medium"
+              >
+                駁回
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* 駁回理由 modal */}
