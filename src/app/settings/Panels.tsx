@@ -84,81 +84,120 @@ export function LineBindingPanel({
   const qrSrc = lineFriendUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(lineFriendUrl)}`
     : null
+  // deep link：直接打開 Bot 對話、訊息欄帶入綁定碼。已加好友者點一下就可送出。
+  const oaMessageUrl = botBasicId && currentCode
+    ? `https://line.me/R/oaMessage/${encodeURIComponent(botBasicId)}/?${encodeURIComponent(currentCode)}`
+    : null
+
+  const handleCopyCode = async () => {
+    if (!currentCode) return
+    try {
+      await navigator.clipboard.writeText(currentCode)
+      toast.success("綁定碼已複製")
+    } catch {
+      toast.error("複製失敗，請手動選取")
+    }
+  }
 
   return (
     <section className="bg-white rounded-lg shadow border border-gray-200 p-6">
       <h2 className="text-lg font-medium mb-4">綁定 LINE 帳號</h2>
 
-      <ol className="text-sm text-gray-700 space-y-2 mb-6 list-decimal list-inside">
-        <li>用手機掃右側 QR Code 加 Bot 好友</li>
-        <li>按下「產生綁定碼」拿到 6 碼</li>
-        <li>把綁定碼貼給 Bot，看到「綁定成功」就完成</li>
-      </ol>
-
-      <div className="flex flex-col sm:flex-row gap-6 items-start">
-        {/* QR Code */}
-        <div className="flex-shrink-0">
-          {qrSrc ? (
-            <img
-              src={qrSrc}
-              alt="LINE Bot QR Code"
-              className="w-48 h-48 rounded-md border border-gray-200"
-            />
-          ) : (
-            <div className="w-48 h-48 rounded-md border border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-400 p-3 text-center">
-              系統管理員尚未設定 LINE_BOT_BASIC_ID
-            </div>
-          )}
-          {lineFriendUrl && (
-            <a
-              href={lineFriendUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block mt-2 text-xs text-center text-blue-600 hover:underline"
-            >
-              或點此用 LINE 開啟
-            </a>
-          )}
-        </div>
-
-        {/* 綁定碼 */}
-        <div className="flex-1 w-full">
-          {currentCode ? (
-            <div className="space-y-3">
-              <div className="p-4 rounded-md bg-gray-50 border border-gray-200">
-                <div className="text-xs text-gray-500 mb-1">您的綁定碼</div>
-                <div className="text-3xl font-mono font-bold tracking-widest text-gray-900">
-                  {currentCode}
-                </div>
-                {currentExpiry && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    有效期限：
-                    {new Date(currentExpiry).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
-                  </div>
-                )}
+      {/* Step 1: 綁定碼是主角 */}
+      {currentCode ? (
+        <div className="space-y-4">
+          <div className="p-5 rounded-md bg-gray-50 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-2">您的綁定碼（30 分鐘內有效）</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-4xl font-mono font-bold tracking-widest text-gray-900">
+                {currentCode}
               </div>
-              <p className="text-xs text-gray-500">
-                請複製這 6 碼，貼到剛剛加好友的 Bot 對話視窗。
-              </p>
               <button
-                onClick={handleGenerate}
-                disabled={isPending}
-                className="text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                onClick={handleCopyCode}
+                className="text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition shrink-0"
               >
-                {isPending ? "產生中..." : "重新產生"}
+                複製
               </button>
             </div>
-          ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={isPending}
-              className="w-full sm:w-auto bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400"
+            {currentExpiry && (
+              <div className="text-xs text-gray-500 mt-3">
+                有效期限：{new Date(currentExpiry).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+              </div>
+            )}
+          </div>
+
+          {/* Step 2a: 已加好友走這條 — deep link 自動帶入訊息 */}
+          {oaMessageUrl && (
+            <a
+              href={oaMessageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block w-full text-center bg-[var(--brand-primary)] text-white px-4 py-3 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition"
             >
-              {isPending ? "產生中..." : "產生綁定碼"}
-            </button>
+              在 LINE 開啟對話框並送出綁定碼
+            </a>
           )}
+
+          <p className="text-xs text-gray-500 text-center">
+            點上方按鈕會跳到 Bot 對話框、訊息欄已自動填入綁定碼，按「送出」即可完成綁定。
+          </p>
+
+          <button
+            onClick={handleGenerate}
+            disabled={isPending}
+            className="text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+          >
+            {isPending ? "產生中..." : "重新產生綁定碼"}
+          </button>
+
+          {/* Step 2b: 還沒加好友走這條 — 收合區塊 */}
+          <details className="mt-4 border-t border-gray-100 pt-4">
+            <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
+              還沒加 Bot 好友？點此展開 QR Code
+            </summary>
+            <div className="mt-4 flex flex-col sm:flex-row gap-4 items-start">
+              {qrSrc ? (
+                <img
+                  src={qrSrc}
+                  alt="LINE Bot QR Code"
+                  className="w-40 h-40 rounded-md border border-gray-200 shrink-0"
+                />
+              ) : (
+                <div className="w-40 h-40 rounded-md border border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-400 p-3 text-center shrink-0">
+                  系統管理員尚未設定 LINE_BOT_BASIC_ID
+                </div>
+              )}
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>用手機掃左側 QR Code 把 Bot 加為好友，加好友後回來按上面的「在 LINE 開啟對話框」按鈕完成綁定。</p>
+                {lineFriendUrl && (
+                  <a
+                    href={lineFriendUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block text-blue-600 hover:underline text-xs"
+                  >
+                    或點此用 LINE 直接開啟加好友頁
+                  </a>
+                )}
+              </div>
+            </div>
+          </details>
         </div>
-      </div>
+      ) : (
+        // 還沒產綁定碼：首頁只強調這顆按鈕
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            按下下方按鈕產生 6 碼綁定碼，把它送給 LINE Bot 就完成綁定。
+          </p>
+          <button
+            onClick={handleGenerate}
+            disabled={isPending}
+            className="w-full sm:w-auto bg-[var(--brand-primary)] text-white px-6 py-3 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400"
+          >
+            {isPending ? "產生中..." : "產生綁定碼"}
+          </button>
+        </div>
+      )}
     </section>
   )
 }
