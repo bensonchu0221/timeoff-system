@@ -31,9 +31,17 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
         partOfDay: target.partOfDay,
         reason: target.reason,
         oldDuration: target.durationDays,
+        backupId: target.backupId,
       }
     }
   }
+
+  // 代理人下拉清單：在職、排除自己；顯示姓名（部門）
+  const coworkers = await prisma.user.findMany({
+    where: { terminatedDate: null, id: { not: user.id } },
+    select: { id: true, name: true, department: true },
+    orderBy: [{ department: "asc" }, { name: "asc" }],
+  })
 
   const year = new Date().getFullYear()
   const leaveTypes = await prisma.leaveType.findMany({
@@ -88,7 +96,7 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
         </div>
 
         <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-          <LeaveForm balances={balances} holidayDates={holidayDates} editTarget={editTarget} />
+          <LeaveForm balances={balances} holidayDates={holidayDates} editTarget={editTarget} coworkers={coworkers} />
         </div>
       </div>
 

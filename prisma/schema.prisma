@@ -74,6 +74,7 @@ model User {
   // Leaves and Quotas
   leaveRequests  LeaveRequest[]     @relation("UserLeaveRequests")
   approvedLeaves LeaveRequest[]     @relation("ApproverLeaveRequests")
+  backupRequests LeaveRequest[]     @relation("BackupLeaveRequests")
   leaveBalances  UserLeaveBalance[]
   auditLogs      AuditLog[]         @relation("AuditActor")
 
@@ -126,7 +127,14 @@ model LeaveRequest {
 
   approverId     String?
   approver       User?       @relation("ApproverLeaveRequests", fields: [approverId], references: [id])
-  
+
+  // 代理人（選填）：員工請假期間請該人協助；有填則通知該代理人
+  backupId       String?
+  backup         User?       @relation("BackupLeaveRequests", fields: [backupId], references: [id])
+
+  // 24 小時未審核升級用：當 cron 把 pending 單升級給 admin 後寫入時間，避免重複升級
+  escalatedAt    DateTime?
+
   user           User        @relation("UserLeaveRequests", fields: [userId], references: [id])
   leaveType      LeaveType   @relation(fields: [leaveTypeId], references: [id])
 

@@ -6,7 +6,11 @@ export type LineNotifyKey =
   | "reviewResult"           // 員工的假單被核准/駁回
   | "departmentLeave"        // 同部門有人請假成功
   | "dailyPending"           // 主管每日 11:00 待審清單
-  | "dailyRoster"            // 全員每日 11:00 今日請假名單
+  | "dailyRoster"            // 同部門每日 10:00 請假名單
+  | "leaveCancelled"         // 主管 / 同部門：收到撤銷通知
+  | "leaveUpdated"           // 主管：員工修改了 PENDING 假單
+  | "backupAssigned"         // 被指定為代理人
+  | "escalation"             // admin：24h 未審核升級
 
 /**
  * 判斷是否該發 LINE 給該使用者。
@@ -224,6 +228,111 @@ export async function sendLineLeaveResult(
   const messageBlock = message?.trim() ? `\n\n主管留言：\n${message.trim()}` : ""
   const text = `${head}\n假別：${leaveType}${messageBlock}`
 
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 撤銷通知 — 給原審核主管或同部門。
+ * previousStatus 區分 APPROVED 撤銷（影響大）vs PENDING 撤銷（單純取消申請）
+ */
+export async function sendLineLeaveCancelled(
+  toLineUserId: string,
+  applicantName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  previousStatus: "PENDING" | "APPROVED"
+): Promise<void> {
+  const range = formatDateRange(startDate, endDate)
+  const head = previousStatus === "APPROVED" ? "⚠️ 已核准假單被撤銷" : "🚫 待審假單已撤銷"
+  const tail = previousStatus === "APPROVED"
+    ? `\n員工該期間將如常出勤，請依此調整工作安排。`
+    : `\n員工已自行撤銷，無需再審核。`
+  const text = `${head}\n${applicantName}：${leaveType}（${range}）${tail}`
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 修改通知 — 給原審核主管。只在 PENDING 修改後觸發。
+ */
+export async function sendLineLeaveUpdated(
+  toLineUserId: string,
+  applicantName: string,
+  beforeSummary: string,
+  afterSummary: string,
+  link: string
+): Promise<void> {
+  const text =
+    `✏️ 待審假單已修改\n` +
+    `${applicantName} 修改了內容：\n\n` +
+    `修改前：${beforeSummary}\n` +
+    `修改後：${afterSummary}\n\n` +
+    `前往審核：${link}`
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 代理人通知（被指定為代理人）
+ */
+export async function sendLineBackupAssigned(
+  toLineUserId: string,
+  applicantName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  status: "PENDING" | "APPROVED"
+): Promise<void> {
+  const range = formatDateRange(startDate, endDate)
+  const statusLabel = status === "APPROVED" ? "已核准" : "待審核"
+  const text =
+    `🤝 代理人通知\n` +
+    `${applicantName} 將您列為 ${range} 的代理人\n` +
+    `假別：${leaveType}\n` +
+    `狀態：${statusLabel}\n\n` +
+    `若該假單後續未核准或被撤銷，會再通知您。`
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 代理人解除通知
+ */
+export async function sendLineBackupRemoved(
+  toLineUserId: string,
+  applicantName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  reason: "REMOVED_BY_EDIT" | "CANCELLED" | "REJECTED"
+): Promise<void> {
+  const range = formatDateRange(startDate, endDate)
+  const reasonLabel = reason === "CANCELLED" ? "已撤銷" : reason === "REJECTED" ? "已駁回" : "已改指定他人"
+  const text =
+    `↩️ 代理人解除\n` +
+    `${applicantName} 的 ${range} ${leaveType} 假單${reasonLabel}，您不再需要協助代理。`
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 24 小時未審核升級（給 admin）
+ */
+export async function sendLineEscalation(
+  toLineUserId: string,
+  applicantName: string,
+  managerName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  hoursPending: number,
+  link: string
+): Promise<void> {
+  const range = formatDateRange(startDate, endDate)
+  const text =
+    `🚨 假單超時未審核\n` +
+    `申請人：${applicantName}\n` +
+    `原主管：${managerName || "未指派"}\n` +
+    `假別：${leaveType}（${range}）\n` +
+    `已 pending ${hoursPending} 小時\n\n` +
+    `立即審核：${link}`
   await linePush(toLineUserId, [{ type: "text", text }])
 }
 

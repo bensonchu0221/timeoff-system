@@ -7,12 +7,24 @@ import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
-import { sendLeaveApplicationEmail, sendLeaveResultEmail, sendDepartmentLeaveEmail } from "@/lib/email"
+import {
+  sendLeaveApplicationEmail,
+  sendLeaveResultEmail,
+  sendDepartmentLeaveEmail,
+  sendLeaveCancelledEmail,
+  sendLeaveUpdatedEmail,
+  sendBackupAssignedEmail,
+  sendBackupRemovedEmail,
+} from "@/lib/email"
 import {
   shouldSendLine,
   sendLineLeaveApplication,
   sendLineLeaveResult,
   sendLineSameDepartment,
+  sendLineLeaveCancelled,
+  sendLineLeaveUpdated,
+  sendLineBackupAssigned,
+  sendLineBackupRemoved,
 } from "@/lib/line"
 
 export async function applyLeave(data: {
@@ -20,7 +32,8 @@ export async function applyLeave(data: {
   startDate: string,
   endDate: string,
   partOfDay: PartOfDay,
-  reason?: string
+  reason?: string,
+  backupId?: string | null
 }) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
@@ -68,6 +81,14 @@ export async function applyLeave(data: {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const approverId = user?.managerId;
 
+  // 代理人驗證：選填，若有填要是真的存在的在職員工、且不是自己
+  let backupId: string | null = data.backupId || null;
+  if (backupId === userId) backupId = null;
+  if (backupId) {
+    const backup = await prisma.user.findUnique({ where: { id: backupId } });
+    if (!backup || backup.terminatedDate) backupId = null;
+  }
+
   const leaveRequest = await prisma.leaveRequest.create({
     data: {
       userId,
@@ -78,7 +99,8 @@ export async function applyLeave(data: {
       reason: data.reason,
       durationDays,
       status: "PENDING",
-      approverId
+      approverId,
+      backupId,
     }
   });
 
@@ -123,15 +145,67 @@ export async function applyLeave(data: {
     }
   }
 
+  // 代理人通知（選填；申請時尚未核准 = PENDING）
+  if (backupId) {
+    await notifyBackupAssigned(backupId, user?.name || "同事", leaveTypeName, start, end, "PENDING")
+  }
+
   revalidatePath("/dashboard")
   return { success: true, request: leaveRequest }
+}
+
+// ----- 通知 helpers（在 actions 內共用，呼叫 email + LINE）-----
+
+async function notifyBackupAssigned(
+  backupUserId: string,
+  applicantName: string,
+  leaveType: string,
+  start: Date,
+  end: Date,
+  status: "PENDING" | "APPROVED"
+) {
+  const backup = await prisma.user.findUnique({
+    where: { id: backupUserId },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+  })
+  if (!backup) return
+  if (backup.email) {
+    await sendBackupAssignedEmail(backup.email, applicantName, leaveType, start, end, status)
+  }
+  if (shouldSendLine(backup, "backupAssigned")) {
+    await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, status)
+  }
+}
+
+async function notifyBackupRemoved(
+  backupUserId: string,
+  applicantName: string,
+  leaveType: string,
+  start: Date,
+  end: Date,
+  reason: "REMOVED_BY_EDIT" | "CANCELLED" | "REJECTED"
+) {
+  const backup = await prisma.user.findUnique({
+    where: { id: backupUserId },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+  })
+  if (!backup) return
+  if (backup.email) {
+    await sendBackupRemovedEmail(backup.email, applicantName, leaveType, start, end, reason)
+  }
+  if (shouldSendLine(backup, "backupAssigned")) {
+    await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, reason)
+  }
 }
 
 export async function cancelLeave(requestId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
+  const request = await prisma.leaveRequest.findUnique({
+    where: { id: requestId },
+    include: { user: true, leaveType: true }
+  });
   if (!request) throw new Error("Request not found");
 
   // 從 DB 抓最新 role，避免 session 中的 role 過時或被竄改
@@ -150,6 +224,8 @@ export async function cancelLeave(requestId: string) {
     throw new Error("此假單的開始日期已過，無法撤銷！如需修正請聯絡管理員。");
   }
 
+  const previousStatus = request.status as "PENDING" | "APPROVED";
+
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: { status: "CANCELLED" }
@@ -160,11 +236,55 @@ export async function cancelLeave(requestId: string) {
     action: "LEAVE_CANCEL",
     targetType: "LeaveRequest",
     targetId: requestId,
-    payload: { previousStatus: request.status },
+    payload: { previousStatus },
   })
+
+  // --- 撤銷通知 ---
+  const applicantName = request.user?.name || "員工"
+  const leaveTypeName = request.leaveType.name
+  const start = request.startDate
+  const end = request.endDate
+
+  // 通知原審核主管（不管原狀態，都讓他知道）
+  if (request.approverId) {
+    const manager = await prisma.user.findUnique({
+      where: { id: request.approverId },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    });
+    if (manager?.email) {
+      await sendLeaveCancelledEmail(manager.email, applicantName, leaveTypeName, start, end, previousStatus)
+    }
+    if (shouldSendLine(manager, "leaveCancelled")) {
+      await sendLineLeaveCancelled(manager!.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus)
+    }
+  }
+
+  // 已核准 → 同部門也要通知（原本同部門已通知會請假，現在撤銷了）
+  if (previousStatus === "APPROVED" && request.user.department) {
+    const teammates = await prisma.user.findMany({
+      where: {
+        department: request.user.department,
+        terminatedDate: null,
+        id: { not: request.userId },
+      },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    })
+    await Promise.allSettled(teammates.flatMap(t => {
+      const tasks: Promise<unknown>[] = []
+      if (t.email) tasks.push(sendLeaveCancelledEmail(t.email, applicantName, leaveTypeName, start, end, previousStatus))
+      if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
+      return tasks
+    }))
+  }
+
+  // 通知代理人「不用代理了」
+  if (request.backupId) {
+    await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, start, end, "CANCELLED")
+  }
 
   revalidatePath("/dashboard")
   revalidatePath("/admin/approvals")
+  revalidatePath("/admin/gantt")
   return { success: true }
 }
 
@@ -173,13 +293,17 @@ export async function updateLeave(requestId: string, data: {
   startDate: string,
   endDate: string,
   partOfDay: PartOfDay,
-  reason?: string
+  reason?: string,
+  backupId?: string | null
 }) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
 
   const userId = session.user.id;
-  const request = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
+  const request = await prisma.leaveRequest.findUnique({
+    where: { id: requestId },
+    include: { user: true, leaveType: true },
+  });
   if (!request) return { error: "Request not found" };
 
   // 權限：只有本人可以修改自己的單
@@ -230,6 +354,14 @@ export async function updateLeave(requestId: string, data: {
     return { error: `${newLeaveTypeName}不足！修改後需要 ${newDuration} 天，但 ${newLeaveTypeName} 目前最多可改為 ${allowedNewDuration} 天。` };
   }
 
+  // 代理人變更驗證：選填，不能是自己；要是在職員工
+  let newBackupId: string | null = data.backupId === undefined ? request.backupId : (data.backupId || null);
+  if (newBackupId === userId) newBackupId = null;
+  if (newBackupId && newBackupId !== request.backupId) {
+    const backup = await prisma.user.findUnique({ where: { id: newBackupId } });
+    if (!backup || backup.terminatedDate) newBackupId = null;
+  }
+
   await prisma.leaveRequest.update({
     where: { id: requestId },
     data: {
@@ -239,6 +371,7 @@ export async function updateLeave(requestId: string, data: {
       partOfDay: data.partOfDay,
       reason: data.reason,
       durationDays: newDuration,
+      backupId: newBackupId,
     }
   });
 
@@ -255,6 +388,7 @@ export async function updateLeave(requestId: string, data: {
         partOfDay: request.partOfDay,
         durationDays: request.durationDays,
         reason: request.reason,
+        backupId: request.backupId,
       },
       after: {
         leaveTypeId: data.leaveTypeId,
@@ -263,13 +397,61 @@ export async function updateLeave(requestId: string, data: {
         partOfDay: data.partOfDay,
         durationDays: newDuration,
         reason: data.reason ?? null,
+        backupId: newBackupId,
       },
     },
   })
 
+  // --- 通知主管：員工修改了待審內容 ---
+  const applicantName = request.user?.name || "員工"
+  const newLeaveType = data.leaveTypeId === request.leaveTypeId
+    ? request.leaveType
+    : await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
+  const newLeaveTypeName = newLeaveType?.name || "該假別"
+  const before = `${request.leaveType.name}（${formatRange(request.startDate, request.endDate)}，${request.durationDays} 天）`
+  const after = `${newLeaveTypeName}（${formatRange(start, end)}，${newDuration} 天）`
+  const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
+  const reviewLink = `${siteUrl}/admin/approvals`
+
+  if (request.approverId) {
+    const manager = await prisma.user.findUnique({
+      where: { id: request.approverId },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    });
+    if (manager?.email) {
+      await sendLeaveUpdatedEmail(manager.email, applicantName, before, after, reviewLink)
+    }
+    if (shouldSendLine(manager, "leaveUpdated")) {
+      await sendLineLeaveUpdated(manager!.lineUserId!, applicantName, before, after, reviewLink)
+    }
+  }
+
+  // --- 代理人變化通知 ---
+  if (request.backupId !== newBackupId) {
+    // 舊代理人 → 解除
+    if (request.backupId) {
+      await notifyBackupRemoved(request.backupId, applicantName, request.leaveType.name, request.startDate, request.endDate, "REMOVED_BY_EDIT")
+    }
+    // 新代理人 → 指派
+    if (newBackupId) {
+      await notifyBackupAssigned(newBackupId, applicantName, newLeaveTypeName, start, end, "PENDING")
+    }
+  }
+
   revalidatePath("/dashboard")
   revalidatePath("/admin/approvals")
   return { success: true }
+}
+
+// 簡單的日期區間顯示（給通知用，Asia/Taipei）
+function formatRange(start: Date, end: Date): string {
+  const toTW = (d: Date) => {
+    const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }))
+    return `${tw.getMonth() + 1}/${tw.getDate()}`
+  }
+  const s = toTW(start)
+  const e = toTW(end)
+  return s === e ? s : `${s}–${e}`
 }
 
 // 對外的 reviewLeave：從 session 拿 actorId 後委派 reviewLeaveAsUser
@@ -397,6 +579,16 @@ export async function reviewLeaveAsUser(
         return tasks
       })
     )
+  }
+
+  // 代理人通知：核准後正式生效；駁回則解除代理
+  if (request.backupId) {
+    const applicantNameFull = request.user?.name || "員工"
+    if (status === "APPROVED") {
+      await notifyBackupAssigned(request.backupId, applicantNameFull, request.leaveType.name, request.startDate, request.endDate, "APPROVED")
+    } else {
+      await notifyBackupRemoved(request.backupId, applicantNameFull, request.leaveType.name, request.startDate, request.endDate, "REJECTED")
+    }
   }
 
   revalidatePath("/admin/approvals")

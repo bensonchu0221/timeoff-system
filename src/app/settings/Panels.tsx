@@ -180,6 +180,18 @@ const PREF_DEFS: PrefDef[] = [
     managerOnly: true,
   },
   {
+    key: "leaveUpdated",
+    label: "員工修改待審假單",
+    description: "部屬在我審核前修改假單內容時推播",
+    managerOnly: true,
+  },
+  {
+    key: "leaveCancelled",
+    label: "假單撤銷通知",
+    description: "員工撤銷假單時推播（主管收到部屬撤銷、同部門收到同事撤銷）",
+    managerOnly: false,
+  },
+  {
     key: "reviewResult",
     label: "我的假單結果",
     description: "我的假單被核准或駁回時推播",
@@ -192,6 +204,12 @@ const PREF_DEFS: PrefDef[] = [
     managerOnly: false,
   },
   {
+    key: "backupAssigned",
+    label: "我被指定為代理人",
+    description: "同事請假時把我列為代理人會推播",
+    managerOnly: false,
+  },
+  {
     key: "dailyPending",
     label: "每日 11:00 待審清單",
     description: "每日 11:00 推播當下有幾筆待我審的假單",
@@ -199,9 +217,15 @@ const PREF_DEFS: PrefDef[] = [
   },
   {
     key: "dailyRoster",
-    label: "每日 10:00 今日請假名單",
-    description: "每日 10:00 推播今天有誰請假",
+    label: "每日 10:00 同部門請假名單",
+    description: "每日 10:00 推播同部門今天有誰請假",
     managerOnly: false,
+  },
+  {
+    key: "escalation",
+    label: "假單未審核升級提醒",
+    description: "有假單超過 24 小時未審核時推播給 admin",
+    managerOnly: true, // admin / manager 才看得到
   },
 ]
 

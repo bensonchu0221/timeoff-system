@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyRoster } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 
-// 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給每位在職員工
+// 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「同部門」員工
 // 認證：x-cron-secret header
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
@@ -28,31 +28,37 @@ export async function GET(req: NextRequest) {
       endDate: { gte: today },
     },
     include: {
-      user: { select: { name: true } },
+      user: { select: { id: true, name: true, department: true } },
       leaveType: { select: { name: true } },
     },
     orderBy: { user: { name: "asc" } },
   })
 
   if (todayLeaves.length === 0) {
-    // 沒有人請假就跳過，避免每天空訊息騷擾
     return NextResponse.json({ pushed: 0, reason: "no one is on leave today" })
   }
 
-  const rosterLines = todayLeaves.map((l) => {
-    const partLabel =
-      l.partOfDay === "MORNING"
-        ? "（上半天）"
-        : l.partOfDay === "AFTERNOON"
-        ? "（下半天）"
-        : ""
-    return `• ${l.user.name || "員工"}：${l.leaveType.name}${partLabel}`
-  })
+  // 依部門分桶；沒部門的請假者不會引發任何通知（因為配不到接收者）
+  const leavesByDept = new Map<string, typeof todayLeaves>()
+  for (const l of todayLeaves) {
+    const dept = l.user.department
+    if (!dept) continue
+    if (!leavesByDept.has(dept)) leavesByDept.set(dept, [])
+    leavesByDept.get(dept)!.push(l)
+  }
 
-  // 全員都推（個別偏好控制）
+  if (leavesByDept.size === 0) {
+    return NextResponse.json({ pushed: 0, reason: "no leaves with a department today" })
+  }
+
+  // 一次撈所有有部門 + 有綁 LINE 的在職員工
   const recipients = await prisma.user.findMany({
-    where: { terminatedDate: null, lineUserId: { not: null } },
-    select: { id: true, lineUserId: true, lineNotifyPrefs: true },
+    where: {
+      terminatedDate: null,
+      lineUserId: { not: null },
+      department: { in: Array.from(leavesByDept.keys()) },
+    },
+    select: { id: true, lineUserId: true, lineNotifyPrefs: true, department: true },
   })
 
   const tw = new Date(today.toLocaleString("en-US", { timeZone: "Asia/Taipei" }))
@@ -62,6 +68,22 @@ export async function GET(req: NextRequest) {
   await Promise.allSettled(
     recipients.map(async (u) => {
       if (!shouldSendLine(u, "dailyRoster")) return
+      if (!u.department) return
+      const deptLeaves = leavesByDept.get(u.department) || []
+      // 排除自己也請假的情況，避免「您 + 同事 X 今天請假」這種尷尬
+      const filtered = deptLeaves.filter((l) => l.user.id !== u.id)
+      if (filtered.length === 0) return
+
+      const rosterLines = filtered.map((l) => {
+        const partLabel =
+          l.partOfDay === "MORNING"
+            ? "（上半天）"
+            : l.partOfDay === "AFTERNOON"
+            ? "（下半天）"
+            : ""
+        return `• ${l.user.name || "員工"}：${l.leaveType.name}${partLabel}`
+      })
+
       await sendLineDailyRoster(u.lineUserId!, dateLabel, rosterLines)
       pushed += 1
     })
@@ -71,5 +93,6 @@ export async function GET(req: NextRequest) {
     pushed,
     totalRecipients: recipients.length,
     leavesToday: todayLeaves.length,
+    departments: leavesByDept.size,
   })
 }

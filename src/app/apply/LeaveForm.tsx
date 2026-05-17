@@ -24,6 +24,14 @@ export type EditTarget = {
   partOfDay: PartOfDay
   reason: string | null
   oldDuration: number  // 舊的 durationDays，用於前端餘額預檢時加回
+  backupId: string | null
+}
+
+// 代理人下拉選單來源
+type Coworker = {
+  id: string
+  name: string | null
+  department: string | null
 }
 
 // 將後端傳入的 YYYY-MM-DD 字串解析為「本地時區午夜」的 Date，與 DayPicker 行為一致
@@ -32,7 +40,7 @@ function parseDateString(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
-export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Balance[], holidayDates: string[], editTarget?: EditTarget }) {
+export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { balances: Balance[], holidayDates: string[], editTarget?: EditTarget, coworkers: Coworker[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -47,6 +55,7 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
   const [leaveTypeId, setLeaveTypeId] = useState<string>(editTarget?.leaveTypeId || balances[0]?.id || "")
   const [partOfDay, setPartOfDay] = useState<PartOfDay>(editTarget?.partOfDay || "ALL_DAY")
   const [reason, setReason] = useState(editTarget?.reason || "")
+  const [backupId, setBackupId] = useState<string>(editTarget?.backupId || "")
   const [errorMsg, setErrorMsg] = useState("")
   // Modal 標題會帶具體假別名稱，例如「特休不足！」
   const [modalTitle, setModalTitle] = useState("假數不足")
@@ -143,15 +152,10 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
           endDate: toLocalDateStr(range.to || range.from!),
           partOfDay,
           reason,
+          backupId: backupId || null,
         }
         const result = editTarget
-          ? await updateLeave(editTarget.id, {
-              leaveTypeId: payload.leaveTypeId,
-              startDate: payload.startDate,
-              endDate: payload.endDate,
-              partOfDay: payload.partOfDay,
-              reason: payload.reason,
-            })
+          ? await updateLeave(editTarget.id, payload)
           : await applyLeave(payload)
 
         if (result && result.error) {
@@ -251,6 +255,21 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
               </div>
             </div>
           )}
+
+          <label className="fieldset-label font-medium mt-4">代理人 (選填)</label>
+          <select
+            value={backupId}
+            onChange={(e) => setBackupId(e.target.value)}
+            className="select select-bordered w-full bg-white"
+          >
+            <option value="">不指定代理人</option>
+            {coworkers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name || "(未命名)"}{c.department ? `（${c.department}）` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">若指定代理人，送出後該員工會收到通知。</p>
 
           <label className="fieldset-label font-medium mt-4">事由說明 (選填)</label>
           <textarea
