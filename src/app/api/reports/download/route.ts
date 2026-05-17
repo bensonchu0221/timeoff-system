@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
       // --- Section 2: Leave Balances ---
       sheet.addRow(["【假別額度表】"])
-      sheet.addRow(["假別", "剩餘天數", "全年總天數"])
+      sheet.addRow(["假別", "可請天數", "全年總天數"])
       
       const balancesList = await Promise.all(
         leaveTypes.map(async (lt) => {

@@ -49,6 +49,19 @@ model User {
   // iCal 訂閱簽章 token；首次需要時 lazy 產生，admin 可重設以撤銷舊 URL
   calendarToken  String?
 
+  // LINE 綁定相關
+  // lineUserId：LINE 平台的使用者 ID（U 開頭），唯一；綁定後寫入，解綁時清空
+  lineUserId        String?   @unique
+  // lineBindingCode：員工到 /settings 頁產生的一次性綁定碼，傳給 Bot 後完成綁定即清空
+  lineBindingCode   String?   @unique
+  // 綁定碼有效期限（30 分鐘），過期需重新產生
+  lineBindingExpiry DateTime?
+  // 完成綁定的時間，方便除錯與稽核
+  lineBoundAt       DateTime?
+  // 各類 LINE 通知個別開關，JSON 結構，null 視為全 true
+  // 例：{ applicationToManager: true, reviewResult: true, departmentLeave: true, dailyPending: true, dailyRoster: true }
+  lineNotifyPrefs   Json?
+
   // NextAuth
   accounts       Account[]
   sessions       Session[]

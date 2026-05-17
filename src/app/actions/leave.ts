@@ -7,7 +7,13 @@ import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
-import { sendLeaveApplicationEmail, sendLeaveResultEmail } from "@/lib/email"
+import { sendLeaveApplicationEmail, sendLeaveResultEmail, sendDepartmentLeaveEmail } from "@/lib/email"
+import {
+  shouldSendLine,
+  sendLineLeaveApplication,
+  sendLineLeaveResult,
+  sendLineSameDepartment,
+} from "@/lib/line"
 
 export async function applyLeave(data: {
   leaveTypeId: string,
@@ -47,11 +53,15 @@ export async function applyLeave(data: {
   const durationDays = await calculateDurationDays(start, end, data.partOfDay);
   if (durationDays === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
+  // 提前抓假別名稱：錯誤訊息要用，後面寄信也要用
+  const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
+  const leaveTypeName = leaveTypeObj?.name || "該假別";
+
   const year = start.getFullYear();
   const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
 
   if (durationDays > balance.remaining) {
-    return { error: `假數不足！您嘗試申請 ${durationDays} 天，但僅剩餘 ${balance.remaining} 天（包含審核中假單）。` };
+    return { error: `${leaveTypeName}不足！您嘗試申請 ${durationDays} 天，但目前 ${leaveTypeName} 只剩 ${balance.remaining} 天可請（包含審核中假單）。` };
   }
 
   // Get user's manager to assign approver
@@ -87,15 +97,28 @@ export async function applyLeave(data: {
 
   if (approverId) {
     const manager = await prisma.user.findUnique({ where: { id: approverId } });
+    const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
+    const reviewLink = `${siteUrl}/admin/approvals`;
+    const applicantName = user?.name || "員工";
+
     if (manager?.email) {
-      const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
-      const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
       await sendLeaveApplicationEmail(
         manager.email,
-        user?.name || "員工",
-        leaveTypeObj?.name || "假別",
+        applicantName,
+        leaveTypeName,
         durationDays,
-        `${siteUrl}/admin/approvals`
+        reviewLink
+      );
+    }
+    // LINE 通知：依主管的 applicationToManager 偏好決定是否推
+    if (shouldSendLine(manager, "applicationToManager")) {
+      await sendLineLeaveApplication(
+        manager!.lineUserId!,
+        applicantName,
+        leaveTypeName,
+        durationDays,
+        reviewLink,
+        leaveRequest.id
       );
     }
   }
@@ -196,13 +219,15 @@ export async function updateLeave(requestId: string, data: {
   const newDuration = await calculateDurationDays(start, end, data.partOfDay);
   if (newDuration === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
-  // 餘額檢查：若假別未變，舊單的天數已計入 pending、需加回；若假別改了，新假別的 pending 不含本單
+  // 額度檢查：若假別未變，舊單的天數已計入 pending、需加回；若假別改了，新假別的 pending 不含本單
   const leaveTypeChanged = data.leaveTypeId !== request.leaveTypeId;
   const year = start.getFullYear();
   const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
   const allowedNewDuration = leaveTypeChanged ? balance.remaining : balance.remaining + request.durationDays;
   if (newDuration > allowedNewDuration) {
-    return { error: `假數不足！修改後需要 ${newDuration} 天，但目前最多可改為 ${allowedNewDuration} 天。` };
+    const newLeaveType = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
+    const newLeaveTypeName = newLeaveType?.name || "該假別";
+    return { error: `${newLeaveTypeName}不足！修改後需要 ${newDuration} 天，但 ${newLeaveTypeName} 目前最多可改為 ${allowedNewDuration} 天。` };
   }
 
   await prisma.leaveRequest.update({
@@ -247,10 +272,21 @@ export async function updateLeave(requestId: string, data: {
   return { success: true }
 }
 
+// 對外的 reviewLeave：從 session 拿 actorId 後委派 reviewLeaveAsUser
+// 給 web UI 使用；LINE webhook 改走 reviewLeaveAsUser 直接傳入 actorId
 export async function reviewLeave(requestId: string, status: "APPROVED" | "REJECTED", message?: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
+  return reviewLeaveAsUser(session.user.id, requestId, status, message);
+}
 
+// 同一審核邏輯但 actorId 由呼叫端決定（例如 LINE webhook 用綁定的 lineUserId 反查出 User.id）
+export async function reviewLeaveAsUser(
+  actorId: string,
+  requestId: string,
+  status: "APPROVED" | "REJECTED",
+  message?: string
+) {
   // 駁回必填理由（員工知道為什麼被駁，後續才能調整重申）
   const trimmedMessage = message?.trim() || undefined
   if (status === "REJECTED" && !trimmedMessage) {
@@ -263,11 +299,12 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
   });
   if (!request) throw new Error("Request not found");
 
-  // Fetch user from DB to ensure we have the latest role/permissions
-  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } });
-  
-  const isAssignedManager = request.approverId === session.user.id;
-  const hasPrivilegedRole = dbUser?.role === "ADMIN" || dbUser?.role === "MANAGER";
+  // 由 DB 拿最新的 role/權限，避免外部呼叫端傳入過期 session
+  const dbUser = await prisma.user.findUnique({ where: { id: actorId } });
+  if (!dbUser || dbUser.terminatedDate) throw new Error("Unauthorized");
+
+  const isAssignedManager = request.approverId === actorId;
+  const hasPrivilegedRole = dbUser.role === "ADMIN" || dbUser.role === "MANAGER";
 
   if (!isAssignedManager && !hasPrivilegedRole) {
     throw new Error("Forbidden");
@@ -282,8 +319,8 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
     ) + "」，無法再次審核！");
   }
 
-  // 用 transaction 確保「讀取餘額 → 檢查額度 → 更新狀態」是原子操作，
-  // 避免兩位主管同時審核兩張單時各自讀到舊餘額，雙雙通過導致超支。
+  // 用 transaction 確保「讀取額度 → 檢查可用 → 更新狀態」是原子操作，
+  // 避免兩位主管同時審核兩張單時各自讀到舊資料，雙雙通過導致超支。
   // updateMany 加上 status: PENDING 的條件，若已被別人改掉會回 count=0 並中止。
   await prisma.$transaction(async (tx) => {
     if (status === "APPROVED") {
@@ -291,7 +328,7 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
       const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
       const actualAvailable = balance.total - balance.used;
       if (request.durationDays > actualAvailable) {
-        throw new Error(`剩餘假別不夠！該假別目前剩餘可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
+        throw new Error(`${request.leaveType.name}不足！${request.leaveType.name} 目前可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
       }
     }
 
@@ -305,15 +342,61 @@ export async function reviewLeave(requestId: string, status: "APPROVED" | "REJEC
   });
 
   await logAudit({
-    actorId: session.user.id,
+    actorId,
     action: status === "APPROVED" ? "LEAVE_APPROVE" : "LEAVE_REJECT",
     targetType: "LeaveRequest",
     targetId: requestId,
     payload: trimmedMessage ? { message: trimmedMessage } : undefined,
   })
 
+  // 通知申請人本人：Email + LINE 雙軌
   if (request.user?.email) {
     await sendLeaveResultEmail(request.user.email, request.leaveType.name, status, trimmedMessage);
+  }
+  if (shouldSendLine(request.user, "reviewResult")) {
+    await sendLineLeaveResult(
+      request.user.lineUserId!,
+      request.leaveType.name,
+      status,
+      trimmedMessage
+    );
+  }
+
+  // 同部門通知：只在「核准」後送，提醒同部門同事誰會請假
+  if (status === "APPROVED" && request.user.department) {
+    const teammates = await prisma.user.findMany({
+      where: {
+        department: request.user.department,
+        terminatedDate: null,
+        id: { not: request.userId },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        lineUserId: true,
+        lineNotifyPrefs: true,
+      },
+    });
+
+    const applicantName = request.user.name || "同事"
+    const leaveTypeName = request.leaveType.name
+    const start = request.startDate
+    const end = request.endDate
+
+    // 並行送、單一失敗不擋其他人，也不擋主流程
+    await Promise.allSettled(
+      teammates.flatMap((t) => {
+        const tasks: Promise<unknown>[] = []
+        if (t.email) {
+          tasks.push(sendDepartmentLeaveEmail(t.email, applicantName, leaveTypeName, start, end))
+        }
+        if (shouldSendLine(t, "departmentLeave")) {
+          tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end))
+        }
+        return tasks
+      })
+    )
   }
 
   revalidatePath("/admin/approvals")

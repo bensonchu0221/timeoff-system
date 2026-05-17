@@ -48,6 +48,8 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
   const [partOfDay, setPartOfDay] = useState<PartOfDay>(editTarget?.partOfDay || "ALL_DAY")
   const [reason, setReason] = useState(editTarget?.reason || "")
   const [errorMsg, setErrorMsg] = useState("")
+  // Modal 標題會帶具體假別名稱，例如「特休不足！」
+  const [modalTitle, setModalTitle] = useState("假數不足")
 
   // holidayDates are now YYYY-MM-DD strings
   const publicHolidays = holidayDates.map(d => {
@@ -122,7 +124,8 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
 
     if (selectedBalance && duration > selectedBalance.remaining + oldDurationCredit) {
       const available = selectedBalance.remaining + oldDurationCredit
-      setErrorMsg(`假數不足！您選了 ${duration} 天，但 ${selectedBalance.name} 目前最多只能 ${available} 天`)
+      setModalTitle(`${selectedBalance.name}不足`)
+      setErrorMsg(`您選了 ${duration} 天，但 ${selectedBalance.name} 目前最多只能 ${available} 天`)
       const modal = document.getElementById('insufficient_balance_modal') as HTMLDialogElement
       if (modal) modal.showModal()
       return
@@ -294,7 +297,7 @@ export function LeaveForm({ balances, holidayDates, editTarget }: { balances: Ba
         <div className="modal-box">
           <h3 className="font-bold text-lg text-red-600 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            餘額不足！
+            {modalTitle}！
           </h3>
           <p className="py-4 text-gray-700">{errorMsg}</p>
           <div className="modal-action">

@@ -101,6 +101,41 @@ export async function sendLeaveResultEmail(toEmail: string, leaveType: string, s
   await sendBrevoEmail(toEmail, subject, html)
 }
 
+export async function sendDepartmentLeaveEmail(
+  toEmail: string,
+  applicantName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date
+) {
+  const range = formatDateRange(startDate, endDate)
+  const subject = `[團隊通知] ${applicantName} 將於 ${range} 請${leaveType}`
+  const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+      <h2 style="color: #333;">團隊請假通知</h2>
+      <p style="color: #555; line-height: 1.5;"><strong>${escapeHtml(applicantName)}</strong> 將於 <strong>${range}</strong> 請<strong>${escapeHtml(leaveType)}</strong>。</p>
+      <p style="color: #888; line-height: 1.5; font-size: 13px;">此為自動通知，您可以登入系統查看部門完整請假狀況。</p>
+      <div style="margin-top: 24px;">
+        <a href="${siteUrl}/admin/gantt" style="background-color: #7A9A8A; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">查看團隊行事曆</a>
+      </div>
+    </div>
+  `
+  await sendBrevoEmail(toEmail, subject, html)
+}
+
+function formatDateRange(start: Date, end: Date): string {
+  const s = formatTaipeiDate(start)
+  const e = formatTaipeiDate(end)
+  return s === e ? s : `${s}–${e}`
+}
+
+function formatTaipeiDate(d: Date): string {
+  const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }))
+  return `${tw.getMonth() + 1}/${tw.getDate()}`
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
