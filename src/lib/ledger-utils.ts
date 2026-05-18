@@ -1,6 +1,6 @@
 import { prisma } from "./db"
-import { LeaveType } from "@prisma/client"
 import { formatTaipeiDate, formatTaipeiDateISO, startOfYearUTC } from "./date-format"
+import { getAnniversaryBaseDays, monthsBetween } from "./leave-utils"
 
 export type LedgerEvent = {
   id: string
@@ -12,6 +12,34 @@ export type LedgerEvent = {
   runningBalance: number
 }
 
+// 工具：把 hireDate + N 年得到的同月同日 UTC Date
+// 例：hireDate=2024-05-13、N=1 → 2025-05-13
+function addYearsUTC(d: Date, years: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth(), d.getUTCDate()))
+}
+
+// 工具：hireDate + N 個月，同日 UTC
+function addMonthsUTC(d: Date, months: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()))
+}
+
+// 對給定的週年期 N，依分水嶺式 override 算出該期實際發放天數
+function getAnniversaryActualDays(
+  N: number,
+  hireYear: number,
+  leaveTypeDefaultDays: number,
+  overrides: { year: number; totalQuota: number }[]
+): number {
+  const base = getAnniversaryBaseDays(N, leaveTypeDefaultDays)
+  const anniversaryStartYear = hireYear + (N - 1)
+  let applicable: number | null = null
+  for (const o of overrides) {
+    if (o.year <= anniversaryStartYear) applicable = o.totalQuota
+    else break
+  }
+  return applicable !== null ? Math.max(base, applicable) : base
+}
+
 export async function getLeaveLedger(userId: string, leaveTypeId: string): Promise<LedgerEvent[]> {
   const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId } })
   if (!leaveType) throw new Error("Leave type not found")
@@ -20,84 +48,100 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
   if (!user) throw new Error("User not found")
 
   const isAnnualLeave = leaveType.name.includes("特休") || leaveType.name.toLowerCase().includes("annual")
-  const currentYear = new Date().getFullYear()
+  const now = new Date()
 
-  let events: Omit<LedgerEvent, "runningBalance">[] = []
+  const events: Omit<LedgerEvent, "runningBalance">[] = []
 
   if (isAnnualLeave) {
     // 特休必須有到職日才能畫 ledger
-    if (!user.hireDate) {
-      return []
-    }
+    if (!user.hireDate) return []
+
     const hireDate = user.hireDate
-    const hireYear = hireDate.getFullYear()
-    const startYear = hireYear
+    const hireYear = hireDate.getUTCFullYear()
+    const M = monthsBetween(hireDate, now)
 
-    // 首年比例折算（與 leave-utils.proRataFirstYear 同邏輯）
-    const proRata = (fullQuota: number, y: number) => {
-      const hireDayOfYear = Math.floor((hireDate.getTime() - startOfYearUTC(y).getTime()) / (1000 * 60 * 60 * 24))
-      const daysInYear = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 366 : 365
-      const daysWorked = daysInYear - hireDayOfYear
-      return Math.round((fullQuota * (daysWorked / daysInYear)) * 2) / 2
-    }
-
-    let lastKnownOverride: number | null = null
-    for (let y = startYear; y <= currentYear; y++) {
-      const override = await prisma.userLeaveBalance.findUnique({
-        where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: y } }
-      })
-
-      let grantAmount = 0
-      if (override) {
-        grantAmount = y === hireYear ? proRata(override.totalQuota, y) : override.totalQuota
-        lastKnownOverride = override.totalQuota
-      } else if (lastKnownOverride !== null) {
-        grantAmount = lastKnownOverride
-      } else {
-        grantAmount = y === hireYear ? proRata(leaveType.defaultDays, y) : leaveType.defaultDays
-      }
-
-      if (grantAmount > 0) {
-        events.push({
-          id: `grant-${y}`,
-          date: startOfYearUTC(y),
-          type: "GRANT",
-          leaveTypeName: leaveType.name,
-          description: `${y}年度額度發放`,
-          amount: grantAmount
-        })
-      }
-    }
-
-    const usages = await prisma.leaveRequest.findMany({
-      where: { userId, leaveTypeId, status: { in: ["APPROVED", "PENDING"] } }
+    // 取所有 override（asc by year，畫每期時做分水嶺挑選）
+    const overrides = await prisma.userLeaveBalance.findMany({
+      where: { userId, leaveTypeId },
+      orderBy: { year: "asc" },
+      select: { year: true, totalQuota: true },
     })
 
+    // 入職當天：第 1 週年期發放
+    if (M >= 0) {
+      const day1Days = getAnniversaryActualDays(1, hireYear, leaveType.defaultDays, overrides)
+      events.push({
+        id: `grant-anniv-1`,
+        date: hireDate,
+        type: "GRANT",
+        leaveTypeName: leaveType.name,
+        description: `入職，特休額度發放 ${day1Days} 天（自滿 3 個月起可申請）`,
+        amount: day1Days,
+      })
+    }
+
+    // 滿 3 個月 marker（無金額）
+    if (M >= 3) {
+      events.push({
+        id: `marker-3m`,
+        date: addMonthsUTC(hireDate, 3),
+        type: "GRANT",
+        leaveTypeName: leaveType.name,
+        description: `滿 3 個月，特休開放申請`,
+        amount: 0,
+      })
+    }
+
+    // 已過的每個完整週年（N >= 2）：發放該期額度
+    // maxCompletedAnniv = 0 表示還沒滿 1 年，只有第 1 期；M=12 表示滿 1 年，已完成第 1 期，進入第 2 期
+    const completedAnniversaries = Math.floor(M / 12)
+    for (let N = 2; N <= completedAnniversaries + 1; N++) {
+      // 第 N 週年期的「發放時點」是 hireDate + (N-1) 年
+      // 例：N=2 → hireDate+1 年（滿 1 年那天）
+      const grantDate = addYearsUTC(hireDate, N - 1)
+      if (grantDate > now) break  // 不顯示未來事件
+
+      const seniorityCompleted = N - 1  // 滿幾年
+      const days = getAnniversaryActualDays(N, hireYear, leaveType.defaultDays, overrides)
+      events.push({
+        id: `grant-anniv-${N}`,
+        date: grantDate,
+        type: "GRANT",
+        leaveTypeName: leaveType.name,
+        description: `${formatTaipeiDateISO(grantDate)} 滿 ${seniorityCompleted} 年特休額度新增 ${days} 天`,
+        amount: days,
+      })
+    }
+
+    // 已請假紀錄（APPROVED + PENDING）
+    const usages = await prisma.leaveRequest.findMany({
+      where: { userId, leaveTypeId, status: { in: ["APPROVED", "PENDING"] } },
+    })
     for (const req of usages) {
       events.push({
         id: `usage-${req.id}`,
-        date: req.startDate, // sorting by startDate
+        date: req.startDate,
         type: "USAGE",
         leaveTypeName: leaveType.name,
-        description: `請假 (${formatTaipeiDateISO(req.startDate)}~${formatTaipeiDateISO(req.endDate)}) ${req.status === 'PENDING' ? '[待審核]' : ''}`,
-        amount: -req.durationDays
+        description: `請假 (${formatTaipeiDateISO(req.startDate)}~${formatTaipeiDateISO(req.endDate)}) ${req.status === "PENDING" ? "[待審核]" : ""}`,
+        amount: -req.durationDays,
       })
     }
-
   } else {
-    // Non-annual leave usually resets every year, so maybe just show current year
+    // 非特休：維持曆年制 ledger（只顯示當年）
+    const currentYear = new Date().getUTCFullYear()
     const override = await prisma.userLeaveBalance.findUnique({
-      where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: currentYear } }
+      where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: currentYear } },
     })
     const grantAmount = override ? override.totalQuota : leaveType.defaultDays
-    
+
     events.push({
       id: `grant-${currentYear}`,
       date: startOfYearUTC(currentYear),
       type: "GRANT",
       leaveTypeName: leaveType.name,
       description: `${currentYear}年度額度發放`,
-      amount: grantAmount
+      amount: grantAmount,
     })
 
     const usages = await prisma.leaveRequest.findMany({
@@ -107,9 +151,9 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
         status: { in: ["APPROVED", "PENDING"] },
         startDate: {
           gte: startOfYearUTC(currentYear),
-          lt: startOfYearUTC(currentYear + 1)
-        }
-      }
+          lt: startOfYearUTC(currentYear + 1),
+        },
+      },
     })
 
     for (const req of usages) {
@@ -118,26 +162,20 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
         date: req.startDate,
         type: "USAGE",
         leaveTypeName: leaveType.name,
-        description: `請假\n${formatTaipeiDate(req.startDate)} ~ ${formatTaipeiDate(req.endDate)} ${req.status === 'PENDING' ? '[待審核]' : ''}`,
-        amount: -req.durationDays
+        description: `請假\n${formatTaipeiDate(req.startDate)} ~ ${formatTaipeiDate(req.endDate)} ${req.status === "PENDING" ? "[待審核]" : ""}`,
+        amount: -req.durationDays,
       })
     }
   }
 
-  // Sort events chronologically
+  // 依時間正序排序，計算 running balance；最後反轉成「新→舊」給 UI
   events.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  // Calculate running balance
   let currentBalance = 0
   const finalEvents: LedgerEvent[] = []
-  
   for (const e of events) {
     currentBalance += e.amount
-    finalEvents.push({
-      ...e,
-      runningBalance: currentBalance
-    })
+    finalEvents.push({ ...e, runningBalance: currentBalance })
   }
-
-  return finalEvents.reverse() // Return newest first for the timeline UI
+  return finalEvents.reverse()
 }

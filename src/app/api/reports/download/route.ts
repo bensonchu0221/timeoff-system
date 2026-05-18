@@ -48,9 +48,11 @@ export async function GET(req: NextRequest) {
       sheet.addRow(["【假別額度表】"])
       sheet.addRow(["假別", "可請天數", "全年總天數"])
       
+      // 報表以「該年最後一刻」為 asOf：特休拿到截至該年底的累計、非特休拿該曆年餘額
+      const asOfYearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59))
       const balancesList = await Promise.all(
         leaveTypes.map(async (lt) => {
-          const bal = await getUserLeaveBalance(user.id, lt.id, year)
+          const bal = await getUserLeaveBalance(user.id, lt.id, asOfYearEnd)
           return { name: lt.name, ...bal }
         })
       )

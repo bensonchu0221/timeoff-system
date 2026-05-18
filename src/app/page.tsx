@@ -41,7 +41,7 @@ export default async function DashboardPage() {
 
   const balances = await Promise.all(
     leaveTypes.map(async (lt) => {
-      const bal = await getUserLeaveBalance(user.id, lt.id, year)
+      const bal = await getUserLeaveBalance(user.id, lt.id)
       return { type: lt.name, ...bal }
     })
   )
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
 
         {/* 左側：剩餘天數列表 */}
         <div className="lg:col-span-1">
-          <BalanceSummary balances={balances} year={year} />
+          <BalanceSummary balances={balances} />
         </div>
 
         {/* 右側：請假紀錄 */}

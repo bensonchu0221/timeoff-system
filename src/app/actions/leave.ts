@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
-import { calculateDurationDays, getUserLeaveBalance } from "@/lib/leave-utils"
+import { calculateDurationDays, getUserLeaveBalance, monthsBetween } from "@/lib/leave-utils"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
@@ -70,16 +70,22 @@ export async function applyLeave(data: {
   const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
   const leaveTypeName = leaveTypeObj?.name || "該假別";
 
-  const year = start.getFullYear();
-  const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
+  // 先 fetch user：特休 3 個月 gate 與 manager 都要用
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const approverId = user?.managerId;
+
+  // 特休 gate：到職滿 3 個月才能請特休（公司政策）
+  const isAnnual = leaveTypeObj && (leaveTypeObj.name.includes("特休") || leaveTypeObj.name.toLowerCase().includes("annual"));
+  if (isAnnual && user?.hireDate && monthsBetween(user.hireDate, start) < 3) {
+    return { error: `${leaveTypeName}需到職滿 3 個月後才能申請。` };
+  }
+
+  // 額度檢查：以請假開始日當 asOf，計算當下的累計可請額度
+  const balance = await getUserLeaveBalance(userId, data.leaveTypeId, start);
 
   if (durationDays > balance.remaining) {
     return { error: `${leaveTypeName}不足！您嘗試申請 ${durationDays} 天，但目前 ${leaveTypeName} 只剩 ${balance.remaining} 天可請（包含審核中假單）。` };
   }
-
-  // Get user's manager to assign approver
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  const approverId = user?.managerId;
 
   // 代理人驗證：選填，若有填要是真的存在的在職員工、且不是自己
   let backupId: string | null = data.backupId || null;
@@ -345,8 +351,7 @@ export async function updateLeave(requestId: string, data: {
 
   // 額度檢查：若假別未變，舊單的天數已計入 pending、需加回；若假別改了，新假別的 pending 不含本單
   const leaveTypeChanged = data.leaveTypeId !== request.leaveTypeId;
-  const year = start.getFullYear();
-  const balance = await getUserLeaveBalance(userId, data.leaveTypeId, year);
+  const balance = await getUserLeaveBalance(userId, data.leaveTypeId, start);
   const allowedNewDuration = leaveTypeChanged ? balance.remaining : balance.remaining + request.durationDays;
   if (newDuration > allowedNewDuration) {
     const newLeaveType = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
@@ -503,8 +508,7 @@ export async function reviewLeaveAsUser(
   // updateMany 加上 status: PENDING 的條件，若已被別人改掉會回 count=0 並中止。
   await prisma.$transaction(async (tx) => {
     if (status === "APPROVED") {
-      const year = request.startDate.getFullYear();
-      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, year);
+      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
       const actualAvailable = balance.total - balance.used;
       if (request.durationDays > actualAvailable) {
         throw new Error(`${request.leaveType.name}不足！${request.leaveType.name} 目前可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);

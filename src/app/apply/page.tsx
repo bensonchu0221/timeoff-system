@@ -54,7 +54,7 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
     leaveTypes
       .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
       .map(async (lt) => {
-        const bal = await getUserLeaveBalance(user.id, lt.id, year)
+        const bal = await getUserLeaveBalance(user.id, lt.id)
         return { 
           id: lt.id,
           name: lt.name,
@@ -102,7 +102,7 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
 
       {/* 左側：剩餘天數列表 */}
       <div className="lg:col-span-1">
-        <BalanceSummary balances={balances} year={year} />
+        <BalanceSummary balances={balances} />
       </div>
     </div>
   )

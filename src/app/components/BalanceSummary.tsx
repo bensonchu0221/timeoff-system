@@ -7,10 +7,11 @@ type Balance = {
   remaining: number
 }
 
-export function BalanceSummary({ balances, year }: { balances: Balance[], year: number }) {
+// 特休改週年制累計後，「年度」概念對特休不再適用；標題改為「假別額度（截至今日）」
+export function BalanceSummary({ balances }: { balances: Balance[] }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-medium text-gray-900 mb-4">{year} 年假別額度</h2>
+      <h2 className="text-lg font-medium text-gray-900 mb-4">假別額度（截至今日）</h2>
       <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden divide-y divide-gray-100">
         {balances.map(b => {
           const percentage = b.total > 0 ? (b.remaining / b.total) * 100 : 0

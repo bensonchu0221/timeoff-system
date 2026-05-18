@@ -243,7 +243,7 @@ async function handleBalanceQuery(replyToken: string, userId: string): Promise<v
   const lines: string[] = []
   for (const lt of leaveTypes) {
     try {
-      const bal = await getUserLeaveBalance(userId, lt.id, year)
+      const bal = await getUserLeaveBalance(userId, lt.id)
       // 顯示成「可請 X / 全年 Y 天」；total 為 0 也照顯（讓員工知道沒有此假別）
       lines.push(`${lt.name}：可請 ${formatDays(bal.remaining)} / 全年 ${formatDays(bal.total)} 天`)
     } catch (err) {
