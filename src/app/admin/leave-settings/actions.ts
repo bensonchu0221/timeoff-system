@@ -103,6 +103,31 @@ export async function updateUserTotalBalance(data: FormData) {
   return { success: true, message: "已更新額度" }
 }
 
+// 刪除該員工該假別的「所有」override row，讓員工回到「純基準」（特休回到公司前 2 年 / 政府表 fallback）
+export async function deleteUserLeaveBalance(data: FormData) {
+  const actorId = await verifyAdmin()
+  const userId = data.get("userId") as string
+  const leaveTypeId = data.get("leaveTypeId") as string
+
+  if (!userId || !leaveTypeId) throw new Error("Invalid input")
+
+  // 刪除所有歷年的 override row（分水嶺式設計下，留任何一筆都還會被沿用）
+  const result = await prisma.userLeaveBalance.deleteMany({
+    where: { userId, leaveTypeId },
+  })
+
+  await logAudit({
+    actorId,
+    action: "BALANCE_UPDATE",
+    targetType: "UserLeaveBalance",
+    targetId: `${userId}:${leaveTypeId}`,
+    payload: { userId, leaveTypeId, deletedCount: result.count, action: "DELETE_ALL_OVERRIDES" },
+  })
+
+  revalidatePath("/admin/leave-settings")
+  return { success: true, message: `已移除 override，共刪除 ${result.count} 筆歷年設定` }
+}
+
 export async function syncHolidays(year: number) {
   const actorId = await verifyAdmin()
 

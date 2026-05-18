@@ -1,71 +1,63 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { UpdateBalanceForm } from "./Forms"
+import { UpdateOverrideRow } from "./Forms"
 
-type Props = {
-  leaveTypes: { id: string; name: string }[]
-  userBalances: {
-    user: { id: string; name: string | null; email: string }
-    balances: { id: string; total: number; remaining: number }[]
-  }[]
+export type OverrideTableRow = {
+  userId: string
+  leaveTypeId: string
+  userName: string | null
+  userEmail: string
+  leaveTypeName: string
+  currentOverride: number
+  latestOverrideYear: number
+  baselineWithoutOverride: number
+  remaining: number
 }
 
-// 員工額度覆寫表：sticky 左欄會在「往右捲動時」把 email 淡出，僅留名字，
-// 讓右側 input 區可視範圍變大；捲回最左邊再淡入 email。
-export function BalancesTable({ leaveTypes, userBalances }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const [collapsed, setCollapsed] = useState(false)
+type Props = {
+  rows: OverrideTableRow[]
+}
 
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const onScroll = () => {
-      // 60 px 是保守 threshold；超過視為「已往右捲」
-      setCollapsed(el.scrollLeft > 60)
-    }
-    onScroll()
-    el.addEventListener("scroll", onScroll, { passive: true })
-    return () => el.removeEventListener("scroll", onScroll)
-  }, [])
+// 個人 override 列表：只顯示「DB 中有 UserLeaveBalance row」的員工 × 假別組合
+// 同一組合若跨年有多筆，只顯示最新一筆（latestOverrideYear）
+export function BalancesTable({ rows }: Props) {
+  if (rows.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-500 text-sm bg-gray-50 rounded-md">
+        目前沒有任何 override 設定。所有員工皆走「公司前 2 年 / 政府勞基法 §38」基準。
+      </div>
+    )
+  }
 
   return (
-    <div ref={wrapRef} className="overflow-x-auto">
-      <table className="min-w-max w-full divide-y divide-gray-200 text-sm">
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200 text-sm">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-4 py-3 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10">員工</th>
-            {leaveTypes.map((lt) => (
-              <th key={lt.id} className="px-4 py-3 text-left font-medium text-gray-500 border-l border-gray-200 min-w-[200px]">
-                {lt.name}
-              </th>
-            ))}
+            <th className="px-4 py-3 text-left font-medium text-gray-500">員工</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">假別</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">設定年</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">Override 編輯</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {userBalances.map(({ user, balances }) => (
-            <tr key={user.id} className="hover:bg-gray-50">
-              <td className="px-4 py-4 sticky left-0 bg-white z-10 align-top">
-                <div className="font-medium text-gray-900 whitespace-nowrap">{user.name || "未設定"}</div>
-                <div
-                  className={`text-xs text-gray-500 overflow-hidden transition-all duration-300 ease-out whitespace-nowrap ${
-                    collapsed ? "max-h-0 max-w-0 opacity-0 mt-0" : "max-h-6 max-w-xs opacity-100 mt-0.5"
-                  }`}
-                >
-                  {user.email}
-                </div>
+          {rows.map((r) => (
+            <tr key={`${r.userId}:${r.leaveTypeId}`} className="hover:bg-gray-50 align-top">
+              <td className="px-4 py-4">
+                <div className="font-medium text-gray-900 whitespace-nowrap">{r.userName || "未設定"}</div>
+                <div className="text-xs text-gray-500">{r.userEmail}</div>
               </td>
-
-              {balances.map((b) => (
-                <td key={b.id} className="px-4 py-4 border-l border-gray-100">
-                  <UpdateBalanceForm
-                    userId={user.id}
-                    leaveTypeId={b.id}
-                    defaultTotal={b.total}
-                    remaining={b.remaining}
-                  />
-                </td>
-              ))}
+              <td className="px-4 py-4 whitespace-nowrap">{r.leaveTypeName}</td>
+              <td className="px-4 py-4 whitespace-nowrap text-gray-500">{r.latestOverrideYear}</td>
+              <td className="px-4 py-4">
+                <UpdateOverrideRow
+                  userId={r.userId}
+                  leaveTypeId={r.leaveTypeId}
+                  currentOverride={r.currentOverride}
+                  baselineWithoutOverride={r.baselineWithoutOverride}
+                  remaining={r.remaining}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
