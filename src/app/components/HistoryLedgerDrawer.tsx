@@ -138,8 +138,10 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                             <TrendingUp className="w-3 h-3" /> +{event.amount} 天
                           </div>
                           <div className="text-xs text-gray-600 mt-1 whitespace-pre-line">{event.description}</div>
-                          <div className="text-right text-[10px] text-gray-500 mt-2 pt-1 border-t border-gray-100">
-                            結餘: <span className="font-bold text-gray-900">{event.runningBalance}</span> 天
+                          <div className="text-right mt-2 pt-1 border-t border-gray-100">
+                            <span className="text-[10px] text-gray-500">結餘: </span>
+                            <span className="font-bold text-gray-900">{event.runningBalance}</span>
+                            <span className="text-[10px] text-gray-500"> 天</span>
                           </div>
                         </div>
                       </div>
@@ -155,8 +157,10 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
                             <TrendingDown className="w-3 h-3" /> {event.amount} 天
                           </div>
                           <div className="text-xs text-gray-600 mt-1 text-right whitespace-pre-line">{event.description}</div>
-                          <div className="text-left text-[10px] text-gray-500 mt-2 pt-1 border-t border-gray-100">
-                            結餘: <span className="font-bold text-gray-900">{event.runningBalance}</span> 天
+                          <div className="text-left mt-2 pt-1 border-t border-gray-100">
+                            <span className="text-[10px] text-gray-500">結餘: </span>
+                            <span className="font-bold text-gray-900">{event.runningBalance}</span>
+                            <span className="text-[10px] text-gray-500"> 天</span>
                           </div>
                         </div>
                       </div>

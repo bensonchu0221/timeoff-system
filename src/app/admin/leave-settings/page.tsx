@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
-import { getUserLeaveBalance, calcAnnualLeaveCumulative } from "@/lib/leave-utils"
+import { getUserLeaveBalance, getAnniversaryBaseDays, monthsBetween } from "@/lib/leave-utils"
 
 import {
   CreateLeaveTypeForm,
@@ -69,8 +69,11 @@ export default async function LeaveSettingsPage() {
 
         let baseline: number
         if (isAnnualLeaveName(o.leaveType.name) && o.user.hireDate) {
-          // 特休：模擬「無 override」的累計
-          baseline = calcAnnualLeaveCumulative(o.user.hireDate, now, o.leaveType.defaultDays, [])
+          // 特休：當前所在週年期、無 override 時應發的天數
+          // （前 2 年走 defaultDays，滿 2 年起走勞基法 §38 表）
+          const M = monthsBetween(o.user.hireDate, now)
+          const currentN = Math.floor(M / 12) + 1
+          baseline = getAnniversaryBaseDays(currentN, o.leaveType.defaultDays)
         } else {
           baseline = o.leaveType.defaultDays
         }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Calendar, Copy, Check, RefreshCw } from "lucide-react"
+import { Copy, Check, RefreshCw } from "lucide-react"
 import { getMyCalendarUrl, getTeamCalendarUrl, resetCalendarToken } from "@/app/actions/calendar"
 import toast from "react-hot-toast"
 
@@ -59,10 +59,9 @@ export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boole
     <div className="relative inline-block">
       <button
         onClick={handleOpen}
-        className="text-xs px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50 inline-flex items-center gap-1.5 text-gray-700 transition"
+        className="text-xs text-gray-700 hover:text-gray-900 hover:underline transition whitespace-nowrap"
         title="複製可貼到 Google Calendar / Outlook 的訂閱網址"
       >
-        <Calendar className="w-3.5 h-3.5" />
         訂閱請假行事曆
       </button>
 

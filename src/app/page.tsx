@@ -85,7 +85,7 @@ export default async function DashboardPage() {
           <CalendarSubscribeButton showTeam={user.role === "MANAGER" || user.role === "ADMIN"} />
           <Link
             href="/flow"
-            className="px-4 py-2 text-sm border border-[var(--brand-primary)] text-[var(--brand-primary)] font-medium rounded-md hover:bg-[var(--brand-primary)]/10 transition whitespace-nowrap"
+            className="text-xs text-gray-700 hover:text-gray-900 hover:underline transition whitespace-nowrap"
           >
             請假審核流程圖
           </Link>
