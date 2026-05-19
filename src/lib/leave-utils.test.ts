@@ -15,6 +15,7 @@ import {
   getStatutoryAnnualDays,
   getAnniversaryBaseDays,
   monthsBetween,
+  addYearsUTC,
   calcAnnualLeaveCumulative,
 } from "./leave-utils"
 import { prisma } from "./db"
@@ -289,5 +290,71 @@ describe("calcAnnualLeaveCumulative（特休累計總額）", () => {
       // 滿 3 個月，第 1 期 max(10, 5) = 10
       expect(calcAnnualLeaveCumulative(hire, utcDate("2026-08-13"), 10, overrides)).toBe(10)
     })
+  })
+
+  describe("with opening（資料遷移情境）", () => {
+    // Leo 2025-11-03 入職、opening = 10.5 @ 2026-01-01（無 override）
+    const leoHire = utcDate("2025-11-03")
+    const leoOpening = { balance: 10.5, at: utcDate("2026-01-01") }
+
+    it("opening 之前到下次週年發放點：total = opening.balance", () => {
+      // 2026-05-19 還沒到 11/3 → 維持 10.5
+      expect(calcAnnualLeaveCumulative(leoHire, utcDate("2026-05-19"), 10, [], leoOpening)).toBe(10.5)
+    })
+
+    it("opening 之後過了 1 個週年發放點：total = opening + 該期額度", () => {
+      // 2026-11-03 滿 1 年第 2 週年期發放 (前 2 年公司 10) → 20.5
+      expect(calcAnnualLeaveCumulative(leoHire, utcDate("2026-11-03"), 10, [], leoOpening)).toBe(20.5)
+    })
+
+    it("opening 之後過了 2 個週年發放點：累加兩期", () => {
+      // 2027-11-03 滿 2 年第 3 週年期發放 (政府 2 年 10) → 20.5 + 10 = 30.5
+      expect(calcAnnualLeaveCumulative(leoHire, utcDate("2027-11-03"), 10, [], leoOpening)).toBe(30.5)
+    })
+
+    // Benson 2024-05-13、opening = 7.5 @ 2026-01-01、override = 15 @ year=2026
+    const bensonHire = utcDate("2024-05-13")
+    const bensonOpening = { balance: 7.5, at: utcDate("2026-01-01") }
+    const bensonOverrides = [{ year: 2026, totalQuota: 15 }]
+
+    it("opening + override 共存：opening 之前不被 override 影響（已含在 opening）", () => {
+      // 2026-04-30 在 opening (1/1) 之後、第 3 週年期發放 (5/13) 之前
+      expect(calcAnnualLeaveCumulative(bensonHire, utcDate("2026-04-30"), 10, bensonOverrides, bensonOpening)).toBe(7.5)
+    })
+
+    it("opening + override：opening 後第 1 個週年期套 override（基準10、政府10、override15 → 15）", () => {
+      // 2026-05-13 滿 2 年（第 3 週年期，年資 2 → 基準=政府10）
+      // max(10, 15 override) = 15
+      // total = 7.5 + 15 = 22.5
+      expect(calcAnnualLeaveCumulative(bensonHire, utcDate("2026-05-13"), 10, bensonOverrides, bensonOpening)).toBe(22.5)
+    })
+
+    it("opening + override：滿 5 年時政府表 15 = override 15、不再變化", () => {
+      // 2029-05-13 滿 5 年（第 6 週年期，年資 5 → 政府 15）
+      // 第 3 期 max(10, 15)=15、第 4 期 max(14, 15)=15、第 5 期 max(14, 15)=15、第 6 期 max(15, 15)=15
+      // total = 7.5 + 15 × 4 = 67.5
+      expect(calcAnnualLeaveCumulative(bensonHire, utcDate("2029-05-13"), 10, bensonOverrides, bensonOpening)).toBe(67.5)
+    })
+
+    // 2026 入職員工：不設 opening，走原邏輯（gate 3 個月）
+    it("2026 入職員工無 opening：未滿 3 個月 = 0", () => {
+      const alvinHire = utcDate("2026-05-04")
+      expect(calcAnnualLeaveCumulative(alvinHire, utcDate("2026-05-19"), 10, [])).toBe(0)
+      expect(calcAnnualLeaveCumulative(alvinHire, utcDate("2026-08-04"), 10, [])).toBe(10)
+    })
+  })
+})
+
+describe("addYearsUTC", () => {
+  it("加 1 年同月同日", () => {
+    expect(addYearsUTC(utcDate("2024-05-13"), 1).toISOString().slice(0, 10)).toBe("2025-05-13")
+  })
+
+  it("加 0 年 = 原日期", () => {
+    expect(addYearsUTC(utcDate("2024-05-13"), 0).toISOString().slice(0, 10)).toBe("2024-05-13")
+  })
+
+  it("跨閏年 2/29：2/29 → 隔年 3/1（Date 自動 normalize）", () => {
+    expect(addYearsUTC(utcDate("2024-02-29"), 1).toISOString().slice(0, 10)).toBe("2025-03-01")
   })
 })
