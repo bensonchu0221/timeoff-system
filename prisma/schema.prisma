@@ -38,6 +38,8 @@ model User {
   id             String    @id @default(uuid())
   email          String    @unique
   name           String?
+  // 中文姓名（顯示用，可選；OAuth 帶入的 name 通常是英文/暱稱）
+  chineseName    String?
   emailVerified  DateTime?
   image          String?
   role           Role      @default(EMPLOYEE)
@@ -46,6 +48,13 @@ model User {
   gender         Gender    @default(FEMALE)
   // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
   terminatedDate DateTime?
+
+  // 特休 Opening Balance（資料遷移用）
+  // 兩欄同存或同空，由 application code 保證 invariant
+  // openingBalance: openingAt 那一刻「應有的累計可請特休」（已含歷史所有 grant/usage 抵銷）
+  // openingAt: 切換日；getUserLeaveBalance 之後的 used/pending 也從此切（startDate >= openingAt 才算）
+  annualLeaveOpeningBalance Float?
+  annualLeaveOpeningAt      DateTime?
   // iCal 訂閱簽章 token；首次需要時 lazy 產生，admin 可重設以撤銷舊 URL
   calendarToken  String?
 
