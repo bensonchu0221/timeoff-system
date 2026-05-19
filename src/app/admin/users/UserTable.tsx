@@ -28,6 +28,8 @@ type UserNode = {
   terminatedDate: Date | null
   annualLeaveOpeningBalance: number | null
   annualLeaveOpeningAt: Date | null
+  annualLeaveOpeningB: number | null
+  annualLeaveOpeningR: number | null
 }
 
 export function UserTable({ users }: { users: UserNode[] }) {
@@ -175,8 +177,10 @@ export function UserTable({ users }: { users: UserNode[] }) {
                     userId={user.id}
                     initialBalance={user.annualLeaveOpeningBalance}
                     initialAt={user.annualLeaveOpeningAt}
+                    initialB={user.annualLeaveOpeningB}
+                    initialR={user.annualLeaveOpeningR}
                     disabled={isPending}
-                    onSave={(b, at) => wrap(() => setAnnualLeaveOpening(user.id, b, at))}
+                    onSave={(balance, at, b, r) => wrap(() => setAnnualLeaveOpening(user.id, balance, at, b, r))}
                     onClear={() => wrap(() => clearAnnualLeaveOpening(user.id))}
                   />
                 </td>
@@ -227,10 +231,13 @@ function InlineTextCell({
   )
 }
 
-// Opening Balance 設定控件：兩個 input + 儲存 + 清除（已設時才有）
+// Opening Balance 設定控件：balance + at + B + R 共四個 input + 儲存 / 清除
+// 公式：opening = round((hireDate月份/12) × B + R, 0.5)
 function OpeningCell({
   initialBalance,
   initialAt,
+  initialB,
+  initialR,
   disabled,
   onSave,
   onClear,
@@ -238,32 +245,50 @@ function OpeningCell({
   userId: string
   initialBalance: number | null
   initialAt: Date | null
+  initialB: number | null
+  initialR: number | null
   disabled?: boolean
-  onSave: (balance: number, atISO: string) => void
+  onSave: (balance: number, atISO: string, b: number, r: number) => void
   onClear: () => void
 }) {
   const initialBalanceStr = initialBalance !== null ? String(initialBalance) : ""
   const initialAtStr = initialAt ? initialAt.toISOString().split("T")[0] : "2026-01-01"
+  const initialBStr = initialB !== null ? String(initialB) : ""
+  const initialRStr = initialR !== null ? String(initialR) : ""
   const [balance, setBalance] = useState(initialBalanceStr)
   const [at, setAt] = useState(initialAtStr)
+  const [b, setB] = useState(initialBStr)
+  const [r, setR] = useState(initialRStr)
   const hasOpening = initialBalance !== null
 
   const handleSave = () => {
-    const num = Number(balance)
-    if (balance.trim() === "" || isNaN(num)) {
-      toast.error("請填天數")
+    const balanceNum = Number(balance)
+    const bNum = Number(b)
+    const rNum = Number(r)
+    if (balance.trim() === "" || isNaN(balanceNum)) {
+      toast.error("請填 opening 天數")
       return
     }
     if (!at) {
       toast.error("請填日期")
       return
     }
-    onSave(num, at)
+    if (b.trim() === "" || isNaN(bNum)) {
+      toast.error("請填 B（基本年天數）")
+      return
+    }
+    if (r.trim() === "" || isNaN(rNum)) {
+      toast.error("請填 R（未休天數）")
+      return
+    }
+    onSave(balanceNum, at, bNum, rNum)
   }
 
   const handleClear = () => {
     if (!confirm("清除特休 Opening 後，該員工特休改從入職日累計（會大量增加可請天數）。確定？")) return
     setBalance("")
+    setB("")
+    setR("")
     onClear()
   }
 
@@ -275,9 +300,10 @@ function OpeningCell({
           step="0.5"
           disabled={disabled}
           value={balance}
-          placeholder="天數"
+          placeholder="opening"
           onChange={(e) => setBalance(e.target.value)}
           className="input input-bordered input-sm w-20 bg-gray-50"
+          title="opening 天數"
         />
         <span className="text-xs text-gray-400">@</span>
         <input
@@ -287,6 +313,30 @@ function OpeningCell({
           onChange={(e) => setAt(e.target.value)}
           className="input input-bordered input-sm w-36 bg-gray-50"
         />
+      </div>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          step="0.5"
+          disabled={disabled}
+          value={b}
+          placeholder="B"
+          onChange={(e) => setB(e.target.value)}
+          className="input input-bordered input-sm w-16 bg-gray-50"
+          title="B：基本年天數（前2年=10、滿2年起依勞基法或個人 override）"
+        />
+        <span className="text-[10px] text-gray-400">天 / R</span>
+        <input
+          type="number"
+          step="0.5"
+          disabled={disabled}
+          value={r}
+          placeholder="R"
+          onChange={(e) => setR(e.target.value)}
+          className="input input-bordered input-sm w-16 bg-gray-50"
+          title="R：2025 未休天數"
+        />
+        <span className="text-[10px] text-gray-400">天</span>
       </div>
       <div className="flex items-center gap-2">
         <button

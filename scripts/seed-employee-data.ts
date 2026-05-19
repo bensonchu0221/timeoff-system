@@ -20,25 +20,29 @@ type Entry = {
   chineseName: string
   hireDate: string       // YYYY-MM-DD
   opening?: number       // null 表示不設 opening（2026 入職者）
+  openingB?: number      // 公式 B：個人特休基準天數；與 opening 同存同空
+  openingR?: number      // 公式 R：2025 未休天數；與 opening 同存同空
   overrideDays?: number  // 特休 override（B ≠ 基準才設）；不設則跳過
 }
 
+// 公式：opening = round((hireDate 月份/12) × B + R, 0.5)
+// Naomi (R=1) 與 plan 文件中標的 R=0 不一致 — 因 R=0 算出 1.5 ≠ 實際 2.5，採能 round 出 2.5 的值
 const employees: Entry[] = [
-  { email: "connie@popin.cc",            name: "Connie",  chineseName: "申芳萍", hireDate: "2017-04-19", opening: 117,  overrideDays: 20 },
-  { email: "daniel@popin.cc",            name: "Daniel",  chineseName: "陳維晟", hireDate: "2018-08-27", opening: 17.5, overrideDays: 16 },
-  { email: "amber@popin.cc",             name: "Amber",   chineseName: "王亞昀", hireDate: "2019-02-11", opening: 9.5 },
-  { email: "jessica@popin.cc",           name: "Jessica", chineseName: "林玉茹", hireDate: "2021-02-22", opening: 14.5 },
-  { email: "linzhongjyun@popin.cc",      name: "Joy",     chineseName: "林仲軍", hireDate: "2023-08-14", opening: 8.5 },
-  { email: "lulu@popin.cc",              name: "Lulu",    chineseName: "黃乙姍", hireDate: "2024-03-11", opening: 5,    overrideDays: 15 },
-  { email: "ted@popin.cc",               name: "Ted",     chineseName: "陳柏昇", hireDate: "2024-03-11", opening: 4.5,  overrideDays: 15 },
-  { email: "benson@popin.cc",            name: "Benson",  chineseName: "朱詠玄", hireDate: "2024-05-13", opening: 7.5,  overrideDays: 15 },
-  { email: "maggie@popin.cc",            name: "Maggie",  chineseName: "王俐文", hireDate: "2024-03-13", opening: 7,    overrideDays: 15 },
-  { email: "tina@popin.cc",              name: "Tina",    chineseName: "劉又瑄", hireDate: "2024-09-02", opening: 17.5, overrideDays: 17 },
-  { email: "naomi@broadciel.com",        name: "Naomi",   chineseName: "王悅軒", hireDate: "2025-02-04", opening: 2.5 },
-  { email: "wenny@broadciel.com",        name: "Wenny",   chineseName: "李育萱", hireDate: "2025-02-04", opening: 1.5 },
-  { email: "kalvin@broadciel.com",       name: "Kalvin",  chineseName: "李承孝", hireDate: "2025-04-07", opening: 15,   overrideDays: 15 },
-  { email: "leo@popin.cc",               name: "Leo",     chineseName: "傅希碩", hireDate: "2025-11-03", opening: 10.5 },
-  { email: "joyce@broadciel.com",        name: "Joyce",   chineseName: "王婉如", hireDate: "2025-11-10", opening: 10.5 },
+  { email: "connie@popin.cc",            name: "Connie",  chineseName: "申芳萍", hireDate: "2017-04-19", opening: 117,  openingB: 20, openingR: 110.5, overrideDays: 20 },
+  { email: "daniel@popin.cc",            name: "Daniel",  chineseName: "陳維晟", hireDate: "2018-08-27", opening: 17.5, openingB: 16, openingR: 7,     overrideDays: 16 },
+  { email: "amber@popin.cc",             name: "Amber",   chineseName: "王亞昀", hireDate: "2019-02-11", opening: 9.5,  openingB: 15, openingR: 7 },
+  { email: "jessica@popin.cc",           name: "Jessica", chineseName: "林玉茹", hireDate: "2021-02-22", opening: 14.5, openingB: 15, openingR: 12 },
+  { email: "linzhongjyun@popin.cc",      name: "Joy",     chineseName: "林仲軍", hireDate: "2023-08-14", opening: 8.5,  openingB: 10, openingR: 2 },
+  { email: "lulu@popin.cc",              name: "Lulu",    chineseName: "黃乙姍", hireDate: "2024-03-11", opening: 5,    openingB: 15, openingR: 1,     overrideDays: 15 },
+  { email: "ted@popin.cc",               name: "Ted",     chineseName: "陳柏昇", hireDate: "2024-03-11", opening: 4.5,  openingB: 15, openingR: 0.5,   overrideDays: 15 },
+  { email: "benson@popin.cc",            name: "Benson",  chineseName: "朱詠玄", hireDate: "2024-05-13", opening: 7.5,  openingB: 15, openingR: 1,     overrideDays: 15 },
+  { email: "maggie@popin.cc",            name: "Maggie",  chineseName: "王俐文", hireDate: "2024-03-13", opening: 7,    openingB: 15, openingR: 3,     overrideDays: 15 },
+  { email: "tina@popin.cc",              name: "Tina",    chineseName: "劉又瑄", hireDate: "2024-09-02", opening: 17.5, openingB: 17, openingR: 4.5,   overrideDays: 17 },
+  { email: "naomi@broadciel.com",        name: "Naomi",   chineseName: "王悅軒", hireDate: "2025-02-04", opening: 2.5,  openingB: 10, openingR: 1 },
+  { email: "wenny@broadciel.com",        name: "Wenny",   chineseName: "李育萱", hireDate: "2025-02-04", opening: 1.5,  openingB: 10, openingR: 0 },
+  { email: "kalvin@broadciel.com",       name: "Kalvin",  chineseName: "李承孝", hireDate: "2025-04-07", opening: 15,   openingB: 15, openingR: 10,    overrideDays: 15 },
+  { email: "leo@popin.cc",               name: "Leo",     chineseName: "傅希碩", hireDate: "2025-11-03", opening: 10.5, openingB: 10, openingR: 1.5 },
+  { email: "joyce@broadciel.com",        name: "Joyce",   chineseName: "王婉如", hireDate: "2025-11-10", opening: 10.5, openingB: 10, openingR: 1.5 },
   // 2026 入職：不設 opening、不設 override（走純新邏輯）
   { email: "emma@broadciel.com",         name: "Emma",    chineseName: "張維芬", hireDate: "2026-02-23" },
   { email: "daniel@broadciel.com",       name: "Daniel",  chineseName: "張建華", hireDate: "2026-02-23" },
@@ -90,17 +94,30 @@ async function main() {
     }
     if (emp.opening !== undefined) {
       const openingAt = new Date(`${OPENING_AT_ISO}T00:00:00.000Z`)
-      if (user.annualLeaveOpeningBalance !== emp.opening || user.annualLeaveOpeningAt?.getTime() !== openingAt.getTime()) {
+      const balanceChanged = user.annualLeaveOpeningBalance !== emp.opening
+      const atChanged = user.annualLeaveOpeningAt?.getTime() !== openingAt.getTime()
+      const bChanged = user.annualLeaveOpeningB !== (emp.openingB ?? null)
+      const rChanged = user.annualLeaveOpeningR !== (emp.openingR ?? null)
+      if (balanceChanged || atChanged || bChanged || rChanged) {
         updates.annualLeaveOpeningBalance = emp.opening
         updates.annualLeaveOpeningAt = openingAt
-        logs.push(`opening: ${user.annualLeaveOpeningBalance ?? "(空)"} → ${emp.opening} @ ${OPENING_AT_ISO}`)
+        updates.annualLeaveOpeningB = emp.openingB ?? null
+        updates.annualLeaveOpeningR = emp.openingR ?? null
+        logs.push(`opening: ${user.annualLeaveOpeningBalance ?? "(空)"} → ${emp.opening} @ ${OPENING_AT_ISO} (B=${emp.openingB ?? "-"}, R=${emp.openingR ?? "-"})`)
         counters.openingSet++
       }
     } else {
-      // 2026 入職員工：確保 opening 為空（若之前有設則清掉）
-      if (user.annualLeaveOpeningBalance !== null || user.annualLeaveOpeningAt !== null) {
+      // 2026 入職員工：確保 opening 與 B/R 都為空（若之前有設則清掉）
+      if (
+        user.annualLeaveOpeningBalance !== null ||
+        user.annualLeaveOpeningAt !== null ||
+        user.annualLeaveOpeningB !== null ||
+        user.annualLeaveOpeningR !== null
+      ) {
         updates.annualLeaveOpeningBalance = null
         updates.annualLeaveOpeningAt = null
+        updates.annualLeaveOpeningB = null
+        updates.annualLeaveOpeningR = null
         logs.push(`opening: 清除（2026 入職員工不需 opening）`)
       }
     }

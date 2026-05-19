@@ -55,6 +55,11 @@ model User {
   // openingAt: 切換日；getUserLeaveBalance 之後的 used/pending 也從此切（startDate >= openingAt 才算）
   annualLeaveOpeningBalance Float?
   annualLeaveOpeningAt      DateTime?
+  // opening 算式的兩個參數（HR 手動填入，與 balance 同存同空）
+  // B = 個人特休基準天數（公司政策或 HR 議定值）
+  // R = 切換前 2025 年未休天數
+  annualLeaveOpeningB       Float?
+  annualLeaveOpeningR       Float?
   // iCal 訂閱簽章 token；首次需要時 lazy 產生，admin 可重設以撤銷舊 URL
   calendarToken  String?
 

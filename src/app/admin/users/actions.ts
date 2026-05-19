@@ -213,21 +213,38 @@ export async function updateUserDepartment(userId: string, department: string) {
   return { success: true, message: "已更新部門" }
 }
 
-// 設定特休 Opening Balance（兩個欄位同時寫入）
-export async function setAnnualLeaveOpening(userId: string, balance: number, atISO: string) {
+// 設定特休 Opening Balance（四欄一起寫入：balance、at、B、R）
+// B/R 為算式分量：opening = round((hireDate月份/12) × B + R, 0.5)
+// 不強制驗證 round 結果是否等於 balance，因為 HR 可能手動微調（rounding 邊界保留彈性）
+export async function setAnnualLeaveOpening(
+  userId: string,
+  balance: number,
+  atISO: string,
+  b: number,
+  r: number,
+) {
   const actorId = await requireActorId()
   if (isNaN(balance) || balance < 0) throw new Error("Opening 天數需為非負數")
   if (!atISO) throw new Error("Opening 日期必填")
+  if (isNaN(b) || b < 0) throw new Error("B（基本年天數）需為非負數")
+  if (isNaN(r) || r < 0) throw new Error("R（未休天數）需為非負數")
 
   const before = await prisma.user.findUnique({
     where: { id: userId },
-    select: { annualLeaveOpeningBalance: true, annualLeaveOpeningAt: true },
+    select: {
+      annualLeaveOpeningBalance: true,
+      annualLeaveOpeningAt: true,
+      annualLeaveOpeningB: true,
+      annualLeaveOpeningR: true,
+    },
   })
   await prisma.user.update({
     where: { id: userId },
     data: {
       annualLeaveOpeningBalance: balance,
       annualLeaveOpeningAt: new Date(`${atISO}T00:00:00.000Z`),
+      annualLeaveOpeningB: b,
+      annualLeaveOpeningR: r,
     },
   })
   await logAudit({
@@ -236,8 +253,13 @@ export async function setAnnualLeaveOpening(userId: string, balance: number, atI
     targetType: "User",
     targetId: userId,
     payload: {
-      from: { balance: before?.annualLeaveOpeningBalance ?? null, at: before?.annualLeaveOpeningAt?.toISOString() ?? null },
-      to: { balance, at: atISO },
+      from: {
+        balance: before?.annualLeaveOpeningBalance ?? null,
+        at: before?.annualLeaveOpeningAt?.toISOString() ?? null,
+        b: before?.annualLeaveOpeningB ?? null,
+        r: before?.annualLeaveOpeningR ?? null,
+      },
+      to: { balance, at: atISO, b, r },
     },
   })
   revalidatePath("/admin/users")
@@ -245,16 +267,26 @@ export async function setAnnualLeaveOpening(userId: string, balance: number, atI
   return { success: true, message: `已設定特休 Opening = ${balance} 天 @ ${atISO}` }
 }
 
-// 清除特休 Opening（兩個欄位一起 null）
+// 清除特休 Opening（四欄一起 null）
 export async function clearAnnualLeaveOpening(userId: string) {
   const actorId = await requireActorId()
   const before = await prisma.user.findUnique({
     where: { id: userId },
-    select: { annualLeaveOpeningBalance: true, annualLeaveOpeningAt: true },
+    select: {
+      annualLeaveOpeningBalance: true,
+      annualLeaveOpeningAt: true,
+      annualLeaveOpeningB: true,
+      annualLeaveOpeningR: true,
+    },
   })
   await prisma.user.update({
     where: { id: userId },
-    data: { annualLeaveOpeningBalance: null, annualLeaveOpeningAt: null },
+    data: {
+      annualLeaveOpeningBalance: null,
+      annualLeaveOpeningAt: null,
+      annualLeaveOpeningB: null,
+      annualLeaveOpeningR: null,
+    },
   })
   await logAudit({
     actorId,
@@ -262,7 +294,12 @@ export async function clearAnnualLeaveOpening(userId: string) {
     targetType: "User",
     targetId: userId,
     payload: {
-      cleared: { balance: before?.annualLeaveOpeningBalance ?? null, at: before?.annualLeaveOpeningAt?.toISOString() ?? null },
+      cleared: {
+        balance: before?.annualLeaveOpeningBalance ?? null,
+        at: before?.annualLeaveOpeningAt?.toISOString() ?? null,
+        b: before?.annualLeaveOpeningB ?? null,
+        r: before?.annualLeaveOpeningR ?? null,
+      },
     },
   })
   revalidatePath("/admin/users")

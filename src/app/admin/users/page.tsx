@@ -36,6 +36,8 @@ export default async function AdminUsersPage() {
       terminatedDate: true,
       annualLeaveOpeningBalance: true,
       annualLeaveOpeningAt: true,
+      annualLeaveOpeningB: true,
+      annualLeaveOpeningR: true,
     },
     orderBy: [
       { terminatedDate: 'asc' }, // 在職在上（null 排前）
