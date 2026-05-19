@@ -127,8 +127,6 @@ export function calcAnnualLeaveCumulative(
   }
 
   // 無 opening：原邏輯（從 hireDate 累計）
-  if (M < 3) return 0   // gate：未滿 3 個月不可請
-
   const maxN = Math.floor(M / 12) + 1
   let total = 0
   for (let N = 1; N <= maxN; N++) {
