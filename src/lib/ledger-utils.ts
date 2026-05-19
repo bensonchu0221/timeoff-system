@@ -68,12 +68,17 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
 
     if (hasOpening && openingAt) {
       // OPENING 事件：替代入職發放事件
+      // 算式：round((hireDate月份/12) × B + R, 0.5)
+      //   B = 個人特休基準天數（前2年=10、滿2年起依勞基法 §38，或 HR 給的 override）
+      //   R = 2025 未休天數（由 HR 從舊系統匯入）
+      // B/R 是 HR 手動填入，無法從系統反推（rounding ambiguity），所以只顯示公式結構
+      const hireMonth = hireDate.getUTCMonth() + 1
       events.push({
         id: `opening`,
         date: openingAt,
         type: "GRANT",
         leaveTypeName: leaveType.name,
-        description: `${formatTaipeiDateISO(openingAt)} 系統匯入起始額度 ${openingBalance} 天`,
+        description: `${formatTaipeiDateISO(openingAt)} 系統匯入起始額度 ${openingBalance} 天\n\n公式：round((${hireMonth}/12) × B + R, 0.5)\nB = 個人特休基準天數\nR = 2025 未休天數`,
         amount: openingBalance,
       })
     } else {
