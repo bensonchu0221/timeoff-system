@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { generateBindingCode, LineNotifyKey } from "@/lib/line"
 import { revalidatePath } from "next/cache"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 const BINDING_CODE_TTL_MS = 30 * 60 * 1000 // 30 分鐘
 
@@ -12,6 +13,7 @@ const BINDING_CODE_TTL_MS = 30 * 60 * 1000 // 30 分鐘
  * 重複呼叫會覆寫舊碼，避免一個員工同時有多個有效碼。
  */
 export async function generateLineBindingCode() {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
 
@@ -48,6 +50,7 @@ export async function generateLineBindingCode() {
  * 解綁：清掉 lineUserId / lineBoundAt / 還在的綁定碼
  */
 export async function unbindLine() {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
 
@@ -69,6 +72,7 @@ export async function unbindLine() {
  * 更新單一通知偏好 key
  */
 export async function updateLineNotifyPref(key: LineNotifyKey, enabled: boolean) {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
 

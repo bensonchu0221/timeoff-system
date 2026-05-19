@@ -26,6 +26,7 @@ import {
   sendLineBackupAssigned,
   sendLineBackupRemoved,
 } from "@/lib/line"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 export async function applyLeave(data: {
   leaveTypeId: string,
@@ -35,6 +36,7 @@ export async function applyLeave(data: {
   reason?: string,
   backupId?: string | null
 }) {
+  await assertNotImpersonating()
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
 
@@ -205,6 +207,7 @@ async function notifyBackupRemoved(
 }
 
 export async function cancelLeave(requestId: string) {
+  await assertNotImpersonating()
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -302,6 +305,7 @@ export async function updateLeave(requestId: string, data: {
   reason?: string,
   backupId?: string | null
 }) {
+  await assertNotImpersonating()
   const session = await auth();
   if (!session?.user?.id) return { error: "Unauthorized" };
 
@@ -462,6 +466,7 @@ function formatRange(start: Date, end: Date): string {
 // 對外的 reviewLeave：從 session 拿 actorId 後委派 reviewLeaveAsUser
 // 給 web UI 使用；LINE webhook 改走 reviewLeaveAsUser 直接傳入 actorId
 export async function reviewLeave(requestId: string, status: "APPROVED" | "REJECTED", message?: string) {
+  await assertNotImpersonating()
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   return reviewLeaveAsUser(session.user.id, requestId, status, message);
@@ -600,6 +605,7 @@ export async function reviewLeaveAsUser(
 
 // 批次審核：對每張單獨立呼叫 reviewLeave，失敗（如已被別人改、額度不足）獨立回報但不中止整批
 export async function batchReviewLeave(ids: string[], status: "APPROVED" | "REJECTED", message?: string) {
+  await assertNotImpersonating()
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 

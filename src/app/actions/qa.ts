@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 export async function getFAQs(search?: string) {
   return await prisma.fAQ.findMany({
@@ -17,6 +18,7 @@ export async function getFAQs(search?: string) {
 }
 
 export async function createFAQ(data: { question: string, answer: string, category?: string, order?: number }) {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized")
 
@@ -26,6 +28,7 @@ export async function createFAQ(data: { question: string, answer: string, catego
 }
 
 export async function updateFAQ(id: string, data: { question?: string, answer?: string, category?: string, order?: number }) {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized")
 
@@ -38,6 +41,7 @@ export async function updateFAQ(id: string, data: { question?: string, answer?: 
 }
 
 export async function deleteFAQ(id: string) {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized")
 

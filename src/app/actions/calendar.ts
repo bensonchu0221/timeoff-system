@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
 import crypto from "crypto"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 // 32 字元 url-safe token；衝撞機率極低，重設時直接覆蓋舊值即可撤銷舊訂閱
 function generateToken(): string {
@@ -44,6 +45,7 @@ export async function getTeamCalendarUrl() {
 
 // 重設 token → 舊網址即刻失效
 export async function resetCalendarToken(targetUserId?: string) {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
 

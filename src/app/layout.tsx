@@ -7,6 +7,7 @@ import { Toaster } from "react-hot-toast";
 import { auth } from "@/auth";
 import { HelpDrawer } from "./components/HelpDrawer";
 import { prisma } from "@/lib/db";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,6 +55,7 @@ export default async function RootLayout({
           }}
         />
         <Providers>
+          <ImpersonationBanner />
           <header className="bg-[var(--brand-primary)] text-white shadow-md sticky top-0 z-30">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
               <div className="flex items-center gap-6">

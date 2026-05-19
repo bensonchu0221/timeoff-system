@@ -69,7 +69,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
             return (
               <tr key={user.id} className={isTerminated ? "bg-gray-50 opacity-60" : ""}>
                 <td className="px-6 py-4 whitespace-nowrap align-top">
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-1">
                     <span className="font-medium text-gray-900 flex items-center gap-2">
                       {user.name || "未設定名稱"}
                       {user.chineseName && (
@@ -80,6 +80,16 @@ export function UserTable({ users }: { users: UserNode[] }) {
                       )}
                     </span>
                     <span className="text-gray-500">{user.email}</span>
+                    {/* 以此人視角檢視：POST /api/admin/impersonate?email=...；用 form 提交確保走 server-side redirect */}
+                    <form action={`/api/admin/impersonate?email=${encodeURIComponent(user.email)}`} method="POST" className="mt-0.5">
+                      <button
+                        type="submit"
+                        className="text-[11px] text-amber-700 hover:text-amber-900 hover:underline"
+                        title="切換到此員工視角檢視畫面（read-only，無法寫入）"
+                      >
+                        以此人視角檢視 →
+                      </button>
+                    </form>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">

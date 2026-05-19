@@ -4,8 +4,10 @@ import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 async function verifyAdmin(): Promise<string> {
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.email) throw new Error("Unauthorized")
 

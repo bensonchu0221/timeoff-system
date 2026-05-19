@@ -5,8 +5,11 @@ import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 import { Role } from "@prisma/client"
+import { assertNotImpersonating } from "@/lib/impersonation"
 
 async function requireActorId(): Promise<string> {
+  // impersonate 模式下 session.user.id 會被替換成 target，這裡直接擋以避免任何 admin 寫入流到目標員工身上
+  await assertNotImpersonating()
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
   return session.user.id
