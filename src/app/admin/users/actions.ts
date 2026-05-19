@@ -134,6 +134,7 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
 export async function createUser(data: FormData) {
   const actorId = await requireActorId()
   const name = data.get("name") as string
+  const chineseName = data.get("chineseName") as string
   const email = data.get("email") as string
   const department = data.get("department") as string
   const role = data.get("role") as Role
@@ -155,6 +156,7 @@ export async function createUser(data: FormData) {
   const created = await prisma.user.create({
     data: {
       name,
+      chineseName: chineseName || null,
       email,
       department: department || null,
       role: role || "EMPLOYEE",
@@ -168,8 +170,99 @@ export async function createUser(data: FormData) {
     action: "USER_CREATE",
     targetType: "User",
     targetId: created.id,
-    payload: { name, email, role: role || "EMPLOYEE", hireDate: hireDateStr || null },
+    payload: { name, chineseName: chineseName || null, email, role: role || "EMPLOYEE", hireDate: hireDateStr || null },
   })
 
   revalidatePath("/admin/users")
+}
+
+// 更新中文姓名
+export async function updateUserChineseName(userId: string, chineseName: string) {
+  const actorId = await requireActorId()
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { chineseName: true } })
+  const value = chineseName.trim() || null
+  await prisma.user.update({ where: { id: userId }, data: { chineseName: value } })
+  await logAudit({
+    actorId,
+    action: "USER_UPDATE_CHINESE_NAME",
+    targetType: "User",
+    targetId: userId,
+    payload: { from: before?.chineseName ?? null, to: value },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: "已更新中文姓名" }
+}
+
+// 更新部門
+export async function updateUserDepartment(userId: string, department: string) {
+  const actorId = await requireActorId()
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { department: true } })
+  const value = department.trim() || null
+  await prisma.user.update({ where: { id: userId }, data: { department: value } })
+  await logAudit({
+    actorId,
+    action: "USER_UPDATE_DEPARTMENT",
+    targetType: "User",
+    targetId: userId,
+    payload: { from: before?.department ?? null, to: value },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: "已更新部門" }
+}
+
+// 設定特休 Opening Balance（兩個欄位同時寫入）
+export async function setAnnualLeaveOpening(userId: string, balance: number, atISO: string) {
+  const actorId = await requireActorId()
+  if (isNaN(balance) || balance < 0) throw new Error("Opening 天數需為非負數")
+  if (!atISO) throw new Error("Opening 日期必填")
+
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { annualLeaveOpeningBalance: true, annualLeaveOpeningAt: true },
+  })
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      annualLeaveOpeningBalance: balance,
+      annualLeaveOpeningAt: new Date(`${atISO}T00:00:00.000Z`),
+    },
+  })
+  await logAudit({
+    actorId,
+    action: "USER_SET_ANNUAL_OPENING",
+    targetType: "User",
+    targetId: userId,
+    payload: {
+      from: { balance: before?.annualLeaveOpeningBalance ?? null, at: before?.annualLeaveOpeningAt?.toISOString() ?? null },
+      to: { balance, at: atISO },
+    },
+  })
+  revalidatePath("/admin/users")
+  revalidatePath("/")
+  return { success: true, message: `已設定特休 Opening = ${balance} 天 @ ${atISO}` }
+}
+
+// 清除特休 Opening（兩個欄位一起 null）
+export async function clearAnnualLeaveOpening(userId: string) {
+  const actorId = await requireActorId()
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { annualLeaveOpeningBalance: true, annualLeaveOpeningAt: true },
+  })
+  await prisma.user.update({
+    where: { id: userId },
+    data: { annualLeaveOpeningBalance: null, annualLeaveOpeningAt: null },
+  })
+  await logAudit({
+    actorId,
+    action: "USER_CLEAR_ANNUAL_OPENING",
+    targetType: "User",
+    targetId: userId,
+    payload: {
+      cleared: { balance: before?.annualLeaveOpeningBalance ?? null, at: before?.annualLeaveOpeningAt?.toISOString() ?? null },
+    },
+  })
+  revalidatePath("/admin/users")
+  revalidatePath("/")
+  return { success: true, message: "已清除特休 Opening" }
 }

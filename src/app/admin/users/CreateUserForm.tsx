@@ -26,8 +26,12 @@ export function CreateUserForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap gap-4 items-end bg-gray-50 p-4 rounded-md">
       <div>
-        <label className="block text-xs font-medium text-gray-700">姓名</label>
-        <input type="text" name="name" required className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="王小明" />
+        <label className="block text-xs font-medium text-gray-700">姓名（英文 / 暱稱）</label>
+        <input type="text" name="name" required className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="Ming" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700">中文姓名 (選填)</label>
+        <input type="text" name="chineseName" className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="王小明" />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">Email</label>

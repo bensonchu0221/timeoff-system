@@ -26,12 +26,16 @@ export default async function AdminUsersPage() {
     select: {
       id: true,
       name: true,
+      chineseName: true,
       email: true,
       role: true,
+      department: true,
       managerId: true,
       hireDate: true,
       gender: true,
       terminatedDate: true,
+      annualLeaveOpeningBalance: true,
+      annualLeaveOpeningAt: true,
     },
     orderBy: [
       { terminatedDate: 'asc' }, // 在職在上（null 排前）
