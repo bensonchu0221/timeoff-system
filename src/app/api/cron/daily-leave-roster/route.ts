@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyRoster } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 
-// 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「同部門」員工
+// 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「全公司在職員工」
 // 認證：x-cron-secret header
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       endDate: { gte: today },
     },
     include: {
-      user: { select: { id: true, name: true, department: true } },
+      user: { select: { id: true, name: true } },
       leaveType: { select: { name: true } },
     },
     orderBy: { user: { name: "asc" } },
@@ -38,27 +38,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ pushed: 0, reason: "no one is on leave today" })
   }
 
-  // 依部門分桶；沒部門的請假者不會引發任何通知（因為配不到接收者）
-  const leavesByDept = new Map<string, typeof todayLeaves>()
-  for (const l of todayLeaves) {
-    const dept = l.user.department
-    if (!dept) continue
-    if (!leavesByDept.has(dept)) leavesByDept.set(dept, [])
-    leavesByDept.get(dept)!.push(l)
-  }
-
-  if (leavesByDept.size === 0) {
-    return NextResponse.json({ pushed: 0, reason: "no leaves with a department today" })
-  }
-
-  // 一次撈所有有部門 + 有綁 LINE 的在職員工
+  // 通知對象：全公司在職且已綁定 LINE 的員工（不再限同部門）
   const recipients = await prisma.user.findMany({
     where: {
       terminatedDate: null,
       lineUserId: { not: null },
-      department: { in: Array.from(leavesByDept.keys()) },
     },
-    select: { id: true, lineUserId: true, lineNotifyPrefs: true, department: true },
+    select: { id: true, lineUserId: true, lineNotifyPrefs: true },
   })
 
   const tw = new Date(today.toLocaleString("en-US", { timeZone: "Asia/Taipei" }))
@@ -68,10 +54,9 @@ export async function GET(req: NextRequest) {
   await Promise.allSettled(
     recipients.map(async (u) => {
       if (!shouldSendLine(u, "dailyRoster")) return
-      if (!u.department) return
-      const deptLeaves = leavesByDept.get(u.department) || []
-      // 排除自己也請假的情況，避免「您 + 同事 X 今天請假」這種尷尬
-      const filtered = deptLeaves.filter((l) => l.user.id !== u.id)
+      // 把「自己今天也請假」的那筆從名單裡濾掉，避免「您 + 同事 X 今天請假」這種尷尬
+      // 若濾掉自己後沒人剩下，這位接收者就略過（不要只看到「今日請假：（空）」）
+      const filtered = todayLeaves.filter((l) => l.user.id !== u.id)
       if (filtered.length === 0) return
 
       const rosterLines = filtered.map((l) => {
@@ -93,6 +78,5 @@ export async function GET(req: NextRequest) {
     pushed,
     totalRecipients: recipients.length,
     leavesToday: todayLeaves.length,
-    departments: leavesByDept.size,
   })
 }

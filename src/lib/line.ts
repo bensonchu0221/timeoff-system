@@ -6,7 +6,7 @@ export type LineNotifyKey =
   | "reviewResult"           // 員工的假單被核准/駁回
   | "departmentLeave"        // 同部門有人請假成功
   | "dailyPending"           // 主管每日 11:00 待審清單
-  | "dailyRoster"            // 同部門每日 10:00 請假名單
+  | "dailyRoster"            // 每日 10:00 全公司請假名單
   | "leaveCancelled"         // 主管 / 同部門：收到撤銷通知
   | "leaveUpdated"           // 主管：員工修改了 PENDING 假單
   | "backupAssigned"         // 被指定為代理人
@@ -442,7 +442,7 @@ export async function sendLineDailyPending(
 }
 
 /**
- * 每日 11:00 推給全員：今天有誰請假
+ * 每日 10:00 推給全公司在職員工：今天有誰請假
  */
 export async function sendLineDailyRoster(
   toLineUserId: string,

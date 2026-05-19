@@ -78,9 +78,9 @@ export default async function FlowPage() {
             behavior="LINE 推播「您目前有 N 筆假單待審核」+ 審核連結"
           />
           <ScenarioCard
-            title="每日 10:00 同部門名單"
-            trigger="同部門有人今天請假（APPROVED）"
-            behavior="LINE 推播「今日請假：A 特休、B 事假上午」給同部門其他員工"
+            title="每日 10:00 全公司請假名單"
+            trigger="今天有人請假（APPROVED）"
+            behavior="LINE 推播「今日請假：A 特休、B 事假上午」給全公司在職且已綁定 LINE 的同仁（自己今天請假則不會看到自己）"
           />
         </div>
       </section>
@@ -113,12 +113,15 @@ export default async function FlowPage() {
               <NotifyRow event="撤銷（已核准）" rcpts={["-", "✓", "✓", "✓ 解除", "-"]} />
               <NotifyRow event="24h 未審核升級" rcpts={["-", "-", "-", "-", "✓"]} />
               <NotifyRow event="每日 11:00 待審清單" rcpts={["-", "✓", "-", "-", "-"]} />
-              <NotifyRow event="每日 10:00 同部門名單" rcpts={["✓", "-", "-", "-", "-"]} />
+              <NotifyRow event="每日 10:00 全公司請假名單 **" rcpts={["✓", "✓", "✓", "✓", "✓"]} />
             </tbody>
           </table>
         </div>
         <p className="text-xs text-gray-500 mt-2">
           * 修改時，代理人若有變動才會通知（舊代理人收解除、新代理人收指派）。
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          ** 全公司請假名單：所有在職且已綁定 LINE 的同仁皆會收到（自己今天請假則只看到其他人的名單）。
         </p>
       </section>
 

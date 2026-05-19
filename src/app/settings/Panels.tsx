@@ -330,8 +330,8 @@ const PREF_DEFS: PrefDef[] = [
   },
   {
     key: "dailyRoster",
-    label: "每日 10:00 同部門請假名單",
-    description: "每日 10:00 推播同部門今天有誰請假",
+    label: "每日 10:00 全公司請假名單",
+    description: "每日 10:00 推播全公司今天有誰請假",
     managerOnly: false,
   },
   {
