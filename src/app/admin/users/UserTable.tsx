@@ -2,6 +2,7 @@
 
 import { Role } from "@prisma/client"
 import { useState, useRef, useEffect, useTransition } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
   updateUserRole,
   updateUserManager,
@@ -36,6 +37,7 @@ export function UserTable({ users }: { users: UserNode[] }) {
   const [isPending, startTransition] = useTransition()
   const containerRef = useRef<HTMLDivElement>(null)
   const [isScrolled, setIsScrolled] = useState(false)
+  const scrollIntervalRef = useRef<number | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -44,6 +46,21 @@ export function UserTable({ users }: { users: UserNode[] }) {
     el.addEventListener("scroll", onScroll)
     return () => el.removeEventListener("scroll", onScroll)
   }, [])
+
+  // hover 浮動按鈕時持續捲動，移開即停
+  const startScroll = (dx: number) => {
+    stopScroll()
+    scrollIntervalRef.current = window.setInterval(() => {
+      containerRef.current?.scrollBy({ left: dx })
+    }, 16)
+  }
+  const stopScroll = () => {
+    if (scrollIntervalRef.current !== null) {
+      clearInterval(scrollIntervalRef.current)
+      scrollIntervalRef.current = null
+    }
+  }
+  useEffect(() => () => stopScroll(), [])
 
   const wrap = (fn: () => Promise<{ success: boolean; message: string } | void>) => {
     startTransition(async () => {
@@ -60,9 +77,10 @@ export function UserTable({ users }: { users: UserNode[] }) {
   const managers = users.filter(u => (u.role === "MANAGER" || u.role === "ADMIN") && !u.terminatedDate)
 
   return (
-    <div ref={containerRef} className="bg-white rounded-lg shadow overflow-x-auto lg:overflow-y-auto lg:max-h-[75vh] border border-gray-200">
+    <div className="relative">
+    <div ref={containerRef} className="bg-white rounded-lg shadow overflow-x-auto border border-gray-200">
       <table className="min-w-max w-full divide-y divide-gray-200 text-sm">
-        <thead className="bg-gray-50 sticky top-0 z-20">
+        <thead className="bg-gray-50">
           <tr>
             <th className="sticky left-0 z-30 bg-gray-50 border-r border-gray-200 px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">中文姓名</th>
@@ -95,11 +113,11 @@ export function UserTable({ users }: { users: UserNode[] }) {
                         </span>
                       )}
                     </span>
-                    <span className={`text-gray-500 whitespace-nowrap overflow-hidden transition-all duration-300 ${isScrolled ? "max-h-0 opacity-0" : "max-h-8 opacity-100"}`}>
+                    <span className={`text-gray-500 whitespace-nowrap overflow-hidden transition-all duration-300 ${isScrolled ? "max-w-0 max-h-0 opacity-0" : "max-w-xs max-h-8 opacity-100"}`}>
                       {user.email}
                     </span>
                     {/* 以此人視角檢視：POST /api/admin/impersonate?email=...；用 form 提交確保走 server-side redirect */}
-                    <form action={`/api/admin/impersonate?email=${encodeURIComponent(user.email)}`} method="POST" className={`overflow-hidden transition-all duration-300 ${isScrolled ? "max-h-0 opacity-0" : "max-h-8 opacity-100"}`}>
+                    <form action={`/api/admin/impersonate?email=${encodeURIComponent(user.email)}`} method="POST" className={`overflow-hidden transition-all duration-300 ${isScrolled ? "max-w-0 max-h-0 opacity-0" : "max-w-xs max-h-8 opacity-100"}`}>
                       <button
                         type="submit"
                         className="text-[11px] text-amber-700 hover:text-amber-900 hover:underline"
@@ -213,6 +231,26 @@ export function UserTable({ users }: { users: UserNode[] }) {
           })}
         </tbody>
       </table>
+    </div>
+      {/* 浮動左右捲動按鈕（PC 限定，hover 持續捲動） */}
+      <button
+        type="button"
+        onMouseEnter={() => startScroll(-12)}
+        onMouseLeave={stopScroll}
+        className="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
+        aria-label="向左捲動"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+      <button
+        type="button"
+        onMouseEnter={() => startScroll(12)}
+        onMouseLeave={stopScroll}
+        className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
+        aria-label="向右捲動"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
     </div>
   )
 }
