@@ -220,14 +220,12 @@ export async function setAnnualLeaveOpening(
   userId: string,
   balance: number,
   atISO: string,
-  b: number,
-  r: number,
+  b: number | null,
+  r: number | null,
 ) {
   const actorId = await requireActorId()
   if (isNaN(balance) || balance < 0) throw new Error("Opening 天數需為非負數")
   if (!atISO) throw new Error("Opening 日期必填")
-  if (isNaN(b) || b < 0) throw new Error("B（基本年天數）需為非負數")
-  if (isNaN(r) || r < 0) throw new Error("R（未休天數）需為非負數")
 
   const before = await prisma.user.findUnique({
     where: { id: userId },

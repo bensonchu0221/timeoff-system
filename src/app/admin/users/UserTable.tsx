@@ -1,7 +1,7 @@
 "use client"
 
 import { Role } from "@prisma/client"
-import { useState, useTransition } from "react"
+import { useState, useRef, useEffect, useTransition } from "react"
 import {
   updateUserRole,
   updateUserManager,
@@ -34,6 +34,16 @@ type UserNode = {
 
 export function UserTable({ users }: { users: UserNode[] }) {
   const [isPending, startTransition] = useTransition()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isScrolled, setIsScrolled] = useState(false)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onScroll = () => setIsScrolled(el.scrollLeft > 10)
+    el.addEventListener("scroll", onScroll)
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [])
 
   const wrap = (fn: () => Promise<{ success: boolean; message: string } | void>) => {
     startTransition(async () => {
@@ -50,11 +60,11 @@ export function UserTable({ users }: { users: UserNode[] }) {
   const managers = users.filter(u => (u.role === "MANAGER" || u.role === "ADMIN") && !u.terminatedDate)
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-x-auto border border-gray-200">
+    <div ref={containerRef} className="bg-white rounded-lg shadow overflow-x-auto lg:overflow-y-auto lg:max-h-[75vh] border border-gray-200">
       <table className="min-w-max w-full divide-y divide-gray-200 text-sm">
-        <thead className="bg-gray-50">
+        <thead className="bg-gray-50 sticky top-0 z-20">
           <tr>
-            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
+            <th className="sticky left-0 z-30 bg-gray-50 border-r border-gray-200 px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">員工</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">中文姓名</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">角色權限</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">性別</th>
@@ -70,20 +80,26 @@ export function UserTable({ users }: { users: UserNode[] }) {
             const isTerminated = !!user.terminatedDate
             return (
               <tr key={user.id} className={isTerminated ? "bg-gray-50 opacity-60" : ""}>
-                <td className="px-6 py-4 whitespace-nowrap align-top">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-gray-900 flex items-center gap-2">
+                <td className={`sticky left-0 z-10 bg-white border-r border-gray-200 align-top whitespace-nowrap transition-all duration-300 ${isTerminated ? "bg-gray-50" : "bg-white"} ${isScrolled ? "px-3 py-2" : "px-6 py-4"}`}>
+                  <div className="flex flex-col gap-1 overflow-hidden">
+                    <span className="font-medium text-gray-900 flex items-center gap-2 whitespace-nowrap">
                       {user.name || "未設定名稱"}
                       {user.chineseName && (
-                        <span className="text-xs text-gray-400 font-normal">{user.chineseName}</span>
+                        <span className={`text-xs text-gray-400 font-normal overflow-hidden whitespace-nowrap transition-all duration-300 ${isScrolled ? "max-w-0 opacity-0" : "max-w-xs opacity-100"}`}>
+                          {user.chineseName}
+                        </span>
                       )}
                       {isTerminated && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-gray-200 text-gray-600 font-normal">已離職</span>
+                        <span className={`text-[10px] rounded bg-gray-200 text-gray-600 font-normal overflow-hidden whitespace-nowrap transition-all duration-300 ${isScrolled ? "max-w-0 opacity-0 px-0 py-0" : "max-w-xs opacity-100 px-2 py-0.5"}`}>
+                          已離職
+                        </span>
                       )}
                     </span>
-                    <span className="text-gray-500">{user.email}</span>
+                    <span className={`text-gray-500 whitespace-nowrap overflow-hidden transition-all duration-300 ${isScrolled ? "max-h-0 opacity-0" : "max-h-8 opacity-100"}`}>
+                      {user.email}
+                    </span>
                     {/* 以此人視角檢視：POST /api/admin/impersonate?email=...；用 form 提交確保走 server-side redirect */}
-                    <form action={`/api/admin/impersonate?email=${encodeURIComponent(user.email)}`} method="POST" className="mt-0.5">
+                    <form action={`/api/admin/impersonate?email=${encodeURIComponent(user.email)}`} method="POST" className={`overflow-hidden transition-all duration-300 ${isScrolled ? "max-h-0 opacity-0" : "max-h-8 opacity-100"}`}>
                       <button
                         type="submit"
                         className="text-[11px] text-amber-700 hover:text-amber-900 hover:underline"
@@ -177,10 +193,8 @@ export function UserTable({ users }: { users: UserNode[] }) {
                     userId={user.id}
                     initialBalance={user.annualLeaveOpeningBalance}
                     initialAt={user.annualLeaveOpeningAt}
-                    initialB={user.annualLeaveOpeningB}
-                    initialR={user.annualLeaveOpeningR}
                     disabled={isPending}
-                    onSave={(balance, at, b, r) => wrap(() => setAnnualLeaveOpening(user.id, balance, at, b, r))}
+                    onSave={(balance, at) => wrap(() => setAnnualLeaveOpening(user.id, balance, at, null, null))}
                     onClear={() => wrap(() => clearAnnualLeaveOpening(user.id))}
                   />
                 </td>
@@ -231,13 +245,10 @@ function InlineTextCell({
   )
 }
 
-// Opening Balance 設定控件：balance + at + B + R 共四個 input + 儲存 / 清除
-// 公式：opening = round((hireDate月份/12) × B + R, 0.5)
+// Opening Balance 設定控件：balance + at 兩個 input + 儲存 / 清除
 function OpeningCell({
   initialBalance,
   initialAt,
-  initialB,
-  initialR,
   disabled,
   onSave,
   onClear,
@@ -245,26 +256,18 @@ function OpeningCell({
   userId: string
   initialBalance: number | null
   initialAt: Date | null
-  initialB: number | null
-  initialR: number | null
   disabled?: boolean
-  onSave: (balance: number, atISO: string, b: number, r: number) => void
+  onSave: (balance: number, atISO: string) => void
   onClear: () => void
 }) {
   const initialBalanceStr = initialBalance !== null ? String(initialBalance) : ""
   const initialAtStr = initialAt ? initialAt.toISOString().split("T")[0] : "2026-01-01"
-  const initialBStr = initialB !== null ? String(initialB) : ""
-  const initialRStr = initialR !== null ? String(initialR) : ""
   const [balance, setBalance] = useState(initialBalanceStr)
   const [at, setAt] = useState(initialAtStr)
-  const [b, setB] = useState(initialBStr)
-  const [r, setR] = useState(initialRStr)
   const hasOpening = initialBalance !== null
 
   const handleSave = () => {
     const balanceNum = Number(balance)
-    const bNum = Number(b)
-    const rNum = Number(r)
     if (balance.trim() === "" || isNaN(balanceNum)) {
       toast.error("請填 opening 天數")
       return
@@ -273,22 +276,12 @@ function OpeningCell({
       toast.error("請填日期")
       return
     }
-    if (b.trim() === "" || isNaN(bNum)) {
-      toast.error("請填 B（基本年天數）")
-      return
-    }
-    if (r.trim() === "" || isNaN(rNum)) {
-      toast.error("請填 R（未休天數）")
-      return
-    }
-    onSave(balanceNum, at, bNum, rNum)
+    onSave(balanceNum, at)
   }
 
   const handleClear = () => {
     if (!confirm("清除特休 Opening 後，該員工特休改從入職日累計（會大量增加可請天數）。確定？")) return
     setBalance("")
-    setB("")
-    setR("")
     onClear()
   }
 
@@ -313,30 +306,6 @@ function OpeningCell({
           onChange={(e) => setAt(e.target.value)}
           className="input input-bordered input-sm w-36 bg-gray-50"
         />
-      </div>
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          step="0.5"
-          disabled={disabled}
-          value={b}
-          placeholder="B"
-          onChange={(e) => setB(e.target.value)}
-          className="input input-bordered input-sm w-16 bg-gray-50"
-          title="B：基本年天數（前2年=10、滿2年起依勞基法或個人 override）"
-        />
-        <span className="text-[10px] text-gray-400">天 / R</span>
-        <input
-          type="number"
-          step="0.5"
-          disabled={disabled}
-          value={r}
-          placeholder="R"
-          onChange={(e) => setR(e.target.value)}
-          className="input input-bordered input-sm w-16 bg-gray-50"
-          title="R：2025 未休天數"
-        />
-        <span className="text-[10px] text-gray-400">天</span>
       </div>
       <div className="flex items-center gap-2">
         <button
