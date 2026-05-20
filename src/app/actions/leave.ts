@@ -76,6 +76,11 @@ export async function applyLeave(data: {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const approverId = user?.managerId;
 
+  // 生理假 gate：男性不得申請
+  if (user?.gender === "MALE" && leaveTypeObj?.name.includes("生理假")) {
+    return { error: "男性員工無法申請生理假。" };
+  }
+
   // 特休 gate：到職滿 3 個月才能請特休（公司政策）
   const isAnnual = leaveTypeObj && (leaveTypeObj.name.includes("特休") || leaveTypeObj.name.toLowerCase().includes("annual"));
   if (isAnnual && user?.hireDate && monthsBetween(user.hireDate, start) < 3) {

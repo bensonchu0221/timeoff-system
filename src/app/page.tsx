@@ -40,10 +40,12 @@ export default async function DashboardPage() {
   const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
 
   const balances = await Promise.all(
-    leaveTypes.map(async (lt) => {
-      const bal = await getUserLeaveBalance(user.id, lt.id)
-      return { type: lt.name, ...bal }
-    })
+    leaveTypes
+      .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
+      .map(async (lt) => {
+        const bal = await getUserLeaveBalance(user.id, lt.id)
+        return { type: lt.name, ...bal }
+      })
   )
 
   const history = await prisma.leaveRequest.findMany({
