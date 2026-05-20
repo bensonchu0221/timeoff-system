@@ -1,14 +1,17 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
-import { getUserLeaveBalance, getAnniversaryBaseDays, monthsBetween } from "@/lib/leave-utils"
+import { getUserLeaveBalance, getStatutoryAnnualDays, monthsBetween } from "@/lib/leave-utils"
 
 import {
   CreateLeaveTypeForm,
   DeleteLeaveTypeButton,
   SyncHolidaysForm,
   CreateOverrideForm,
+  CreateAdjustmentForm,
+  DeleteAdjustmentButton,
 } from "./Forms"
+import { formatTaipeiDateISO } from "@/lib/date-format"
 import { BalancesTable, OverrideTableRow } from "./BalancesTable"
 
 export const metadata = {
@@ -59,6 +62,16 @@ export default async function LeaveSettingsPage() {
     if (!existing || o.year > existing.year) latestByPair.set(key, o)
   }
 
+  // HR 手動調整清單（含操作人 / 員工 / 假別資訊）
+  const adjustments = await prisma.leaveAdjustment.findMany({
+    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+    include: {
+      user: { select: { name: true, email: true } },
+      leaveType: { select: { name: true } },
+      createdBy: { select: { name: true, email: true } },
+    },
+  })
+
   // 對每筆顯示用 row，算出「目前可請」與「移除 override 後的基準」
   const now = new Date()
   const rows: OverrideTableRow[] = await Promise.all(
@@ -69,11 +82,13 @@ export default async function LeaveSettingsPage() {
 
         let baseline: number
         if (isAnnualLeaveName(o.leaveType.name) && o.user.hireDate) {
-          // 特休：當前所在週年期、無 override 時應發的天數
-          // （前 2 年走 defaultDays，滿 2 年起走勞基法 §38 表）
-          const M = monthsBetween(o.user.hireDate, now)
-          const currentN = Math.floor(M / 12) + 1
-          baseline = getAnniversaryBaseDays(currentN, o.leaveType.defaultDays)
+          // 特休（曆年制）：今年 1/1 時依「已完整年資」應發的天數
+          // 前 2 年走 defaultDays，滿 2 年起走勞基法 §38 表
+          const jan1OfCurrentYear = new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
+          const completedYears = Math.floor(monthsBetween(o.user.hireDate, jan1OfCurrentYear) / 12)
+          baseline = completedYears < 2
+            ? o.leaveType.defaultDays
+            : getStatutoryAnnualDays(completedYears)
         } else {
           baseline = o.leaveType.defaultDays
         }
@@ -105,7 +120,8 @@ export default async function LeaveSettingsPage() {
         <ul className="menu menu-horizontal bg-base-200 rounded-box p-1">
           <li><a href="#section-types" className="font-medium">1. 假別管理</a></li>
           <li><a href="#section-balances" className="font-medium">2. 額度覆寫</a></li>
-          <li><a href="#section-sync" className="font-medium">3. 國定假日同步</a></li>
+          <li><a href="#section-adjustments" className="font-medium">3. 手動調整</a></li>
+          <li><a href="#section-sync" className="font-medium">4. 國定假日同步</a></li>
         </ul>
       </div>
 
@@ -157,9 +173,62 @@ export default async function LeaveSettingsPage() {
         <BalancesTable rows={rows} />
       </div>
 
+      {/* HR 手動調整 */}
+      <div id="section-adjustments" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
+        <h2 className="text-lg font-medium mb-4">3. HR 手動調整（補發 / 扣除）</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          手動調整獨立於主計算邏輯之外（不影響 override / opening / pro-rata / 1/1 grant），僅加總到員工最終 balance。
+          員工從「生效日」當天起可動用該天數；之前 balance 不含此調整。
+        </p>
+
+        <CreateAdjustmentForm
+          users={activeUsers}
+          leaveTypes={leaveTypes.map((lt) => ({ id: lt.id, name: lt.name }))}
+        />
+
+        {adjustments.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">尚無手動調整紀錄</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">員工</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">假別</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">生效日</th>
+                  <th className="px-4 py-2 text-right font-medium text-gray-500">數量</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">原因</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">操作人</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">建立時間</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {adjustments.map((adj) => (
+                  <tr key={adj.id}>
+                    <td className="px-4 py-3 font-medium">{adj.user.name || adj.user.email}</td>
+                    <td className="px-4 py-3">{adj.leaveType.name}</td>
+                    <td className="px-4 py-3">{formatTaipeiDateISO(adj.effectiveAt)}</td>
+                    <td className={`px-4 py-3 text-right font-bold ${adj.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {adj.amount > 0 ? "+" : ""}{adj.amount}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 max-w-xs whitespace-pre-wrap">{adj.reason}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{adj.createdBy.name || adj.createdBy.email}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{formatTaipeiDateISO(adj.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <DeleteAdjustmentButton id={adj.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* 國定假日同步 */}
       <div id="section-sync" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
-        <h2 className="text-lg font-medium mb-4">3. 國定假日同步</h2>
+        <h2 className="text-lg font-medium mb-4">4. 國定假日同步</h2>
         <p className="text-sm text-gray-500 mb-4">
           新的一年開始前，您可以透過此功能自動從政府開放資料庫（人事行政總處）拉取該年度的國定假日與補班日，無須手動輸入。
         </p>

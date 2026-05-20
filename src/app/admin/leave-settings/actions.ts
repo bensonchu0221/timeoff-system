@@ -130,6 +130,74 @@ export async function deleteUserLeaveBalance(data: FormData) {
   return { success: true, message: `已移除 override，共刪除 ${result.count} 筆歷年設定` }
 }
 
+// ── HR 手動調整特休（曆年制：補發 / 扣除）──
+// effectiveAt 之前 balance 不含此調整；員工從 effectiveAt 當天起可動用
+
+export async function addLeaveAdjustment(data: FormData) {
+  const actorId = await verifyAdmin()
+  const userId = data.get("userId") as string
+  const leaveTypeId = data.get("leaveTypeId") as string
+  const effectiveAtStr = data.get("effectiveAt") as string
+  const amount = Number(data.get("amount"))
+  const reason = ((data.get("reason") as string) || "").trim()
+
+  if (!userId || !leaveTypeId || !effectiveAtStr) throw new Error("欄位不可空白")
+  if (isNaN(amount) || amount === 0) throw new Error("數量必須為非 0 數值")
+  // 限制 0.5 倍數
+  if (Math.abs(amount * 2 - Math.round(amount * 2)) > 1e-9) {
+    throw new Error("數量必須是 0.5 的倍數")
+  }
+  if (!reason) throw new Error("原因必填")
+
+  // 正規化 effectiveAt 為 UTC midnight（與 hireDate / 1/1 grant 一致）
+  const [y, m, d] = effectiveAtStr.split("-").map(Number)
+  if (!y || !m || !d) throw new Error("生效日格式錯誤")
+  const effectiveAt = new Date(Date.UTC(y, m - 1, d))
+
+  const created = await prisma.leaveAdjustment.create({
+    data: { userId, leaveTypeId, effectiveAt, amount, reason, createdById: actorId },
+  })
+
+  await logAudit({
+    actorId,
+    action: "USER_ADD_LEAVE_ADJUSTMENT",
+    targetType: "LeaveAdjustment",
+    targetId: created.id,
+    payload: { userId, leaveTypeId, effectiveAt: effectiveAt.toISOString(), amount, reason },
+  })
+
+  revalidatePath("/admin/leave-settings")
+  return { success: true, message: `已新增調整 ${amount > 0 ? "+" : ""}${amount} 天` }
+}
+
+export async function deleteLeaveAdjustment(data: FormData) {
+  const actorId = await verifyAdmin()
+  const id = data.get("id") as string
+  if (!id) throw new Error("缺少 id")
+
+  const before = await prisma.leaveAdjustment.findUnique({ where: { id } })
+  if (!before) throw new Error("找不到此調整紀錄")
+
+  await prisma.leaveAdjustment.delete({ where: { id } })
+
+  await logAudit({
+    actorId,
+    action: "USER_DELETE_LEAVE_ADJUSTMENT",
+    targetType: "LeaveAdjustment",
+    targetId: id,
+    payload: {
+      userId: before.userId,
+      leaveTypeId: before.leaveTypeId,
+      effectiveAt: before.effectiveAt.toISOString(),
+      amount: before.amount,
+      reason: before.reason,
+    },
+  })
+
+  revalidatePath("/admin/leave-settings")
+  return { success: true, message: "已刪除調整" }
+}
+
 export async function syncHolidays(year: number) {
   const actorId = await verifyAdmin()
 
