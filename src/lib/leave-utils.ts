@@ -57,7 +57,7 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
 }
 
 // 勞基法 §38 特休對照表（來源：2017 修正版本 + HR 2026-05-18 確認）
-// 僅在年資 >= 2 時被呼叫（年資 0~1 走公司前 2 年政策，由 getAnniversaryBaseDays 處理）
+// 僅在年資 >= 2 時被呼叫（年資 0~1 走公司前 2 年政策）
 export function getStatutoryAnnualDays(seniorityYears: number): number {
   if (seniorityYears < 2) return 0           // 不會走到（安全 fallback）
   if (seniorityYears < 3) return 10          // 滿 2 年
@@ -65,15 +65,6 @@ export function getStatutoryAnnualDays(seniorityYears: number): number {
   if (seniorityYears < 10) return 15         // 5-9 年
   if (seniorityYears >= 25) return 30        // 25 年起封頂
   return Math.min(15 + (seniorityYears - 9), 30)  // 10→16, 11→17, ..., 24→30
-}
-
-// 第 N 個週年期應給的基準天數（不含 override 比較）
-// 第 N 週年期 = [hireDate + (N-1) 年, hireDate + N 年)，期間開始時員工年資 = N - 1
-// 公司前 2 年（N=1, N=2）走 leaveType.defaultDays；之後走政府表
-export function getAnniversaryBaseDays(N: number, leaveTypeDefaultDays: number): number {
-  const seniorityAtStart = N - 1
-  if (seniorityAtStart < 2) return leaveTypeDefaultDays
-  return getStatutoryAnnualDays(seniorityAtStart)
 }
 
 // 計算 start → end 的「完整月份數」（floor）
@@ -91,57 +82,99 @@ export function addYearsUTC(d: Date, years: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth(), d.getUTCDate()))
 }
 
-// 計算「截至 asOf」的累計特休總額（分水嶺式 override + 可選 opening）
-// overrides 必須已 ORDER BY year ASC
-// opening 存在時：累計從 opening.balance 起算、只加 opening.at 之後的週年發放
-export function calcAnnualLeaveCumulative(
+// 無條件進位至最小 0.5 單位
+function ceilToHalf(n: number): number {
+  return Math.ceil(n * 2) / 2
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+}
+
+function daysInYear(year: number): number {
+  return isLeapYear(year) ? 366 : 365
+}
+
+// hireDate（含當天）到隔年 1/1 的天數差（整數天）
+// 例：2025-08-05 → 149 天；2025-12-31 → 1 天；2025-01-01 → 365 天
+function daysFromHireToYearEnd(hireDate: Date): number {
+  const nextYearStart = Date.UTC(hireDate.getUTCFullYear() + 1, 0, 1)
+  return Math.round((nextYearStart - hireDate.getTime()) / 86_400_000)
+}
+
+// 計算「截至 asOf」的累計特休總額（曆年制：入職 pro-rata + 每年 1/1 grant + 手動調整）
+// overrides 必須已 ORDER BY year ASC（year = 曆年，分水嶺式取 year <= calendarYear 的最大 totalQuota）
+// adjustments = HR 手動調整（effectiveAt + amount，amount 可正可負）
+// opening 存在時：從 opening.balance 起算、只加 opening.at 之後的 1/1 grant 與 adjustments
+export function calcCalendarYearCumulative(
   hireDate: Date,
   asOf: Date,
   leaveTypeDefaultDays: number,
   overrides: { year: number; totalQuota: number }[],
+  adjustments: { effectiveAt: Date; amount: number }[],
   opening?: { balance: number; at: Date }
 ): number {
-  const M = monthsBetween(hireDate, asOf)
-  const hireYear = hireDate.getUTCFullYear()
-
-  // 有 opening：從 opening.balance 起算，只加 openingAt 之後到 asOf 之前的週年發放
-  if (opening) {
-    let total = opening.balance
-    if (M < 0) return total   // asOf < hireDate（理論不應發生）
-    const maxN = Math.floor(M / 12) + 1
-    for (let N = 1; N <= maxN; N++) {
-      const grantDate = addYearsUTC(hireDate, N - 1)
-      // 只算 opening.at < grantDate <= asOf 的週年期
-      if (grantDate > opening.at && grantDate <= asOf) {
-        const base = getAnniversaryBaseDays(N, leaveTypeDefaultDays)
-        const anniversaryStartYear = hireYear + (N - 1)
-        let applicable: number | null = null
-        for (const o of overrides) {
-          if (o.year <= anniversaryStartYear) applicable = o.totalQuota
-          else break
-        }
-        total += applicable !== null ? Math.max(base, applicable) : base
-      }
-    }
-    return total
-  }
-
-  // 無 opening：原邏輯（從 hireDate 累計）
-  const maxN = Math.floor(M / 12) + 1
-  let total = 0
-  for (let N = 1; N <= maxN; N++) {
-    const base = getAnniversaryBaseDays(N, leaveTypeDefaultDays)
-    const anniversaryStartYear = hireYear + (N - 1)
-
-    // 分水嶺：對該週年期，找 year <= anniversaryStartYear 的最大 year override
+  // 分水嶺式 override（year = 曆年）
+  function resolveOverride(calendarYear: number): number | null {
     let applicable: number | null = null
     for (const o of overrides) {
-      if (o.year <= anniversaryStartYear) applicable = o.totalQuota
-      else break   // 已 sort 過，超過就停
+      if (o.year <= calendarYear) applicable = o.totalQuota
+      else break
     }
-
-    total += applicable !== null ? Math.max(base, applicable) : base
+    return applicable
   }
+
+  // 某 1/1 當天的發放額度（依年資 + override）
+  function grantForJan1(year: number): number {
+    const jan1 = new Date(Date.UTC(year, 0, 1))
+    const completedYears = Math.floor(monthsBetween(hireDate, jan1) / 12)
+    const base = completedYears < 2
+      ? leaveTypeDefaultDays
+      : getStatutoryAnnualDays(completedYears)
+    const applicable = resolveOverride(year)
+    return applicable !== null ? Math.max(base, applicable) : base
+  }
+
+  // ── 主邏輯：grants ──
+  let total: number
+  if (opening) {
+    total = opening.balance
+    let year = hireDate.getUTCFullYear() + 1
+    // 上限：asOf 那年（不會無限跑）
+    const stopYear = asOf.getUTCFullYear() + 1
+    while (year < stopYear) {
+      const jan1 = new Date(Date.UTC(year, 0, 1))
+      if (jan1 > asOf) break
+      if (jan1 > opening.at) {       // strictly greater → opening.at 當天的 grant 已含在 opening
+        total += grantForJan1(year)
+      }
+      year++
+    }
+  } else {
+    if (asOf < hireDate) return 0
+    // 入職 pro-rata = (本年剩餘天數，含 hireDate 當天) / 該年總天數 × defaultDays
+    const remainingDays = daysFromHireToYearEnd(hireDate)
+    const yearTotal = daysInYear(hireDate.getUTCFullYear())
+    total = ceilToHalf(remainingDays / yearTotal * leaveTypeDefaultDays)
+
+    // 每年 1/1 grants
+    let year = hireDate.getUTCFullYear() + 1
+    const stopYear = asOf.getUTCFullYear() + 1
+    while (year < stopYear) {
+      const jan1 = new Date(Date.UTC(year, 0, 1))
+      if (jan1 > asOf) break
+      total += grantForJan1(year)
+      year++
+    }
+  }
+
+  // ── 手動調整（獨立於主邏輯，effectiveAt <= asOf 才計入）──
+  for (const adj of adjustments) {
+    if (adj.effectiveAt > asOf) continue
+    if (opening && adj.effectiveAt <= opening.at) continue   // 已含在 opening 內
+    total += adj.amount
+  }
+
   return total
 }
 
@@ -171,13 +204,20 @@ export async function getUserLeaveBalance(
       select: { year: true, totalQuota: true }
     })
 
+    // 取所有手動調整（HR 補發 / 扣除，獨立於主邏輯）
+    const adjustments = await prisma.leaveAdjustment.findMany({
+      where: { userId, leaveTypeId },
+      orderBy: { effectiveAt: 'asc' },
+      select: { effectiveAt: true, amount: true }
+    })
+
     // 組裝 opening（兩個欄位同存才有效）
     const opening = (user.annualLeaveOpeningBalance !== null && user.annualLeaveOpeningAt !== null)
       ? { balance: user.annualLeaveOpeningBalance, at: user.annualLeaveOpeningAt }
       : undefined
 
-    const total = calcAnnualLeaveCumulative(
-      user.hireDate, asOf, leaveType.defaultDays, overrides, opening
+    const total = calcCalendarYearCumulative(
+      user.hireDate, asOf, leaveType.defaultDays, overrides, adjustments, opening
     )
 
     // 已用 / 待審：opening 存在時從 openingAt 起算；否則從入職以來累計

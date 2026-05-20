@@ -1,6 +1,6 @@
 import { prisma } from "./db"
 import { formatTaipeiDate, formatTaipeiDateISO, startOfYearUTC } from "./date-format"
-import { getAnniversaryBaseDays, monthsBetween, addYearsUTC } from "./leave-utils"
+import { getStatutoryAnnualDays, monthsBetween, addYearsUTC } from "./leave-utils"
 
 export type LedgerEvent = {
   id: string
@@ -17,21 +17,51 @@ function addMonthsUTC(d: Date, months: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()))
 }
 
-// 對給定的週年期 N，依分水嶺式 override 算出該期實際發放天數
-function getAnniversaryActualDays(
-  N: number,
-  hireYear: number,
-  leaveTypeDefaultDays: number,
+function ceilToHalfLocal(n: number): number {
+  return Math.ceil(n * 2) / 2
+}
+
+function isLeapYearLocal(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+}
+
+function daysInYearLocal(year: number): number {
+  return isLeapYearLocal(year) ? 366 : 365
+}
+
+function daysFromHireToYearEndLocal(hireDate: Date): number {
+  const nextYearStart = Date.UTC(hireDate.getUTCFullYear() + 1, 0, 1)
+  return Math.round((nextYearStart - hireDate.getTime()) / 86_400_000)
+}
+
+// 分水嶺式 override（year = 曆年）
+function resolveCalendarOverride(
+  calendarYear: number,
   overrides: { year: number; totalQuota: number }[]
-): number {
-  const base = getAnniversaryBaseDays(N, leaveTypeDefaultDays)
-  const anniversaryStartYear = hireYear + (N - 1)
+): number | null {
   let applicable: number | null = null
   for (const o of overrides) {
-    if (o.year <= anniversaryStartYear) applicable = o.totalQuota
+    if (o.year <= calendarYear) applicable = o.totalQuota
     else break
   }
-  return applicable !== null ? Math.max(base, applicable) : base
+  return applicable
+}
+
+// 某 1/1 當天的發放額度（依年資 + override 取大）
+function grantForJan1(
+  year: number,
+  hireDate: Date,
+  leaveTypeDefaultDays: number,
+  overrides: { year: number; totalQuota: number }[]
+): { days: number; completedYears: number } {
+  const jan1 = new Date(Date.UTC(year, 0, 1))
+  const completedYears = Math.floor(monthsBetween(hireDate, jan1) / 12)
+  const base = completedYears < 2
+    ? leaveTypeDefaultDays
+    : getStatutoryAnnualDays(completedYears)
+  const applicable = resolveCalendarOverride(year, overrides)
+  const days = applicable !== null ? Math.max(base, applicable) : base
+  return { days, completedYears }
 }
 
 export async function getLeaveLedger(userId: string, leaveTypeId: string): Promise<LedgerEvent[]> {
@@ -99,16 +129,18 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
         amount: openingBalance,
       })
     } else {
-      // 無 opening：原本的入職發放事件
+      // 無 opening：入職日 pro-rata 發放
       if (M >= 0) {
-        const day1Days = getAnniversaryActualDays(1, hireYear, leaveType.defaultDays, overrides)
+        const remainingDays = daysFromHireToYearEndLocal(hireDate)
+        const yearTotal = daysInYearLocal(hireYear)
+        const proRata = ceilToHalfLocal(remainingDays / yearTotal * leaveType.defaultDays)
         events.push({
-          id: `grant-anniv-1`,
+          id: `grant-hire`,
           date: hireDate,
           type: "GRANT",
           leaveTypeName: leaveType.name,
-          description: `入職，特休額度發放 ${day1Days} 天（自滿 3 個月起可申請）`,
-          amount: day1Days,
+          description: `入職，特休 pro-rata 發放 ${proRata} 天（${remainingDays}/${yearTotal} × ${leaveType.defaultDays}，自滿 3 個月起可申請）`,
+          amount: proRata,
         })
       }
 
@@ -125,23 +157,42 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
       }
     }
 
-    // 已過的每個完整週年（N >= 2）：發放該期額度
-    // 有 opening：只畫 grantDate > openingAt 的（之前的已含在 OPENING 裡）
-    const completedAnniversaries = Math.floor(M / 12)
-    for (let N = 2; N <= completedAnniversaries + 1; N++) {
-      const grantDate = addYearsUTC(hireDate, N - 1)
-      if (grantDate > now) break
-      if (openingAt && grantDate <= openingAt) continue  // 已含在 opening 中
+    // 每年 1/1 grant 事件：jan1 > openingAt && jan1 <= now
+    {
+      const startYear = hireYear + 1
+      const stopYear = now.getUTCFullYear() + 1
+      for (let year = startYear; year < stopYear; year++) {
+        const jan1 = new Date(Date.UTC(year, 0, 1))
+        if (jan1 > now) break
+        if (openingAt && jan1 <= openingAt) continue   // 已含在 OPENING 內
+        const { days, completedYears } = grantForJan1(year, hireDate, leaveType.defaultDays, overrides)
+        events.push({
+          id: `grant-jan1-${year}`,
+          date: jan1,
+          type: "GRANT",
+          leaveTypeName: leaveType.name,
+          description: `${year}/01/01 特休額度發放 ${days} 天（年資 ${completedYears} 年）`,
+          amount: days,
+        })
+      }
+    }
 
-      const seniorityCompleted = N - 1
-      const days = getAnniversaryActualDays(N, hireYear, leaveType.defaultDays, overrides)
+    // HR 手動調整事件（與 grants 平行，effectiveAt 即事件日期）
+    const adjustments = await prisma.leaveAdjustment.findMany({
+      where: { userId, leaveTypeId },
+      orderBy: { effectiveAt: "asc" },
+    })
+    for (const adj of adjustments) {
+      if (openingAt && adj.effectiveAt <= openingAt) continue   // 已含在 opening 中
+      if (adj.effectiveAt > now) continue                       // 未生效不顯示
+      const isPositive = adj.amount >= 0
       events.push({
-        id: `grant-anniv-${N}`,
-        date: grantDate,
-        type: "GRANT",
+        id: `adjustment-${adj.id}`,
+        date: adj.effectiveAt,
+        type: isPositive ? "GRANT" : "USAGE",
         leaveTypeName: leaveType.name,
-        description: `${formatTaipeiDateISO(grantDate)} 滿 ${seniorityCompleted} 年特休額度新增 ${days} 天`,
-        amount: days,
+        description: `手動${isPositive ? "補發" : "扣除"} ${Math.abs(adj.amount)} 天（${formatTaipeiDateISO(adj.effectiveAt)} 起生效；原因：${adj.reason}）`,
+        amount: adj.amount,
       })
     }
 

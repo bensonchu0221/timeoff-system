@@ -92,6 +92,10 @@ model User {
   leaveBalances  UserLeaveBalance[]
   auditLogs      AuditLog[]         @relation("AuditActor")
 
+  // HR 手動調整（曆年制特休：補發 / 扣除）
+  leaveAdjustments    LeaveAdjustment[] @relation("UserLeaveAdjustments")
+  createdAdjustments  LeaveAdjustment[] @relation("CreatedLeaveAdjustments")
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
@@ -106,6 +110,7 @@ model LeaveType {
   // Relations
   requests       LeaveRequest[]
   balances       UserLeaveBalance[]
+  adjustments    LeaveAdjustment[]
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -154,6 +159,27 @@ model LeaveRequest {
 
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+}
+
+// HR 手動調整特休（曆年制下，獨立於主計算邏輯之外的補發 / 扣除）
+// effectiveAt 之前 balance 不含此調整；員工從 effectiveAt 當天起可動用該天數
+model LeaveAdjustment {
+  id          String   @id @default(uuid())
+  userId      String
+  leaveTypeId String
+  effectiveAt DateTime // 生效日（UTC midnight）
+  amount      Float    // 正=補發、負=扣除（0.5 倍數）
+  reason      String   @db.Text // 必填，HR 操作備註
+
+  createdById String   // 操作 HR 的 user id
+
+  user      User      @relation("UserLeaveAdjustments", fields: [userId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+  createdBy User      @relation("CreatedLeaveAdjustments", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, leaveTypeId, effectiveAt])
 }
 
 model Holiday {

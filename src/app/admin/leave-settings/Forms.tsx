@@ -8,6 +8,8 @@ import {
   updateUserTotalBalance,
   deleteUserLeaveBalance,
   syncHolidays,
+  addLeaveAdjustment,
+  deleteLeaveAdjustment,
 } from "./actions"
 
 export function CreateLeaveTypeForm() {
@@ -277,6 +279,177 @@ export function CreateOverrideForm({
         {isPending ? "新增中..." : "+ 新增 Override"}
       </button>
     </form>
+  )
+}
+
+// HR 手動調整：新增一筆 LeaveAdjustment
+export function CreateAdjustmentForm({
+  users,
+  leaveTypes,
+}: {
+  users: { id: string; name: string | null; email: string }[]
+  leaveTypes: { id: string; name: string }[]
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [userId, setUserId] = useState("")
+  const [leaveTypeId, setLeaveTypeId] = useState("")
+  const [effectiveAt, setEffectiveAt] = useState(() => {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${y}-${m}-${day}`
+  })
+  const [amount, setAmount] = useState("")
+  const [reason, setReason] = useState("")
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!userId || !leaveTypeId || !effectiveAt || amount.trim() === "" || reason.trim() === "") {
+      toast.error("請填寫所有欄位（員工、假別、生效日、數量、原因）")
+      return
+    }
+    const num = Number(amount)
+    if (isNaN(num) || num === 0) {
+      toast.error("數量必須為非 0 數值")
+      return
+    }
+    startTransition(async () => {
+      try {
+        const fd = new FormData()
+        fd.append("userId", userId)
+        fd.append("leaveTypeId", leaveTypeId)
+        fd.append("effectiveAt", effectiveAt)
+        fd.append("amount", String(num))
+        fd.append("reason", reason.trim())
+        const result = await addLeaveAdjustment(fd)
+        if (result?.success) {
+          toast.success(result.message)
+          setUserId("")
+          setLeaveTypeId("")
+          setAmount("")
+          setReason("")
+        }
+      } catch (err: any) {
+        toast.error(err.message || "新增失敗")
+      }
+    })
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-3 bg-gray-50 p-4 rounded-md mb-6"
+    >
+      <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-3 md:gap-4">
+        <div className="w-full md:w-auto">
+          <label className="block text-xs font-medium text-gray-700">員工</label>
+          <select
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            required
+            className="mt-1 block w-full md:w-44 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
+          >
+            <option value="">請選擇員工</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.email}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full md:w-auto">
+          <label className="block text-xs font-medium text-gray-700">假別</label>
+          <select
+            value={leaveTypeId}
+            onChange={(e) => setLeaveTypeId(e.target.value)}
+            required
+            className="mt-1 block w-full md:w-36 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
+          >
+            <option value="">請選擇假別</option>
+            {leaveTypes.map((lt) => (
+              <option key={lt.id} value={lt.id}>
+                {lt.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full md:w-auto">
+          <label className="block text-xs font-medium text-gray-700">生效日</label>
+          <input
+            type="date"
+            value={effectiveAt}
+            onChange={(e) => setEffectiveAt(e.target.value)}
+            required
+            className="mt-1 block w-full md:w-36 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
+          />
+        </div>
+        <div className="w-full md:w-auto">
+          <label className="block text-xs font-medium text-gray-700">數量（可正可負）</label>
+          <input
+            type="number"
+            step="0.5"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="+2 / -1"
+            required
+            className="mt-1 block w-full md:w-28 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700">原因（必填）</label>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          required
+          rows={2}
+          placeholder="例如：補發 HR 漏發 2 天 / 扣除溢用 1 天"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-gray-500">
+          ⓘ 員工從「生效日」當天起可動用此調整；之前 balance 不含此調整。
+        </p>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400 whitespace-nowrap"
+        >
+          {isPending ? "新增中..." : "+ 新增手動調整"}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+export function DeleteAdjustmentButton({ id }: { id: string }) {
+  const [isPending, startTransition] = useTransition()
+
+  const handleDelete = () => {
+    if (!confirm("確定要刪除這筆手動調整嗎？此動作會即時改變員工 balance。")) return
+
+    startTransition(async () => {
+      try {
+        const fd = new FormData()
+        fd.append("id", id)
+        const result = await deleteLeaveAdjustment(fd)
+        if (result?.success) toast.success(result.message)
+      } catch (err: any) {
+        toast.error(err.message || "刪除失敗")
+      }
+    })
+  }
+
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={isPending}
+      className="text-red-500 hover:text-red-700 text-xs font-medium disabled:opacity-50"
+    >
+      {isPending ? "刪除中..." : "刪除"}
+    </button>
   )
 }
 

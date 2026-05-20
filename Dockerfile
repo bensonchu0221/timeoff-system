@@ -21,6 +21,9 @@ COPY . .
 # Next.js telemetry is disabled
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# 跑單元測試，失敗就讓 docker build 中斷 → Cloud Build 失敗 → 不部署
+RUN npm test
+
 # Build the application
 RUN npm run build
 
