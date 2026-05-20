@@ -31,16 +31,20 @@ export async function getMyCalendarUrl() {
   return { url: `${siteUrl()}/api/calendar/${session.user.id}.ics?token=${token}` }
 }
 
-// 團隊訂閱網址：自己 + 直屬下屬的請假事件；僅 MANAGER / ADMIN 可取得
+// 團隊訂閱網址：自己所在的小組（主管 + 同組成員），全員可取得
 export async function getTeamCalendarUrl() {
   const session = await auth()
   if (!session?.user?.id) throw new Error("Unauthorized")
-  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } })
-  if (!dbUser || (dbUser.role !== "MANAGER" && dbUser.role !== "ADMIN")) {
-    throw new Error("僅主管或管理員可取得團隊訂閱網址")
-  }
   const token = await ensureToken(session.user.id)
   return { url: `${siteUrl()}/api/calendar/team/${session.user.id}.ics?token=${token}` }
+}
+
+// 全公司訂閱網址：所有人的已核准假單，全員可取得
+export async function getCompanyCalendarUrl() {
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Unauthorized")
+  const token = await ensureToken(session.user.id)
+  return { url: `${siteUrl()}/api/calendar/company/${session.user.id}.ics?token=${token}` }
 }
 
 // 重設 token → 舊網址即刻失效

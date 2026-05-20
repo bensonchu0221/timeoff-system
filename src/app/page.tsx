@@ -2,7 +2,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
-import { Calendar } from "lucide-react"
+import { Calendar, Info } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
 import { CancelLeaveButton } from "./components/CancelLeaveButton"
@@ -84,12 +84,13 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <CalendarSubscribeButton showTeam={user.role === "MANAGER" || user.role === "ADMIN"} />
+          <CalendarSubscribeButton />
           <Link
             href="/flow"
-            className="text-xs text-gray-700 hover:text-gray-900 hover:underline transition whitespace-nowrap"
+            className="btn btn-circle btn-ghost btn-sm"
+            title="請假審核流程圖"
           >
-            請假審核流程圖
+            <Info className="w-5 h-5" />
           </Link>
           <Link
             href="/apply"

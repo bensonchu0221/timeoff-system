@@ -1,27 +1,30 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Copy, Check, RefreshCw } from "lucide-react"
-import { getMyCalendarUrl, getTeamCalendarUrl, resetCalendarToken } from "@/app/actions/calendar"
+import { CalendarDays, Copy, Check, RefreshCw } from "lucide-react"
+import { getMyCalendarUrl, getTeamCalendarUrl, getCompanyCalendarUrl, resetCalendarToken } from "@/app/actions/calendar"
 import toast from "react-hot-toast"
 
 // 一個按鈕展開 popover，顯示訂閱網址、複製、重設 token
-export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boolean }) {
+export function CalendarSubscribeButton() {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [myUrl, setMyUrl] = useState<string | null>(null)
   const [teamUrl, setTeamUrl] = useState<string | null>(null)
-  const [copied, setCopied] = useState<"my" | "team" | null>(null)
+  const [companyUrl, setCompanyUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState<"my" | "team" | "company" | null>(null)
 
   const loadUrls = () => {
     startTransition(async () => {
       try {
-        const my = await getMyCalendarUrl()
+        const [my, team, company] = await Promise.all([
+          getMyCalendarUrl(),
+          getTeamCalendarUrl(),
+          getCompanyCalendarUrl(),
+        ])
         setMyUrl(my.url)
-        if (showTeam) {
-          const team = await getTeamCalendarUrl()
-          setTeamUrl(team.url)
-        }
+        setTeamUrl(team.url)
+        setCompanyUrl(company.url)
       } catch (err: any) {
         toast.error(err.message || "取得訂閱網址失敗")
       }
@@ -33,7 +36,7 @@ export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boole
     if (!myUrl) loadUrls()
   }
 
-  const copy = (url: string, which: "my" | "team") => {
+  const copy = (url: string, which: "my" | "team" | "company") => {
     navigator.clipboard.writeText(url)
     setCopied(which)
     toast.success("已複製到剪貼簿")
@@ -47,6 +50,7 @@ export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boole
         await resetCalendarToken()
         setMyUrl(null)
         setTeamUrl(null)
+        setCompanyUrl(null)
         toast.success("已重設訂閱 token")
         loadUrls()
       } catch (err: any) {
@@ -59,10 +63,10 @@ export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boole
     <div className="relative inline-block">
       <button
         onClick={handleOpen}
-        className="text-xs text-gray-700 hover:text-gray-900 hover:underline transition whitespace-nowrap"
-        title="複製可貼到 Google Calendar / Outlook 的訂閱網址"
+        className="btn btn-circle btn-ghost btn-sm"
+        title="訂閱請假行事曆"
       >
-        訂閱請假行事曆
+        <CalendarDays className="w-5 h-5" />
       </button>
 
       {open && (
@@ -82,10 +86,8 @@ export function CalendarSubscribeButton({ showTeam = false }: { showTeam?: boole
             </div>
 
             <UrlBlock label="個人版（只有我自己的請假）" url={myUrl} loading={isPending && !myUrl} onCopy={() => myUrl && copy(myUrl, "my")} copied={copied === "my"} />
-
-            {showTeam && (
-              <UrlBlock label="團隊版（我 + 直屬下屬）" url={teamUrl} loading={isPending && !teamUrl} onCopy={() => teamUrl && copy(teamUrl, "team")} copied={copied === "team"} />
-            )}
+            <UrlBlock label="團隊版（我的主管 + 同組成員）" url={teamUrl} loading={isPending && !teamUrl} onCopy={() => teamUrl && copy(teamUrl, "team")} copied={copied === "team"} />
+            <UrlBlock label="全公司版（所有人的請假）" url={companyUrl} loading={isPending && !companyUrl} onCopy={() => companyUrl && copy(companyUrl, "company")} copied={copied === "company"} />
 
             <div className="flex justify-between items-center mt-2 pt-3 border-t border-gray-100">
               <button

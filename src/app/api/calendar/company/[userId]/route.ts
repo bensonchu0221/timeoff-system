@@ -2,38 +2,32 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { buildICS, ICalEvent } from "@/lib/ical"
 
-// 團隊請假行事曆訂閱：/api/calendar/team/{userId}.ics?token={calendarToken}
-// 內容 = 以 root 為錨的整個小組（root + 所有直屬下屬）的 APPROVED 假單
-// root 規則：若 userId 本身有 managerId → root = managerId（下屬看到整組）
-//           否則 → root = userId（主管看到自己帶的組）
+// 全公司請假行事曆訂閱：/api/calendar/company/{userId}.ics?token={calendarToken}
+// 內容 = 全公司所有人的 APPROVED 假單
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ managerId: string }> }
+  ctx: { params: Promise<{ userId: string }> }
 ) {
-  const { managerId: rawUserId } = await ctx.params
+  const { userId: rawUserId } = await ctx.params
   const userId = rawUserId.replace(/\.ics$/, "")
   const token = req.nextUrl.searchParams.get("token")
   if (!token) return new NextResponse("Missing token", { status: 401 })
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, managerId: true, calendarToken: true },
+    select: { calendarToken: true },
   })
   if (!dbUser || dbUser.calendarToken !== token) {
     return new NextResponse("Invalid token", { status: 401 })
   }
 
-  // 下屬 → 以其主管為錨；主管或無主管 → 以自己為錨
-  const rootId = dbUser.managerId ?? dbUser.id
-
-  const teamMembers = await prisma.user.findMany({
-    where: { OR: [{ id: rootId }, { managerId: rootId }] },
+  const allUsers = await prisma.user.findMany({
     select: { id: true, name: true },
   })
-  const memberMap = new Map(teamMembers.map((m) => [m.id, m.name]))
+  const memberMap = new Map(allUsers.map((u) => [u.id, u.name]))
 
   const leaves = await prisma.leaveRequest.findMany({
-    where: { userId: { in: Array.from(memberMap.keys()) }, status: "APPROVED" },
+    where: { status: "APPROVED" },
     include: { leaveType: true },
     orderBy: { startDate: "asc" },
   })
@@ -46,7 +40,7 @@ export async function GET(
     description: l.reason || undefined,
   }))
 
-  const ics = buildICS(`團隊請假行事曆`, events)
+  const ics = buildICS(`全公司請假行事曆`, events)
   return new NextResponse(ics, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
