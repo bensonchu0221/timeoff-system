@@ -98,28 +98,7 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
 
     if (hasOpening && openingAt) {
       // OPENING 事件：替代入職發放事件
-      // 算式：round((hireDate月份/12) × B + R, 0.5)
-      //   B = 個人特休基準天數
-      //   R = 2025 未休天數
-      // B/R 來自 HR 手動填入（user.annualLeaveOpeningB/R）；若沒填則只顯示公式結構
-      const hireMonth = hireDate.getUTCMonth() + 1
-      const B = user.annualLeaveOpeningB
-      const R = user.annualLeaveOpeningR
-      let description = `${formatTaipeiDateISO(openingAt)} 系統匯入起始額度 ${openingBalance} 天`
-      if (B !== null && R !== null) {
-        // 驗算過程用比較細的精度，方便使用者對照
-        const mFraction = hireMonth / 12
-        const mTimesB = mFraction * B
-        const sum = mTimesB + R
-        // 顯示小數點以下 4 位（去尾 0），讓驗算者看清原始未 round 的值
-        const fmt = (n: number) => {
-          const s = n.toFixed(4)
-          return s.replace(/\.?0+$/, "") || "0"
-        }
-        description += `\n\n公式：round((${hireMonth}/12) × B + R, 0.5)\n= round((${hireMonth}/12) × ${B} + ${R}, 0.5)\n= round(${fmt(mTimesB)} + ${R}, 0.5)\n= round(${fmt(sum)}, 0.5)\n= ${openingBalance} 天`
-      } else {
-        description += `\n\n公式：round((${hireMonth}/12) × B + R, 0.5)\nB = 個人特休基準天數\nR = 2025 未休天數`
-      }
+      const description = `${formatTaipeiDateISO(openingAt)} 系統匯入起始額度 ${openingBalance} 天`
       events.push({
         id: `opening`,
         date: openingAt,
