@@ -63,6 +63,7 @@ export default async function RootLayout({
                 <nav className="hidden md:flex space-x-1">
                   <a href="/" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">首頁</a>
                   <a href="/apply" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">請假</a>
+                  <a href="/gantt" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">團隊甘特圖</a>
                   <a href="/settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">個人設定</a>
 
                   {(isAdmin || isManager) && (
@@ -73,7 +74,6 @@ export default async function RootLayout({
                           <span className="indicator-item badge badge-secondary badge-xs bg-red-500 border-red-500"></span>
                         )}
                       </a>
-                      <a href="/admin/gantt" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">團隊甘特圖</a>
                     </>
                   )}
 
@@ -94,6 +94,7 @@ export default async function RootLayout({
                   <ul className="absolute left-0 mt-2 w-48 bg-[var(--brand-primary)] rounded-md shadow-xl z-50 py-2 border border-white/10 text-sm">
                     <li><a href="/" className="block px-4 py-2 text-white/90 hover:bg-white/10">首頁</a></li>
                     <li><a href="/apply" className="block px-4 py-2 text-white/90 hover:bg-white/10">請假</a></li>
+                    <li><a href="/gantt" className="block px-4 py-2 text-white/90 hover:bg-white/10">團隊甘特圖</a></li>
                     <li><a href="/settings" className="block px-4 py-2 text-white/90 hover:bg-white/10">個人設定</a></li>
                     {(isAdmin || isManager) && (
                       <>
@@ -102,7 +103,6 @@ export default async function RootLayout({
                             審核 {pendingCount > 0 && <span className="ml-2 inline-block w-2 h-2 bg-red-500 rounded-full align-middle" />}
                           </a>
                         </li>
-                        <li><a href="/admin/gantt" className="block px-4 py-2 text-white/90 hover:bg-white/10">團隊甘特圖</a></li>
                       </>
                     )}
                     {isAdmin && (

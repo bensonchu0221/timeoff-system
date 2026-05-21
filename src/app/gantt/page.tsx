@@ -10,30 +10,21 @@ export const metadata = {
 export default async function GanttPage(props: { searchParams: Promise<{ month?: string }> }) {
   const searchParams = await props.searchParams;
   const session = await auth()
-  if (!session?.user) redirect("/")
+  // 未登入：帶 callbackUrl 讓登入後自動跳回 /gantt（email 連結點開時無 session 的情境）
+  if (!session?.user) redirect("/?callbackUrl=/gantt")
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email! },
   })
 
-  if (!user || (user.role !== "MANAGER" && user.role !== "ADMIN")) {
-    return <div className="p-6 text-red-500">權限不足：您必須是主管或管理員。</div>
+  if (!user) {
+    return <div className="p-6 text-red-500">找不到使用者資料。</div>
   }
 
-  // 決定要顯示誰的資料；離職者不出現在甘特圖
+  // 所有 role 都看全公司在職員工（透明化）；審核權限另由 canReview 控制
   const targetUsers = await prisma.user.findMany({
-    where: {
-      terminatedDate: null,
-      ...(user.role === "ADMIN" ? {} : {
-        OR: [
-          { id: user.id },
-          { managerId: user.id }
-        ]
-      })
-    },
-    orderBy: {
-      department: 'asc'
-    }
+    where: { terminatedDate: null },
+    orderBy: { department: "asc" },
   })
 
   const userIds = targetUsers.map(u => u.id)
@@ -41,7 +32,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
   // 根據搜尋參數決定起始與結束日期
   const today = new Date()
   let centerDate = new Date(today)
-  
+
   if (searchParams.month) {
     const [year, month] = searchParams.month.split("-").map(Number)
     centerDate = new Date(year, month - 1, 15) // 置中於該月中間
@@ -76,6 +67,9 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
     current.setDate(current.getDate() + 1)
   }
 
+  // 員工版不可審核 PENDING 假單；只有 MANAGER/ADMIN 才允許在格子點開審核 modal
+  const canReview = user.role === "MANAGER" || user.role === "ADMIN"
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-6">
@@ -85,11 +79,12 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
         </p>
       </div>
 
-      <GanttChart 
-        days={days} 
-        targetUsers={targetUsers} 
-        leaves={leaves} 
-        today={today} 
+      <GanttChart
+        days={days}
+        targetUsers={targetUsers}
+        leaves={leaves}
+        today={today}
+        canReview={canReview}
       />
     </div>
   )

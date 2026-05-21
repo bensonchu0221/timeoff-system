@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineEscalation } from "@/lib/line"
-import { sendEscalationEmail } from "@/lib/email"
+import { sendEscalationEmail, displayName } from "@/lib/email"
 
 // 由外部 cron 觸發：找出 PENDING 超過 24 小時且尚未升級過的假單，通知 admin
 // 每筆假單只升級一次（用 escalatedAt 標記），避免重複騷擾
@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
       escalatedAt: null,
     },
     include: {
-      user: { select: { id: true, name: true } },
-      approver: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true, chineseName: true } },
+      approver: { select: { id: true, name: true, chineseName: true } },
       leaveType: { select: { name: true } },
     },
   })
@@ -46,8 +46,8 @@ export async function GET(req: NextRequest) {
   let escalatedCount = 0
   for (const req of stale) {
     const hours = Math.floor((Date.now() - req.createdAt.getTime()) / (60 * 60 * 1000))
-    const applicantName = req.user?.name || "員工"
-    const managerName = req.approver?.name || ""
+    const applicantName = displayName(req.user?.name, req.user?.chineseName)
+    const managerName = displayName(req.approver?.name, req.approver?.chineseName)
     const leaveTypeName = req.leaveType.name
 
     await Promise.allSettled(
@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
             leaveTypeName,
             req.startDate,
             req.endDate,
+            req.partOfDay,
+            req.durationDays,
             hours,
             reviewLink
           ))

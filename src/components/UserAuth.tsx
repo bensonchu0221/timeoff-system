@@ -1,9 +1,14 @@
 "use client"
 
 import { signIn, signOut, useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 
 export function UserAuth() {
   const { data: session, status } = useSession()
+  // 從 URL 讀 callbackUrl（例如 email 點 /gantt 未登入 → 跳 /?callbackUrl=/gantt）
+  // 登入完成後 NextAuth 會自動轉導到該 URL
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get("callbackUrl") || undefined
 
   if (status === "loading") {
     return <div className="text-sm">載入中...</div>
@@ -37,7 +42,7 @@ export function UserAuth() {
 
   return (
     <button
-      onClick={() => signIn("google")}
+      onClick={() => signIn("google", { callbackUrl })}
       className="text-sm bg-white text-[var(--brand-primary)] px-4 py-2 rounded font-medium shadow hover:bg-gray-100 transition-colors"
     >
       使用 Google 登入

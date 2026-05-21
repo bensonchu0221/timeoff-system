@@ -6,16 +6,18 @@ import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export function GanttChart({ 
-  days, 
-  targetUsers, 
-  leaves, 
-  today 
-}: { 
-  days: Date[], 
-  targetUsers: any[], 
-  leaves: any[], 
-  today: Date 
+export function GanttChart({
+  days,
+  targetUsers,
+  leaves,
+  today,
+  canReview = false,
+}: {
+  days: Date[],
+  targetUsers: any[],
+  leaves: any[],
+  today: Date,
+  canReview?: boolean,
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -51,11 +53,11 @@ export function GanttChart({
     const newDate = new Date(year, month - 1 + direction, 1)
     const y = newDate.getFullYear()
     const m = String(newDate.getMonth() + 1).padStart(2, '0')
-    router.push(`/admin/gantt?month=${y}-${m}`)
+    router.push(`/gantt?month=${y}-${m}`)
   }
 
   const goToToday = () => {
-    router.push(`/admin/gantt`)
+    router.push(`/gantt`)
   }
 
   const isDateInLeave = (date: Date, leaveStart: Date, leaveEnd: Date) => {
@@ -203,6 +205,7 @@ export function GanttChart({
                           <GanttLeaveCell
                             leaveOnDay={leaveOnDay}
                             isPending={isPending}
+                            canReview={canReview}
                             userName={u.name || ''}
                             roundedLeft={roundedLeft}
                             roundedRight={roundedRight}

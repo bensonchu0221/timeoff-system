@@ -13,6 +13,7 @@ type LeaveWithRelations = LeaveRequest & {
 export function GanttLeaveCell({
   leaveOnDay,
   isPending,
+  canReview = true,
   userName,
   roundedLeft = true,
   roundedRight = true,
@@ -21,6 +22,7 @@ export function GanttLeaveCell({
 }: {
   leaveOnDay: LeaveWithRelations,
   isPending: boolean,
+  canReview?: boolean,
   userName: string,
   roundedLeft?: boolean,
   roundedRight?: boolean,
@@ -58,14 +60,14 @@ export function GanttLeaveCell({
   return (
     <>
       <div
-        onClick={() => { if (isPending) setIsOpen(true) }}
-        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
+        onClick={() => { if (isPending && canReview) setIsOpen(true) }}
+        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending && canReview ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
         title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
       >
         {leaveOnDay.leaveType.name.substring(0,1)}
       </div>
 
-      {isOpen && isPending && (
+      {isOpen && isPending && canReview && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/30 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
