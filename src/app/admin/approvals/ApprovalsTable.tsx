@@ -29,11 +29,15 @@ function partOfDayLabel(p: string): string {
 
 export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRequest[] }) {
   const [isPending, startTransition] = useTransition()
-  // 駁回 modal 狀態：rejectingId = "BATCH" 表示批次駁回（所有勾選的單）
-  const [rejectingId, setRejectingId] = useState<string | "BATCH" | null>(null)
-  const [rejectMessage, setRejectMessage] = useState("")
-  // 核准 inline 留言（選填）：每張單獨立輸入
-  const [approveNotes, setApproveNotes] = useState<Record<string, string>>({})
+  // 單筆駁回 confirm modal
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  // 單筆核准 confirm modal
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+  // 批次駁回 modal（保留 textarea，因為批次沒有 per-row input）
+  const [batchRejectOpen, setBatchRejectOpen] = useState(false)
+  const [batchRejectMessage, setBatchRejectMessage] = useState("")
+  // 每列的審核留言（核准、駁回都用同一個 input）
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({})
   // 批次選取
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -67,8 +71,8 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
           toast.error(`${res.failures.length} 張失敗：${res.failures.map((f) => f.error).join("；")}`, { duration: 8000 })
         }
         setSelectedIds(new Set())
-        setRejectingId(null)
-        setRejectMessage("")
+        setBatchRejectOpen(false)
+        setBatchRejectMessage("")
       } catch (err: any) {
         toast.error(err.message || "批次操作失敗")
       }
@@ -80,31 +84,17 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
       try {
         await reviewLeave(id, status, message)
         toast.success(status === "APPROVED" ? "已核准" : "已駁回")
-        if (status === "APPROVED") {
-          setApproveNotes((prev) => {
-            const next = { ...prev }
-            delete next[id]
-            return next
-          })
-        }
-        if (status === "REJECTED") {
-          setRejectingId(null)
-          setRejectMessage("")
-        }
+        setReviewNotes((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        setRejectingId(null)
+        setApprovingId(null)
       } catch (err: any) {
         toast.error(err.message || "操作失敗")
       }
     })
-  }
-
-  const submitReject = () => {
-    if (!rejectingId) return
-    // 理由為選填，沒填也可以送出（讓員工自己問或回看單）
-    if (rejectingId === "BATCH") {
-      runBatch("REJECTED", rejectMessage)
-    } else {
-      runReview(rejectingId, "REJECTED", rejectMessage)
-    }
   }
 
   if (pendingRequests.length === 0) {
@@ -135,8 +125,8 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               toast.error("請先勾選假單")
               return
             }
-            setRejectingId("BATCH")
-            setRejectMessage("")
+            setBatchRejectOpen(true)
+            setBatchRejectMessage("")
           }}
           disabled={isPending || selectedIds.size === 0}
           className="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded-md transition disabled:opacity-50"
@@ -164,7 +154,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">假別 / 天數</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">請假區間</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">事由</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">核准留言（選填） / 操作</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">審核留言（選填） / 操作</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -213,24 +203,21 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                   <div className="flex items-center justify-end gap-2">
                     <input
                       type="text"
-                      placeholder="留言（選填）"
-                      value={approveNotes[req.id] ?? ""}
-                      onChange={(e) => setApproveNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
+                      placeholder="審核留言（選填）"
+                      value={reviewNotes[req.id] ?? ""}
+                      onChange={(e) => setReviewNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
                       disabled={isPending}
                       className="input input-bordered input-xs w-40 bg-white"
                     />
                     <button
-                      onClick={() => runReview(req.id, "APPROVED", approveNotes[req.id])}
+                      onClick={() => setApprovingId(req.id)}
                       disabled={isPending}
                       className="bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1 rounded-md transition disabled:opacity-50"
                     >
                       核准
                     </button>
                     <button
-                      onClick={() => {
-                        setRejectingId(req.id)
-                        setRejectMessage("")
-                      }}
+                      onClick={() => setRejectingId(req.id)}
                       disabled={isPending}
                       className="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded-md transition disabled:opacity-50"
                     >
@@ -294,12 +281,12 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               </div>
             )}
 
-            {/* 核准留言（選填） */}
+            {/* 審核留言（選填） */}
             <input
               type="text"
-              placeholder="核准留言（選填）"
-              value={approveNotes[req.id] ?? ""}
-              onChange={(e) => setApproveNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
+              placeholder="審核留言（選填）"
+              value={reviewNotes[req.id] ?? ""}
+              onChange={(e) => setReviewNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
               disabled={isPending}
               className="input input-bordered input-sm w-full bg-white mb-3"
             />
@@ -307,17 +294,14 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
             {/* 操作按鈕 */}
             <div className="flex gap-2">
               <button
-                onClick={() => runReview(req.id, "APPROVED", approveNotes[req.id])}
+                onClick={() => setApprovingId(req.id)}
                 disabled={isPending}
                 className="flex-1 bg-green-100 text-green-700 hover:bg-green-200 px-3 py-2 rounded-md transition disabled:opacity-50 text-sm font-medium"
               >
                 核准
               </button>
               <button
-                onClick={() => {
-                  setRejectingId(req.id)
-                  setRejectMessage("")
-                }}
+                onClick={() => setRejectingId(req.id)}
                 disabled={isPending}
                 className="flex-1 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-2 rounded-md transition disabled:opacity-50 text-sm font-medium"
               >
@@ -328,7 +312,44 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
         ))}
       </div>
 
-      {/* 駁回理由 modal */}
+      {/* 核准 confirm modal */}
+      {approvingId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/30 backdrop-blur-sm"
+          onClick={() => !isPending && setApprovingId(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl border border-gray-100 p-5 max-w-md w-full flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-medium text-gray-900">確認核准</h3>
+            <p className="text-sm text-gray-600">確認要核准這張假單嗎？</p>
+            {reviewNotes[approvingId] && (
+              <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-md border border-gray-200">
+                將附上留言：「{reviewNotes[approvingId]}」
+              </p>
+            )}
+            <div className="flex gap-3 justify-end mt-2">
+              <button
+                onClick={() => setApprovingId(null)}
+                disabled={isPending}
+                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-md text-sm transition font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => runReview(approvingId, "APPROVED", reviewNotes[approvingId])}
+                disabled={isPending}
+                className="px-4 py-2 bg-[#7A9A8A] text-white rounded-md text-sm hover:bg-[#6c8879] transition font-medium shadow-sm disabled:opacity-50"
+              >
+                {isPending ? "送出中..." : "確認核准"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 駁回 confirm modal */}
       {rejectingId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/30 backdrop-blur-sm"
@@ -338,23 +359,13 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
             className="bg-white rounded-lg shadow-xl border border-gray-100 p-5 max-w-md w-full flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-medium text-gray-900">
-              {rejectingId === "BATCH" ? `批次駁回 ${selectedIds.size} 張假單` : "駁回假單"}
-            </h3>
-            <p className="text-sm text-gray-600">
-              {rejectingId === "BATCH"
-                ? "以下理由將套用到所有勾選的假單（選填，若有填員工會收到通知）："
-                : "駁回理由（選填，若有填員工會在通知信與系統內看到）："}
-            </p>
-            <textarea
-              value={rejectMessage}
-              onChange={(e) => setRejectMessage(e.target.value)}
-              disabled={isPending}
-              rows={4}
-              autoFocus
-              placeholder="（選填）例如：該週為部門大型發布期，請改期再申請。"
-              className="textarea textarea-bordered w-full bg-white text-sm"
-            />
+            <h3 className="text-lg font-medium text-gray-900">確認駁回</h3>
+            <p className="text-sm text-gray-600">確認要駁回這張假單嗎？</p>
+            {reviewNotes[rejectingId] && (
+              <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-md border border-gray-200">
+                將附上留言：「{reviewNotes[rejectingId]}」
+              </p>
+            )}
             <div className="flex gap-3 justify-end mt-2">
               <button
                 onClick={() => setRejectingId(null)}
@@ -364,7 +375,52 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                 取消
               </button>
               <button
-                onClick={submitReject}
+                onClick={() => runReview(rejectingId, "REJECTED", reviewNotes[rejectingId])}
+                disabled={isPending}
+                className="px-4 py-2 bg-[#C48F8B] text-white rounded-md text-sm hover:bg-[#b0807c] transition font-medium shadow-sm disabled:opacity-50"
+              >
+                {isPending ? "送出中..." : "確認駁回"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批次駁回 modal（保留 textarea，因為批次無 per-row input） */}
+      {batchRejectOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/30 backdrop-blur-sm"
+          onClick={() => !isPending && setBatchRejectOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl border border-gray-100 p-5 max-w-md w-full flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-medium text-gray-900">
+              批次駁回 {selectedIds.size} 張假單
+            </h3>
+            <p className="text-sm text-gray-600">
+              以下理由將套用到所有勾選的假單（選填，若有填員工會收到通知）：
+            </p>
+            <textarea
+              value={batchRejectMessage}
+              onChange={(e) => setBatchRejectMessage(e.target.value)}
+              disabled={isPending}
+              rows={4}
+              autoFocus
+              placeholder="（選填）例如：該週為部門大型發布期，請改期再申請。"
+              className="textarea textarea-bordered w-full bg-white text-sm"
+            />
+            <div className="flex gap-3 justify-end mt-2">
+              <button
+                onClick={() => setBatchRejectOpen(false)}
+                disabled={isPending}
+                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-md text-sm transition font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => runBatch("REJECTED", batchRejectMessage)}
                 disabled={isPending}
                 className="px-4 py-2 bg-[#C48F8B] text-white rounded-md text-sm hover:bg-[#b0807c] transition font-medium shadow-sm disabled:opacity-50"
               >
