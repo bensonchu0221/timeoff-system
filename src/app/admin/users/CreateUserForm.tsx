@@ -4,7 +4,9 @@ import { useTransition } from "react"
 import toast from "react-hot-toast"
 import { createUser } from "./actions"
 
-export function CreateUserForm() {
+type DepartmentOption = { id: string; name: string }
+
+export function CreateUserForm({ departments }: { departments: DepartmentOption[] }) {
   const [isPending, startTransition] = useTransition()
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -38,8 +40,13 @@ export function CreateUserForm() {
         <input type="email" name="email" required className="input input-bordered input-sm mt-1 w-48 bg-white" placeholder="ming@popin.cc" />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700">部門 (選填)</label>
-        <input type="text" name="department" className="input input-bordered input-sm mt-1 w-32 bg-white" placeholder="產品部" />
+        <label className="block text-xs font-medium text-gray-700">部門</label>
+        <select name="departmentId" required defaultValue="" className="select select-bordered select-sm mt-1 w-32 bg-white">
+          <option value="" disabled>請選擇</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700">角色</label>

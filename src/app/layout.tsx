@@ -80,6 +80,7 @@ export default async function RootLayout({
                   {isAdmin && (
                     <>
                       <a href="/admin/users" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">員工管理</a>
+                      <a href="/admin/departments" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">部門管理</a>
                       <a href="/admin/leave-settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">假別設定</a>
                       <a href="/admin/reports" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">報表</a>
                       <a href="/admin/qa" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">QA 編輯</a>
@@ -108,6 +109,7 @@ export default async function RootLayout({
                     {isAdmin && (
                       <>
                         <li><a href="/admin/users" className="block px-4 py-2 text-white/90 hover:bg-white/10">員工管理</a></li>
+                        <li><a href="/admin/departments" className="block px-4 py-2 text-white/90 hover:bg-white/10">部門管理</a></li>
                         <li><a href="/admin/leave-settings" className="block px-4 py-2 text-white/90 hover:bg-white/10">假別設定</a></li>
                         <li><a href="/admin/reports" className="block px-4 py-2 text-white/90 hover:bg-white/10">報表</a></li>
                         <li><a href="/admin/qa" className="block px-4 py-2 text-white/90 hover:bg-white/10">QA 編輯</a></li>

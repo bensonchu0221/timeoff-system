@@ -32,7 +32,7 @@ export default async function DashboardPage() {
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email! },
-    include: { manager: true }
+    include: { manager: true, department: { select: { name: true } } }
   })
 
   if (!user) return null;
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
             {user.name} 的個人儀表板
           </h1>
           <p className="mt-2 text-gray-600">
-            部門：{user.department || '未設定'} | 直屬主管：{user.manager?.name || '無'}
+            部門：{user.department?.name || '未設定'} | 直屬主管：{user.manager?.name || '無'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

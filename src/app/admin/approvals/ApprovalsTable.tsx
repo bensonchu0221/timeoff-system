@@ -12,7 +12,7 @@ type PendingRequest = {
   partOfDay: string
   durationDays: number
   reason: string | null
-  user: { id: string; name: string | null; image: string | null; department: string | null }
+  user: { id: string; name: string | null; image: string | null; department: { name: string } | null }
   leaveType: { name: string }
 }
 
@@ -178,7 +178,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                     )}
                     <div>
                       <div className="text-sm font-medium text-gray-900">{req.user.name}</div>
-                      <div className="text-sm text-gray-500">{req.user.department || "未設定部門"}</div>
+                      <div className="text-sm text-gray-500">{req.user.department?.name || "未設定部門"}</div>
                     </div>
                   </div>
                 </td>
@@ -254,7 +254,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-gray-900 truncate">{req.user.name}</div>
-                <div className="text-xs text-gray-500 truncate">{req.user.department || "未設定部門"}</div>
+                <div className="text-xs text-gray-500 truncate">{req.user.department?.name || "未設定部門"}</div>
               </div>
             </div>
 

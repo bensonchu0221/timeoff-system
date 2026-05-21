@@ -22,7 +22,8 @@ type UserNode = {
   chineseName: string | null
   email: string
   role: Role
-  department: string | null
+  departmentId: string | null
+  department: { id: string; name: string } | null
   managerId: string | null
   hireDate: Date | null
   gender: string
@@ -33,7 +34,9 @@ type UserNode = {
   annualLeaveOpeningR: number | null
 }
 
-export function UserTable({ users }: { users: UserNode[] }) {
+type DepartmentOption = { id: string; name: string }
+
+export function UserTable({ users, departments }: { users: UserNode[]; departments: DepartmentOption[] }) {
   const [isPending, startTransition] = useTransition()
   const containerRef = useRef<HTMLDivElement>(null)
   const [isScrolled, setIsScrolled] = useState(false)
@@ -173,12 +176,22 @@ export function UserTable({ users }: { users: UserNode[] }) {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">
-                  <InlineTextCell
-                    initial={user.department ?? ""}
-                    placeholder="tech"
+                  <select
                     disabled={isPending}
-                    onSave={(val) => wrap(() => updateUserDepartment(user.id, val))}
-                  />
+                    value={user.departmentId ?? ""}
+                    onChange={(e) => wrap(() => updateUserDepartment(user.id, e.target.value))}
+                    className="select select-bordered select-sm w-full bg-gray-50"
+                  >
+                    {/* 既有 user 的 department 可能是已停用部門，補一個 disabled 選項顯示目前值 */}
+                    {user.department && !departments.some((d) => d.id === user.department!.id) && (
+                      <option value={user.department.id} disabled>
+                        {user.department.name}（已停用）
+                      </option>
+                    )}
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">
                   <select

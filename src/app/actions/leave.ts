@@ -284,10 +284,10 @@ export async function cancelLeave(requestId: string) {
   }
 
   // 已核准 → 同部門也要通知（原本同部門已通知會請假，現在撤銷了）
-  if (previousStatus === "APPROVED" && request.user.department) {
+  if (previousStatus === "APPROVED" && request.user.departmentId) {
     const teammates = await prisma.user.findMany({
       where: {
-        department: request.user.department,
+        departmentId: request.user.departmentId,
         terminatedDate: null,
         id: { not: request.userId },
       },
@@ -577,10 +577,10 @@ export async function reviewLeaveAsUser(
   }
 
   // 同部門通知：只在「核准」後送，提醒同部門同事誰會請假
-  if (status === "APPROVED" && request.user.department) {
+  if (status === "APPROVED" && request.user.departmentId) {
     const teammates = await prisma.user.findMany({
       where: {
-        department: request.user.department,
+        departmentId: request.user.departmentId,
         terminatedDate: null,
         id: { not: request.userId },
       },

@@ -24,7 +24,8 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
   // 所有 role 都看全公司在職員工（透明化）；審核權限另由 canReview 控制
   const targetUsers = await prisma.user.findMany({
     where: { terminatedDate: null },
-    orderBy: { department: "asc" },
+    include: { department: { select: { name: true } } },
+    orderBy: [{ department: { sortOrder: "asc" } }, { name: "asc" }],
   })
 
   const userIds = targetUsers.map(u => u.id)

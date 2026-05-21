@@ -156,7 +156,7 @@ export function GanttChart({
                     <td className="sticky left-0 z-20 bg-white px-3 py-2 border-r border-gray-200 text-xs text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <span className="font-medium">{u.name}</span>
-                        <span className="text-gray-400 text-[10px]">({u.department || '未設定'})</span>
+                        <span className="text-gray-400 text-[10px]">({u.department?.name || '未設定'})</span>
                       </div>
                     </td>
                     

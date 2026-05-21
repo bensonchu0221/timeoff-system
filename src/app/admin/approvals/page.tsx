@@ -26,7 +26,7 @@ export default async function ApprovalsPage() {
       ...(user.role === "ADMIN" ? {} : { user: { managerId: user.id } })
     },
     include: {
-      user: true,
+      user: { include: { department: { select: { name: true } } } },
       leaveType: true,
     },
     orderBy: {

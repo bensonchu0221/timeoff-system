@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
     }
 
     // 報表只列在職員工，離職者另需手動查詢歷史
-    const users = await prisma.user.findMany({ where: { terminatedDate: null }, orderBy: { name: "asc" } })
+    const users = await prisma.user.findMany({
+      where: { terminatedDate: null },
+      include: { department: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    })
     const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
 
     const zip = new JSZip()
@@ -40,7 +44,7 @@ export async function GET(req: NextRequest) {
       sheet.addRow(["【員工基本資料】"])
       sheet.addRow(["姓名", user.name || "未設定"])
       sheet.addRow(["Email", user.email])
-      sheet.addRow(["部門", user.department || "未設定"])
+      sheet.addRow(["部門", user.department?.name || "未設定"])
       sheet.addRow(["角色", user.role === "ADMIN" ? "管理員" : user.role === "MANAGER" ? "主管" : "員工"])
       sheet.addRow([]) // empty row
 

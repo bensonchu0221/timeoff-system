@@ -139,7 +139,7 @@ export async function createUser(data: FormData) {
   const name = data.get("name") as string
   const chineseName = data.get("chineseName") as string
   const email = data.get("email") as string
-  const department = data.get("department") as string
+  const departmentId = data.get("departmentId") as string
   const role = data.get("role") as Role
   const hireDateStr = data.get("hireDate") as string
   const gender = data.get("gender") as any
@@ -147,6 +147,14 @@ export async function createUser(data: FormData) {
   if (!name || !email) {
     throw new Error("姓名與 Email 為必填欄位")
   }
+  if (!departmentId) {
+    throw new Error("部門為必填欄位")
+  }
+
+  // 驗證部門存在且啟用（避免前端傳入失效 id）
+  const dept = await prisma.department.findUnique({ where: { id: departmentId }, select: { isActive: true } })
+  if (!dept) throw new Error("找不到此部門")
+  if (!dept.isActive) throw new Error("此部門已停用，無法指派")
 
   // Check if email already exists
   const existingUser = await prisma.user.findUnique({
@@ -161,7 +169,7 @@ export async function createUser(data: FormData) {
       name,
       chineseName: chineseName || null,
       email,
-      department: department || null,
+      departmentId,
       role: role || "EMPLOYEE",
       hireDate: hireDateStr ? new Date(hireDateStr) : null,
       gender: gender || "FEMALE"
@@ -173,7 +181,7 @@ export async function createUser(data: FormData) {
     action: "USER_CREATE",
     targetType: "User",
     targetId: created.id,
-    payload: { name, chineseName: chineseName || null, email, role: role || "EMPLOYEE", hireDate: hireDateStr || null },
+    payload: { name, chineseName: chineseName || null, email, departmentId, role: role || "EMPLOYEE", hireDate: hireDateStr || null },
   })
 
   revalidatePath("/admin/users")
@@ -196,21 +204,32 @@ export async function updateUserChineseName(userId: string, chineseName: string)
   return { success: true, message: "已更新中文姓名" }
 }
 
-// 更新部門
-export async function updateUserDepartment(userId: string, department: string) {
+// 更新部門：傳入 Department.id；驗證存在且啟用後更新
+export async function updateUserDepartment(userId: string, departmentId: string) {
   const actorId = await requireActorId()
-  const before = await prisma.user.findUnique({ where: { id: userId }, select: { department: true } })
-  const value = department.trim() || null
-  await prisma.user.update({ where: { id: userId }, data: { department: value } })
+  if (!departmentId) throw new Error("請選擇部門")
+
+  const dept = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { isActive: true, name: true },
+  })
+  if (!dept) throw new Error("找不到此部門")
+  if (!dept.isActive) throw new Error("此部門已停用，無法指派")
+
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { departmentId: true },
+  })
+  await prisma.user.update({ where: { id: userId }, data: { departmentId } })
   await logAudit({
     actorId,
     action: "USER_UPDATE_DEPARTMENT",
     targetType: "User",
     targetId: userId,
-    payload: { from: before?.department ?? null, to: value },
+    payload: { from: before?.departmentId ?? null, to: departmentId },
   })
   revalidatePath("/admin/users")
-  return { success: true, message: "已更新部門" }
+  return { success: true, message: `已更新部門為 ${dept.name}` }
 }
 
 // 設定特休 Opening Balance（四欄一起寫入：balance、at、B、R）

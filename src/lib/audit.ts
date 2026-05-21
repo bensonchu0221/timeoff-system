@@ -25,8 +25,13 @@ export type AuditAction =
   | "HOLIDAY_SYNC"
   | "USER_ADD_LEAVE_ADJUSTMENT"
   | "USER_DELETE_LEAVE_ADJUSTMENT"
+  | "DEPARTMENT_CREATE"
+  | "DEPARTMENT_UPDATE_NAME"
+  | "DEPARTMENT_UPDATE_CODE"
+  | "DEPARTMENT_UPDATE_SORT"
+  | "DEPARTMENT_TOGGLE_ACTIVE"
 
-export type AuditTargetType = "LeaveRequest" | "User" | "LeaveType" | "UserLeaveBalance" | "Holiday" | "LeaveAdjustment"
+export type AuditTargetType = "LeaveRequest" | "User" | "LeaveType" | "UserLeaveBalance" | "Holiday" | "LeaveAdjustment" | "Department"
 
 // 寫一筆稽核紀錄；audit 失敗不應該擋住主流程，因此 try/catch 後僅 console.error
 export async function logAudit(params: {

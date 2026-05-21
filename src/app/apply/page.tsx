@@ -38,8 +38,8 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
   // 代理人下拉清單：在職、排除自己；顯示姓名（部門）
   const coworkers = await prisma.user.findMany({
     where: { terminatedDate: null, id: { not: user.id } },
-    select: { id: true, name: true, department: true },
-    orderBy: [{ department: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, department: { select: { name: true, sortOrder: true } } },
+    orderBy: [{ department: { sortOrder: "asc" } }, { name: "asc" }],
   })
 
   const year = new Date().getFullYear()

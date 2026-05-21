@@ -29,7 +29,8 @@ export default async function AdminUsersPage() {
       chineseName: true,
       email: true,
       role: true,
-      department: true,
+      departmentId: true,
+      department: { select: { id: true, name: true } },
       managerId: true,
       hireDate: true,
       gender: true,
@@ -45,6 +46,13 @@ export default async function AdminUsersPage() {
     ]
   })
 
+  // 下拉選項只取啟用中的部門；新增 user 與 inline 改部門共用
+  const departments = await prisma.department.findMany({
+    where: { isActive: true },
+    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    select: { id: true, name: true },
+  })
+
   return (
     <div className="space-y-6">
       <div>
@@ -53,14 +61,14 @@ export default async function AdminUsersPage() {
           設定每位員工的系統權限角色，並指定其直屬主管（用於請假簽核）。
         </p>
       </div>
-      
+
       {/* 新增員工表單 */}
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
         <h2 className="text-lg font-medium mb-4 text-gray-900">手動建立新員工</h2>
-        <CreateUserForm />
+        <CreateUserForm departments={departments} />
       </div>
 
-      <UserTable users={users} />
+      <UserTable users={users} departments={departments} />
     </div>
   )
 }

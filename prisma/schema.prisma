@@ -43,7 +43,9 @@ model User {
   emailVerified  DateTime?
   image          String?
   role           Role      @default(EMPLOYEE)
-  department     String?
+  // 部門：外鍵指向 Department 表；管理透過 /admin/departments 後台
+  departmentId   String
+  department     Department @relation("UserDepartment", fields: [departmentId], references: [id])
   hireDate       DateTime?
   gender         Gender    @default(FEMALE)
   // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
@@ -98,6 +100,24 @@ model User {
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// 部門：取代 User.department 自由文字欄位，提供 admin 後台 CRUD、排序、停用
+// 與 User 透過 departmentId 外鍵關聯；第 2 階段後 User.departmentId NOT NULL
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?  @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  users     User[]   @relation("UserDepartment")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder, name])
+  @@index([isActive])
 }
 
 model LeaveType {

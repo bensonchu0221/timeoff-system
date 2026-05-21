@@ -31,7 +31,7 @@ export type EditTarget = {
 type Coworker = {
   id: string
   name: string | null
-  department: string | null
+  department: { name: string } | null
 }
 
 // 將後端傳入的 YYYY-MM-DD 字串解析為「本地時區午夜」的 Date，與 DayPicker 行為一致
@@ -265,7 +265,7 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
             <option value="">不指定代理人</option>
             {coworkers.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name || "(未命名)"}{c.department ? `（${c.department}）` : ""}
+                {c.name || "(未命名)"}{c.department ? `（${c.department.name}）` : ""}
               </option>
             ))}
           </select>
