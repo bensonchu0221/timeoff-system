@@ -195,89 +195,38 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
       })
     }
   } else {
-    // 非特休：以 hireDate 為基準的週年制（每期 reset）
-    // 沒 hireDate → fallback 曆年制（向後相容）
-    if (!user.hireDate) {
-      const currentYear = new Date().getUTCFullYear()
-      const override = await prisma.userLeaveBalance.findUnique({
-        where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: currentYear } },
-      })
-      const grantAmount = override ? override.totalQuota : leaveType.defaultDays
+    // 非特休：曆年制（1/1 ～ 12/31），不管有無 hireDate
+    const currentYear = now.getUTCFullYear()
+    const override = await prisma.userLeaveBalance.findUnique({
+      where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: currentYear } },
+    })
+    const grantAmount = override ? override.totalQuota : leaveType.defaultDays
 
+    events.push({
+      id: `grant-${currentYear}`,
+      date: startOfYearUTC(currentYear),
+      type: "GRANT",
+      leaveTypeName: leaveType.name,
+      description: `${currentYear}年度額度發放`,
+      amount: grantAmount,
+    })
+
+    const usages = await prisma.leaveRequest.findMany({
+      where: {
+        userId, leaveTypeId,
+        status: { in: ["APPROVED", "PENDING"] },
+        startDate: { gte: startOfYearUTC(currentYear), lt: startOfYearUTC(currentYear + 1) },
+      },
+    })
+    for (const req of usages) {
       events.push({
-        id: `grant-${currentYear}`,
-        date: startOfYearUTC(currentYear),
-        type: "GRANT",
+        id: `usage-${req.id}`,
+        date: req.startDate,
+        type: "USAGE",
         leaveTypeName: leaveType.name,
-        description: `${currentYear}年度額度發放`,
-        amount: grantAmount,
+        description: `請假\n${formatTaipeiDate(req.startDate)} ~ ${formatTaipeiDate(req.endDate)} ${req.status === "PENDING" ? "[待審核]" : ""}`,
+        amount: -req.durationDays,
       })
-
-      const usages = await prisma.leaveRequest.findMany({
-        where: {
-          userId, leaveTypeId,
-          status: { in: ["APPROVED", "PENDING"] },
-          startDate: { gte: startOfYearUTC(currentYear), lt: startOfYearUTC(currentYear + 1) },
-        },
-      })
-      for (const req of usages) {
-        events.push({
-          id: `usage-${req.id}`,
-          date: req.startDate,
-          type: "USAGE",
-          leaveTypeName: leaveType.name,
-          description: `請假\n${formatTaipeiDate(req.startDate)} ~ ${formatTaipeiDate(req.endDate)} ${req.status === "PENDING" ? "[待審核]" : ""}`,
-          amount: -req.durationDays,
-        })
-      }
-    } else {
-      // 有 hireDate：當前所在週年期 [periodStart, periodEnd)
-      const M = monthsBetween(user.hireDate, now)
-      const N = Math.floor(M / 12) + 1
-      const periodStart = addYearsUTC(user.hireDate, N - 1)
-      const periodEnd = addYearsUTC(user.hireDate, N)
-
-      // override 分水嶺式
-      const hireYear = user.hireDate.getUTCFullYear()
-      const anniversaryStartYear = hireYear + (N - 1)
-      const allOverrides = await prisma.userLeaveBalance.findMany({
-        where: { userId, leaveTypeId },
-        orderBy: { year: "asc" },
-        select: { year: true, totalQuota: true },
-      })
-      let sticky: number | null = null
-      for (const o of allOverrides) {
-        if (o.year <= anniversaryStartYear) sticky = o.totalQuota
-        else break
-      }
-      const grantAmount = sticky ?? leaveType.defaultDays
-
-      events.push({
-        id: `grant-${formatTaipeiDateISO(periodStart)}`,
-        date: periodStart,
-        type: "GRANT",
-        leaveTypeName: leaveType.name,
-        description: `${formatTaipeiDateISO(periodStart)} 週年期額度發放 ${grantAmount} 天`,
-        amount: grantAmount,
-      })
-
-      const usages = await prisma.leaveRequest.findMany({
-        where: {
-          userId, leaveTypeId,
-          status: { in: ["APPROVED", "PENDING"] },
-          startDate: { gte: periodStart, lt: periodEnd },
-        },
-      })
-      for (const req of usages) {
-        events.push({
-          id: `usage-${req.id}`,
-          date: req.startDate,
-          type: "USAGE",
-          leaveTypeName: leaveType.name,
-          description: `請假\n${formatTaipeiDate(req.startDate)} ~ ${formatTaipeiDate(req.endDate)} ${req.status === "PENDING" ? "[待審核]" : ""}`,
-          amount: -req.durationDays,
-        })
-      }
     }
   }
 
