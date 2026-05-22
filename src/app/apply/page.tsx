@@ -54,13 +54,15 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
       .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
       .map(async (lt) => {
         const bal = await getUserLeaveBalance(user.id, lt.id)
-        return { 
+        return {
           id: lt.id,
           name: lt.name,
           type: lt.name,
           total: bal.total,
           used: bal.used,
-          remaining: bal.remaining
+          remaining: bal.remaining,
+          // 是否需證明文件（婚假 / 喪假）；前端用來顯示提示與決定附件區行為
+          requireProof: lt.requireProof,
         }
       })
   )

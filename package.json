@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
+    "@google-cloud/storage": "^7.19.0",
     "@prisma/client": "^6.19.3",
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",

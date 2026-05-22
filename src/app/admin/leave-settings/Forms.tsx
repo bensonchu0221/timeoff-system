@@ -10,6 +10,7 @@ import {
   syncHolidays,
   addLeaveAdjustment,
   deleteLeaveAdjustment,
+  toggleLeaveTypeRequireProof,
 } from "./actions"
 
 export function CreateLeaveTypeForm() {
@@ -51,10 +52,58 @@ export function CreateLeaveTypeForm() {
           <input type="radio" name="isPaid" value="false" className="mr-1" /> 無薪
         </label>
       </div>
+      <div className="flex items-center md:mb-2 whitespace-nowrap">
+        <label className="inline-flex items-center text-sm">
+          <input type="checkbox" name="requireProof" value="true" className="mr-1" /> 需要上傳證明文件
+        </label>
+      </div>
       <button type="submit" disabled={isPending} className="w-full md:w-auto bg-[var(--brand-primary)] text-white px-4 py-2 rounded-md hover:bg-[var(--brand-primary-dark)] text-sm font-medium transition disabled:bg-gray-400">
         {isPending ? "新增中..." : "+ 新增假別"}
       </button>
     </form>
+  )
+}
+
+// 行內 toggle：點擊立刻送 action 切換 requireProof
+export function ToggleRequireProofSwitch({
+  id,
+  initial,
+}: {
+  id: string
+  initial: boolean
+}) {
+  const [isPending, startTransition] = useTransition()
+  // 樂觀 UI：先翻轉本地 state，失敗再 toast 提醒（伺服器 revalidate 也會修正）
+  const [checked, setChecked] = useState(initial)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.checked
+    setChecked(next)
+    startTransition(async () => {
+      try {
+        const fd = new FormData()
+        fd.append("id", id)
+        fd.append("requireProof", next ? "true" : "false")
+        const result = await toggleLeaveTypeRequireProof(fd)
+        if (result?.success) toast.success(result.message)
+      } catch (err: any) {
+        setChecked(!next) // 回滾
+        toast.error(err.message || "更新失敗")
+      }
+    })
+  }
+
+  return (
+    <label className="inline-flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={isPending}
+        onChange={handleChange}
+        className="toggle toggle-sm toggle-primary"
+      />
+      <span className="text-xs text-gray-500">{checked ? "需要" : "不需要"}</span>
+    </label>
   )
 }
 

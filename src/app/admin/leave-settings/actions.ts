@@ -21,13 +21,15 @@ export async function createLeaveType(data: FormData) {
   const name = data.get("name") as string
   const defaultDays = Number(data.get("defaultDays"))
   const isPaid = data.get("isPaid") === "true"
+  // 是否要求上傳證明文件（如婚假 / 喪假）；新增時即可勾選，後續也能用 toggle 改
+  const requireProof = data.get("requireProof") === "true"
 
   if (!name || isNaN(defaultDays)) throw new Error("Invalid input")
 
   let created
   try {
     created = await prisma.leaveType.create({
-      data: { name, defaultDays, isPaid, isActive: true }
+      data: { name, defaultDays, isPaid, requireProof, isActive: true }
     })
   } catch (error: any) {
     if (error.code === 'P2002') {
@@ -40,10 +42,40 @@ export async function createLeaveType(data: FormData) {
     action: "LEAVE_TYPE_CREATE",
     targetType: "LeaveType",
     targetId: created.id,
-    payload: { name, defaultDays, isPaid },
+    payload: { name, defaultDays, isPaid, requireProof },
   })
   revalidatePath("/admin/leave-settings")
   return { success: true, message: "已新增假別" }
+}
+
+// 切換某假別的「需要證明文件」開關；前端使用 optimistic toggle 即時反應
+export async function toggleLeaveTypeRequireProof(data: FormData) {
+  const actorId = await verifyAdmin()
+  const id = data.get("id") as string
+  const next = data.get("requireProof") === "true"
+  if (!id) throw new Error("Invalid input")
+
+  const before = await prisma.leaveType.findUnique({
+    where: { id },
+    select: { name: true, requireProof: true },
+  })
+  if (!before) throw new Error("LeaveType not found")
+
+  await prisma.leaveType.update({
+    where: { id },
+    data: { requireProof: next },
+  })
+
+  await logAudit({
+    actorId,
+    action: "LEAVE_TYPE_UPDATE",
+    targetType: "LeaveType",
+    targetId: id,
+    payload: { field: "requireProof", before: before.requireProof, after: next, name: before.name },
+  })
+
+  revalidatePath("/admin/leave-settings")
+  return { success: true, message: next ? "已開啟「需要證明文件」" : "已關閉「需要證明文件」" }
 }
 
 export async function deleteLeaveType(data: FormData) {

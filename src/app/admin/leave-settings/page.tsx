@@ -10,6 +10,7 @@ import {
   CreateOverrideForm,
   CreateAdjustmentForm,
   DeleteAdjustmentButton,
+  ToggleRequireProofSwitch,
 } from "./Forms"
 import { formatTaipeiDateISO } from "@/lib/date-format"
 import { BalancesTable, OverrideTableRow } from "./BalancesTable"
@@ -137,6 +138,7 @@ export default async function LeaveSettingsPage() {
               <th className="px-4 py-2 text-left font-medium text-gray-500">假別名稱</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">預設天數</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">支薪</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500">證明文件</th>
               <th className="px-4 py-2 text-left font-medium text-gray-500">操作</th>
             </tr>
           </thead>
@@ -146,6 +148,9 @@ export default async function LeaveSettingsPage() {
                 <td className="px-4 py-3 font-medium">{lt.name}</td>
                 <td className="px-4 py-3">{lt.defaultDays} 天</td>
                 <td className="px-4 py-3">{lt.isPaid ? "有" : "無"}</td>
+                <td className="px-4 py-3">
+                  <ToggleRequireProofSwitch id={lt.id} initial={lt.requireProof} />
+                </td>
                 <td className="px-4 py-3">
                   <DeleteLeaveTypeButton id={lt.id} />
                 </td>

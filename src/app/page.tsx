@@ -49,11 +49,14 @@ export default async function DashboardPage() {
   )
 
   const history = await prisma.leaveRequest.findMany({
-    where: { 
+    where: {
       userId: user.id,
       status: { not: "CANCELLED" }
     },
-    include: { leaveType: true },
+    include: {
+      leaveType: { select: { name: true, requireProof: true } },
+      _count: { select: { attachments: true } },
+    },
     orderBy: { createdAt: 'desc' },
     take: 10
   })
@@ -176,6 +179,16 @@ export default async function DashboardPage() {
                               className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
                             >
                               修改
+                            </Link>
+                          )}
+                          {/* 附件入口：需要證明 / 已有附件 / PENDING+APPROVED 都顯示，方便補件與檢視 */}
+                          {(req.leaveType.requireProof || req._count.attachments > 0) && (
+                            <Link
+                              href={`/leave/${req.id}/attachments`}
+                              className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                              title="附件管理"
+                            >
+                              📎 附件{req._count.attachments > 0 ? ` (${req._count.attachments})` : ""}
                             </Link>
                           )}
                           {(req.status === 'PENDING' || req.status === 'APPROVED') && (

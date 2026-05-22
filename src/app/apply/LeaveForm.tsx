@@ -8,11 +8,14 @@ import { PartOfDay } from "@prisma/client"
 import { applyLeave, updateLeave } from "@/app/actions/leave"
 import { useRouter } from "next/navigation"
 import toast from "react-hot-toast"
+import { AttachmentManager } from "@/app/components/AttachmentManager"
 
 type Balance = {
   id: string
   name: string
   remaining: number
+  // 是否需要上傳證明文件（婚假 / 喪假等）
+  requireProof: boolean
 }
 
 // 修改既有假單時傳入：表單會用這些值初始化，並改走 updateLeave
@@ -287,6 +290,14 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
             </div>
           )}
 
+          {/* 新申請模式：選到需證明的假別時，提示送出後可至「我的假單」補附件 */}
+          {!editTarget && selectedBalance?.requireProof && (
+            <div role="alert" className="alert alert-info alert-outline mt-4 bg-blue-50/50">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span>此假別需附上證明文件，送出假單後可從首頁假單列表進入「附件」補上傳（審核前後皆可）。</span>
+            </div>
+          )}
+
           <div className="stats shadow w-full mt-6 bg-gray-50 border border-gray-100">
             <div className="stat">
               <div className="stat-title text-xs">預計扣除假別</div>
@@ -308,6 +319,17 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
           >
             {isPending ? <span className="loading loading-spinner"></span> : (editTarget ? "更新假單" : "送出假單")}
           </button>
+
+          {/* 編輯模式：直接 inline 顯示附件管理（PENDING 可上傳） */}
+          {editTarget && (
+            <div className="mt-6">
+              <AttachmentManager
+                leaveRequestId={editTarget.id}
+                canUpload={true}
+                hint={selectedBalance?.requireProof ? "此假別需附上證明文件。" : undefined}
+              />
+            </div>
+          )}
         </fieldset>
       </div>
 

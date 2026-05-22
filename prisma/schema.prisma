@@ -126,7 +126,9 @@ model LeaveType {
   defaultDays    Float     @default(0) // Default quota (e.g., 14 for Personal leave)
   isPaid         Boolean   @default(true)
   isActive       Boolean   @default(true) // For soft delete
-  
+  // 是否需要上傳證明文件（例：婚假、喪假）；事後補件也允許，僅在 UI 與後端做提示/驗證
+  requireProof   Boolean   @default(false)
+
   // Relations
   requests       LeaveRequest[]
   balances       UserLeaveBalance[]
@@ -177,8 +179,33 @@ model LeaveRequest {
   user           User        @relation("UserLeaveRequests", fields: [userId], references: [id])
   leaveType      LeaveType   @relation(fields: [leaveTypeId], references: [id])
 
+  // 證明文件（婚假/喪假等需上傳；事後補件也允許）
+  attachments    LeaveAttachment[]
+
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+}
+
+// 請假證明文件：實體檔案放 GCS gs://popinpoc1-internal-tool/timeoff/leave-proofs/...
+// 物件命名規則：timeoff/leave-proofs/{userId}/{leaveRequestId}/{uuid}.{ext}
+// 刪除 LeaveRequest 時連同刪除 row（檔案另由 server-side 刪 GCS，避免孤兒物件）
+model LeaveAttachment {
+  id             String       @id @default(uuid())
+  leaveRequestId String
+  // GCS 物件完整路徑（不含 bucket），例：timeoff/leave-proofs/uid/rid/xxx.jpg
+  objectPath     String       @unique
+  // 顯示用原始檔名（使用者上傳時的檔名）
+  originalName   String
+  mimeType       String       // image/jpeg, image/png, image/webp, application/pdf
+  sizeBytes      Int
+  // 通常等於 leaveRequest.userId；保留欄位以利日後 HR 代為上傳
+  uploadedById   String
+
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+
+  @@index([leaveRequestId])
 }
 
 // HR 手動調整特休（曆年制下，獨立於主計算邏輯之外的補發 / 扣除）

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { reviewLeave, batchReviewLeave } from "@/app/actions/leave"
 import { formatTaipeiDate } from "@/lib/date-format"
 import toast from "react-hot-toast"
+import { AttachmentModalButton } from "@/app/components/AttachmentModalButton"
 
 type PendingRequest = {
   id: string
@@ -13,7 +14,10 @@ type PendingRequest = {
   durationDays: number
   reason: string | null
   user: { id: string; name: string | null; image: string | null; department: { name: string } | null }
-  leaveType: { name: string }
+  // 需要 requireProof 在審核 UI 標示「應備證明」
+  leaveType: { name: string; requireProof: boolean }
+  // 已上傳附件數；0 表示尚未上傳
+  attachmentCount: number
 }
 
 // 單日就只秀一個日期，多日才顯示區間（與 LINE / email 通知的格式一致）
@@ -183,8 +187,19 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{req.leaveType.name}</div>
+                  <div className="text-sm text-gray-900">
+                    {req.leaveType.name}
+                    {/* 需要證明文件但尚未上傳 → 紅色提醒；已上傳則直接顯示附件 button */}
+                    {req.leaveType.requireProof && req.attachmentCount === 0 && (
+                      <span className="ml-1 text-xs text-red-600">⚠ 需附件</span>
+                    )}
+                  </div>
                   <div className="text-sm text-[var(--brand-primary)] font-bold">{req.durationDays} 天</div>
+                  {(req.attachmentCount > 0 || req.leaveType.requireProof) && (
+                    <div className="mt-1">
+                      <AttachmentModalButton leaveRequestId={req.id} count={req.attachmentCount} />
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">
@@ -265,6 +280,14 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                 <div className="text-gray-900">
                   {req.leaveType.name} <span className="font-bold text-[var(--brand-primary)]">{req.durationDays} 天</span>
                 </div>
+                {req.leaveType.requireProof && req.attachmentCount === 0 && (
+                  <div className="text-xs text-red-600 mt-0.5">⚠ 需附件</div>
+                )}
+                {(req.attachmentCount > 0 || req.leaveType.requireProof) && (
+                  <div className="mt-1">
+                    <AttachmentModalButton leaveRequestId={req.id} count={req.attachmentCount} />
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-xs text-gray-500">期間 / 時段</div>

@@ -20,19 +20,26 @@ export default async function ApprovalsPage() {
   }
 
   // ADMIN 看全公司所有 PENDING，方便代為審核；MANAGER 只看自己下屬
-  const pendingRequests = await prisma.leaveRequest.findMany({
+  const pendingRaw = await prisma.leaveRequest.findMany({
     where: {
       status: "PENDING",
       ...(user.role === "ADMIN" ? {} : { user: { managerId: user.id } })
     },
     include: {
       user: { include: { department: { select: { name: true } } } },
-      leaveType: true,
+      leaveType: { select: { name: true, requireProof: true } },
+      _count: { select: { attachments: true } },
     },
     orderBy: {
       createdAt: 'asc'
     }
   })
+
+  // 攤平 _count 給 client component，避免 Prisma type 細節外露
+  const pendingRequests = pendingRaw.map((r) => ({
+    ...r,
+    attachmentCount: r._count.attachments,
+  }))
 
   // Admin can see everything if they want, but usually approvals are for direct reports.
   // For simplicity, we just fetch direct reports' pending requests.
