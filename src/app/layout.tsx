@@ -61,8 +61,6 @@ export default async function RootLayout({
               <div className="flex items-center gap-6">
                 <a href="/" className="font-bold text-xl tracking-tight">Timeoff</a>
                 <nav className="hidden md:flex space-x-1">
-                  <a href="/" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">首頁</a>
-                  <a href="/apply" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">請假</a>
                   <a href="/gantt" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">團隊甘特圖</a>
                   <a href="/settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">個人設定</a>
 
@@ -93,8 +91,6 @@ export default async function RootLayout({
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                   </summary>
                   <ul className="absolute left-0 mt-2 w-48 bg-[var(--brand-primary)] rounded-md shadow-xl z-50 py-2 border border-white/10 text-sm">
-                    <li><a href="/" className="block px-4 py-2 text-white/90 hover:bg-white/10">首頁</a></li>
-                    <li><a href="/apply" className="block px-4 py-2 text-white/90 hover:bg-white/10">請假</a></li>
                     <li><a href="/gantt" className="block px-4 py-2 text-white/90 hover:bg-white/10">團隊甘特圖</a></li>
                     <li><a href="/settings" className="block px-4 py-2 text-white/90 hover:bg-white/10">個人設定</a></li>
                     {(isAdmin || isManager) && (

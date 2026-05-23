@@ -10,6 +10,22 @@ import { useRouter } from "next/navigation"
 import toast from "react-hot-toast"
 import { AttachmentManager } from "@/app/components/AttachmentManager"
 
+// 附件限制：與 src/lib/gcs.ts、AttachmentManager.tsx 一致（client 不能 import server-only 模組，故 local 宣告）
+const ATTACH_ALLOWED_MIMES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const
+const ATTACH_MAX_FILE_BYTES = 5 * 1024 * 1024
+const ATTACH_MAX_FILES_PER_REQUEST = 5
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
 type Balance = {
   id: string
   name: string
@@ -62,6 +78,9 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
   const [errorMsg, setErrorMsg] = useState("")
   // Modal 標題會帶具體假別名稱，例如「特休不足！」
   const [modalTitle, setModalTitle] = useState("假數不足")
+  // 新申請模式：requireProof 假別可在送出時一併上傳附件（送出後再串 GCS）
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false)
 
   // holidayDates are now YYYY-MM-DD strings
   const publicHolidays = holidayDates.map(d => {
@@ -115,6 +134,70 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
     }
   }, [duration, partOfDay])
 
+  // 切換到不需證明的假別 → 清掉已選附件，避免讓使用者誤以為會跟著上傳
+  useEffect(() => {
+    if (!selectedBalance?.requireProof) {
+      setPendingFiles([])
+    }
+  }, [selectedBalance?.requireProof])
+
+  // 選檔：mime / 單檔大小 / 累計上限三道前端檢查（後端 API 還會再驗一次）
+  const handlePickFiles = (filesList: FileList | null) => {
+    if (!filesList || filesList.length === 0) return
+    const incoming = Array.from(filesList)
+    const accepted: File[] = []
+    for (const f of incoming) {
+      if (!(ATTACH_ALLOWED_MIMES as readonly string[]).includes(f.type)) {
+        toast.error(`${f.name}：僅支援 JPG / PNG / WebP / PDF`)
+        continue
+      }
+      if (f.size > ATTACH_MAX_FILE_BYTES) {
+        toast.error(`${f.name}：檔案超過 ${ATTACH_MAX_FILE_BYTES / 1024 / 1024} MB`)
+        continue
+      }
+      if (pendingFiles.length + accepted.length >= ATTACH_MAX_FILES_PER_REQUEST) {
+        toast.error(`最多 ${ATTACH_MAX_FILES_PER_REQUEST} 個附件`)
+        break
+      }
+      accepted.push(f)
+    }
+    if (accepted.length > 0) {
+      setPendingFiles(prev => [...prev, ...accepted])
+    }
+  }
+
+  // 送出後逐檔上傳：簽 URL → PUT GCS → 寫 DB；任一步出錯就回報該檔失敗（不阻擋其他檔）
+  const uploadOneAttachment = async (file: File, leaveRequestId: string): Promise<boolean> => {
+    try {
+      const r1 = await fetch(`/api/leave/${leaveRequestId}/attachments/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }),
+      })
+      if (!r1.ok) return false
+      const { uploadUrl, headers, objectPath } = await r1.json()
+      const r2 = await fetch(uploadUrl, { method: "PUT", headers, body: file })
+      if (!r2.ok) return false
+      const r3 = await fetch(`/api/leave/${leaveRequestId}/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          objectPath,
+          originalName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }),
+      })
+      return r3.ok
+    } catch {
+      return false
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg("")
@@ -164,10 +247,37 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
         if (result && result.error) {
           toast.error(result.error)
           setErrorMsg(result.error)
+          return
+        }
+
+        // 新申請成功 + 有預選附件：逐檔丟到 GCS（假單已建立，上傳失敗不回滾，使用者可走補附件管道）
+        const newRequestId: string | undefined = !editTarget ? (result as any)?.request?.id : undefined
+        if (newRequestId && pendingFiles.length > 0) {
+          setIsUploadingAttachments(true)
+          const total = pendingFiles.length
+          const toastId = toast.loading(`假單已送出，正在上傳附件 (0/${total})...`)
+          const failedNames: string[] = []
+          let done = 0
+          for (const file of pendingFiles) {
+            const ok = await uploadOneAttachment(file, newRequestId)
+            done += 1
+            if (!ok) failedNames.push(file.name)
+            toast.loading(`假單已送出，正在上傳附件 (${done}/${total})...`, { id: toastId })
+          }
+          setIsUploadingAttachments(false)
+          if (failedNames.length === 0) {
+            toast.success(`假單已送出，${total} 個附件上傳完成`, { id: toastId })
+          } else {
+            toast.error(
+              `假單已送出，但 ${failedNames.length} 個附件上傳失敗（${failedNames.join("、")}）。可從首頁進入該假單補上傳。`,
+              { id: toastId, duration: 8000 }
+            )
+          }
         } else {
           toast.success(editTarget ? "假單已更新！" : "送出假單成功！")
-          router.push("/")
         }
+
+        router.push("/")
       } catch (err: any) {
         toast.error("伺服器發生未知的錯誤，請稍後再試")
         setErrorMsg("伺服器發生未知的錯誤，請稍後再試")
@@ -290,12 +400,70 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
             </div>
           )}
 
-          {/* 新申請模式：選到需證明的假別時，提示送出後可至「我的假單」補附件 */}
+          {/* 新申請模式：選到需證明的假別時，提示可在下方先選檔、或於送出後從首頁補上傳 */}
           {!editTarget && selectedBalance?.requireProof && (
-            <div role="alert" className="alert alert-info alert-outline mt-4 bg-blue-50/50">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              <span>此假別需附上證明文件，送出假單後可從首頁假單列表進入「附件」補上傳（審核前後皆可）。</span>
-            </div>
+            <>
+              <div role="alert" className="alert alert-info alert-outline mt-4 bg-blue-50/50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>此假別需附上證明文件，可在下方先選檔（送出時一併上傳），或於送出後從首頁假單列表「附件」補上傳。</span>
+              </div>
+
+              {/* 附件挑選區：File 物件先存在前端，送出假單成功後才實際上傳到 GCS */}
+              <div className="mt-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    證明文件（選填） <span className="text-gray-400">({pendingFiles.length}/{ATTACH_MAX_FILES_PER_REQUEST})</span>
+                  </h3>
+                  {pendingFiles.length < ATTACH_MAX_FILES_PER_REQUEST && (
+                    <label className="btn btn-sm btn-outline btn-primary cursor-pointer">
+                      + 選擇檔案
+                      <input
+                        type="file"
+                        multiple
+                        accept={ATTACH_ALLOWED_MIMES.join(",")}
+                        className="hidden"
+                        onChange={(e) => {
+                          handlePickFiles(e.target.files)
+                          // 清掉 input 的值，讓使用者可以重複選同一個檔
+                          e.target.value = ""
+                        }}
+                        disabled={isPending || isUploadingAttachments}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {pendingFiles.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2 text-center">尚未選擇檔案</p>
+                ) : (
+                  <ul className="divide-y divide-gray-200 bg-white rounded border border-gray-200">
+                    {pendingFiles.map((f, idx) => (
+                      <li key={`${f.name}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs w-5">#{idx + 1}</span>
+                            <span className="truncate font-medium" title={f.name}>{f.name}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 ml-7">{formatBytes(f.size)}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+                          disabled={isPending || isUploadingAttachments}
+                          className="btn btn-xs btn-ghost text-red-600 hover:text-red-800"
+                        >
+                          移除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="text-xs text-gray-400 mt-2">
+                  支援 JPG / PNG / WebP / PDF，單檔最大 {ATTACH_MAX_FILE_BYTES / 1024 / 1024} MB，最多 {ATTACH_MAX_FILES_PER_REQUEST} 個檔案；上傳後無法刪除。
+                </p>
+              </div>
+            </>
           )}
 
           <div className="stats shadow w-full mt-6 bg-gray-50 border border-gray-100">
@@ -314,10 +482,12 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
 
           <button
             type="submit"
-            disabled={isPending || duration <= 0}
+            disabled={isPending || isUploadingAttachments || duration <= 0}
             className="btn btn-primary w-full mt-6 text-white"
           >
-            {isPending ? <span className="loading loading-spinner"></span> : (editTarget ? "更新假單" : "送出假單")}
+            {isPending || isUploadingAttachments
+              ? <span className="loading loading-spinner"></span>
+              : (editTarget ? "更新假單" : "送出假單")}
           </button>
 
           {/* 編輯模式：直接 inline 顯示附件管理（PENDING 可上傳） */}
