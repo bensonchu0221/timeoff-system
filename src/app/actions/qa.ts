@@ -49,3 +49,18 @@ export async function deleteFAQ(id: string) {
   revalidatePath("/")
   revalidatePath("/admin/qa")
 }
+
+// 批次重排：依傳入的 id 順序，把每筆 FAQ.order 重設為 0,1,2,...
+export async function reorderFAQs(orderedIds: string[]) {
+  await assertNotImpersonating()
+  const session = await auth()
+  if (!session?.user || (session.user as any).role !== "ADMIN") throw new Error("Unauthorized")
+
+  await prisma.$transaction(
+    orderedIds.map((id, idx) =>
+      prisma.fAQ.update({ where: { id }, data: { order: idx } })
+    )
+  )
+  revalidatePath("/")
+  revalidatePath("/admin/qa")
+}
