@@ -13,13 +13,13 @@ export function BalanceSummary({ balances }: { balances: Balance[] }) {
     <div className="space-y-4">
       <h2 className="text-lg font-medium text-gray-900 mb-4">假別額度（截至今日）</h2>
 
-      {/* 手機版：daisyUI stat 卡片 2 欄 grid */}
-      <div className="grid grid-cols-2 gap-3 lg:hidden">
+      {/* 手機版：daisyUI stat 卡片 4 欄 grid（窄欄讓一列容納更多假別） */}
+      <div className="grid grid-cols-4 gap-2 lg:hidden">
         {balances.map(b => (
-          <div key={b.type} className="stat bg-white rounded-lg shadow border border-gray-100 p-3">
+          <div key={b.type} className="stat bg-white rounded-lg shadow border border-gray-100 p-2">
             <div className="stat-title text-xs text-gray-500 truncate">{b.type}</div>
-            <div className="stat-value text-2xl font-bold text-gray-900">{b.remaining}</div>
-            <div className="stat-desc text-gray-400">/ {b.total} 天</div>
+            <div className="stat-value text-xl font-bold text-gray-900">{b.remaining}</div>
+            <div className="stat-desc text-[10px] text-gray-400">/ {b.total} 天</div>
           </div>
         ))}
       </div>
