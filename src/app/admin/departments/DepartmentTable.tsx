@@ -25,7 +25,13 @@ export function DepartmentTable({ rows }: { rows: DepartmentRow[] }) {
     startTransition(async () => {
       try {
         const res = await fn()
-        if (res?.success) toast.success(res.message)
+        if (res) {
+          if (res.success) {
+            toast.success(res.message)
+          } else {
+            toast.error(res.message)
+          }
+        }
       } catch (err: any) {
         toast.error(err.message || "更新失敗")
       }

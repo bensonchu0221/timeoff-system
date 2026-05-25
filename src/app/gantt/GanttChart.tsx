@@ -25,24 +25,37 @@ export function GanttChart({
   const todayRef = useRef<HTMLTableHeaderCellElement>(null)
   const firstOfMonthRef = useRef<HTMLTableHeaderCellElement>(null)
 
+  // 依年-月分組 days，計算每個月份佔用的天數 (colSpan)
+  const monthGroups: { year: number; month: number; count: number }[] = []
+  days.forEach(day => {
+    const year = day.getFullYear()
+    const month = day.getMonth() + 1
+    const lastGroup = monthGroups[monthGroups.length - 1]
+    if (lastGroup && lastGroup.year === year && lastGroup.month === month) {
+      lastGroup.count++
+    } else {
+      monthGroups.push({ year, month, count: 1 })
+    }
+  })
+
   useEffect(() => {
-    // Scroll to 1st of month on load or month change
-    if (firstOfMonthRef.current && scrollRef.current) {
-      const container = scrollRef.current.getElement ? scrollRef.current.getElement() : scrollRef.current
-      if (container) {
-        // Find the offset of the first day of the selected month
-        const firstDayPos = firstOfMonthRef.current.offsetLeft
-        container.scrollLeft = firstDayPos - 212 // offset the 192px sticky column + 20px padding
-      }
-    } else if (todayRef.current && scrollRef.current && !searchParams.get("month")) {
-      // If no month selected (viewing today's month) and 1st of month is not rendered?
-      // (Wait, days always includes the 1st of the month if we are in this month)
-      const container = scrollRef.current.getElement ? scrollRef.current.getElement() : scrollRef.current
-      if (container) {
-        const todayPos = todayRef.current.offsetLeft
-        const containerWidth = container.offsetWidth
-        container.scrollLeft = todayPos - containerWidth / 2
-      }
+    const container = scrollRef.current?.getElement ? scrollRef.current.getElement() : scrollRef.current
+    if (!container) return
+
+    const hasMonthParam = !!searchParams.get("month")
+
+    if (!hasMonthParam && todayRef.current) {
+      // 如果沒有指定月份（看當月），優先將「今天」對齊在可視區域的正中央
+      const todayPos = todayRef.current.offsetLeft
+      const containerWidth = container.offsetWidth
+      // 左側固定欄寬度為 192px，故可視區域為 containerWidth - 192
+      // 欲將今天置中於此可視區域，scrollLeft 偏移量應為今天的位置減去固定欄寬度與一半的可視區域寬度
+      const visibleWidth = containerWidth - 192
+      container.scrollLeft = todayPos - 192 - visibleWidth / 2
+    } else if (firstOfMonthRef.current) {
+      // 如果有指定月份（或今天不存在），滾動到該月 1 號
+      const firstDayPos = firstOfMonthRef.current.offsetLeft
+      container.scrollLeft = firstDayPos - 212 // 扣除 192px 固定欄 + 20px padding
     }
   }, [days, searchParams])
 
@@ -109,6 +122,24 @@ export function GanttChart({
         <DragScrollContainer className="w-full" ref={scrollRef}>
           <table className="min-w-max w-full border-collapse">
             <thead>
+              {/* 第一層：月份 */}
+              <tr className="border-b border-gray-200">
+                <th className="sticky left-0 z-20 bg-gray-100 px-3 py-2 border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
+                  月份
+                </th>
+                {monthGroups.map((group, idx) => (
+                  <th
+                    key={idx}
+                    colSpan={group.count}
+                    className="sticky left-48 z-10 bg-gray-50 border-r border-gray-200 px-3 py-1 text-left text-xs font-bold text-gray-700 shadow-[1px_0_0_0_#e5e7eb]"
+                  >
+                    <span className="sticky left-[208px] inline-block whitespace-nowrap">
+                      {group.year}年 {group.month}月
+                    </span>
+                  </th>
+                ))}
+              </tr>
+              {/* 第二層：日期與星期 */}
               <tr>
                 <th className="sticky left-0 z-20 bg-gray-100 px-3 py-2 border-b border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
                   成員 (部門)
@@ -129,16 +160,11 @@ export function GanttChart({
                         if (isTargetFirstOfMonth) firstOfMonthRef.current = el
                       }}
                       className={`px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px] 
-                        ${isWeekend ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} 
+                        ${isWeekend ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-600'} 
                         ${isToday ? 'bg-yellow-50 ring-2 ring-yellow-400 ring-inset z-10' : ''}
                         ${isFirstOfMonth ? 'border-l-2 border-l-gray-300' : ''}`}
                     >
                       <div className="flex flex-col items-center leading-none py-1">
-                        {isFirstOfMonth && (
-                          <span className="text-[8px] text-gray-400 font-bold mb-1 uppercase">
-                            {day.getMonth() + 1}月
-                          </span>
-                        )}
                         <span className={`font-semibold text-xs ${isToday ? 'text-yellow-700' : ''}`}>{day.getDate()}</span>
                         <span className="text-[9px] mt-0.5 opacity-60">{['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</span>
                       </div>
@@ -194,7 +220,7 @@ export function GanttChart({
                       }
 
                       let cellContent = null
-                      let bgColorClass = isWeekend ? 'bg-gray-50/50' : 'bg-white'
+                      let bgColorClass = isWeekend ? 'bg-gray-100' : 'bg-white'
 
                       if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
                       if (isFirstOfMonth) bgColorClass += ' border-l-2 border-l-gray-50'

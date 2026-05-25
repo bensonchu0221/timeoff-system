@@ -220,8 +220,10 @@ export async function getUserLeaveBalance(
       user.hireDate, asOf, leaveType.defaultDays, overrides, adjustments, opening
     )
 
-    // 已用 / 待審：opening 存在時從 openingAt 起算；否則從入職以來累計
-    const startFilter = opening ? { gte: opening.at, lte: asOf } : { lte: asOf }
+    // 已用 / 待審：將截止日設為 asOf 所屬年度的 12/31 23:59:59.999
+    // 確保同一年度內未來的請假（例如 6/17）也會正確在今天被扣除，且不影響跨年度預請的額度扣除。
+    const endOfYear = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59, 999))
+    const startFilter = opening ? { gte: opening.at, lte: endOfYear } : { lte: endOfYear }
     const [usedAgg, pendingAgg] = await Promise.all([
       prisma.leaveRequest.aggregate({
         _sum: { durationDays: true },

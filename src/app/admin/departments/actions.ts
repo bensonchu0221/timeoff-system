@@ -26,14 +26,14 @@ function revalidateAll() {
   revalidatePath("/")
 }
 
-function mapUniqueError(error: any): never {
+function handleActionError(error: any): { success: false; message: string } {
   if (error?.code === "P2002") {
     const target = (error.meta?.target as string[] | undefined)?.join(",") ?? ""
-    if (target.includes("name")) throw new Error("此部門名稱已存在")
-    if (target.includes("code")) throw new Error("此部門代碼已存在")
-    throw new Error("欄位重複")
+    if (target.includes("name")) return { success: false, message: "此部門名稱已存在" }
+    if (target.includes("code")) return { success: false, message: "此部門代碼已存在" }
+    return { success: false, message: "欄位重複" }
   }
-  throw error
+  return { success: false, message: error.message || "系統錯誤" }
 }
 
 export async function createDepartment(data: FormData) {
@@ -42,9 +42,9 @@ export async function createDepartment(data: FormData) {
   const codeRaw = ((data.get("code") as string) || "").trim()
   const sortOrderStr = (data.get("sortOrder") as string) || "0"
 
-  if (!name) throw new Error("部門名稱為必填")
+  if (!name) return { success: false, message: "部門名稱為必填" }
   const sortOrder = Number(sortOrderStr)
-  if (isNaN(sortOrder)) throw new Error("排序需為數字")
+  if (isNaN(sortOrder)) return { success: false, message: "排序需為數字" }
 
   let created
   try {
@@ -57,7 +57,7 @@ export async function createDepartment(data: FormData) {
       },
     })
   } catch (error: any) {
-    mapUniqueError(error)
+    return handleActionError(error)
   }
 
   await logAudit({
@@ -74,7 +74,7 @@ export async function createDepartment(data: FormData) {
 export async function updateDepartmentName(id: string, name: string) {
   const actorId = await verifyAdmin()
   const value = name.trim()
-  if (!value) throw new Error("部門名稱不可為空")
+  if (!value) return { success: false, message: "部門名稱不可為空" }
 
   const before = await prisma.department.findUnique({
     where: { id },
@@ -83,7 +83,7 @@ export async function updateDepartmentName(id: string, name: string) {
   try {
     await prisma.department.update({ where: { id }, data: { name: value } })
   } catch (error: any) {
-    mapUniqueError(error)
+    return handleActionError(error)
   }
   await logAudit({
     actorId,
@@ -107,7 +107,7 @@ export async function updateDepartmentCode(id: string, code: string) {
   try {
     await prisma.department.update({ where: { id }, data: { code: value } })
   } catch (error: any) {
-    mapUniqueError(error)
+    return handleActionError(error)
   }
   await logAudit({
     actorId,
@@ -122,13 +122,17 @@ export async function updateDepartmentCode(id: string, code: string) {
 
 export async function updateDepartmentSortOrder(id: string, sortOrder: number) {
   const actorId = await verifyAdmin()
-  if (isNaN(sortOrder)) throw new Error("排序需為數字")
+  if (isNaN(sortOrder)) return { success: false, message: "排序需為數字" }
 
   const before = await prisma.department.findUnique({
     where: { id },
     select: { sortOrder: true },
   })
-  await prisma.department.update({ where: { id }, data: { sortOrder } })
+  try {
+    await prisma.department.update({ where: { id }, data: { sortOrder } })
+  } catch (error: any) {
+    return handleActionError(error)
+  }
   await logAudit({
     actorId,
     action: "DEPARTMENT_UPDATE_SORT",
@@ -147,11 +151,15 @@ export async function toggleDepartmentActive(id: string, isActive: boolean) {
   if (!isActive) {
     const userCount = await prisma.user.count({ where: { departmentId: id } })
     if (userCount > 0) {
-      throw new Error(`此部門仍有 ${userCount} 位使用者，請先將他們轉到其他部門再停用`)
+      return { success: false, message: `此部門目前正在被使用（尚有 ${userCount} 位使用者），無法關閉啟用。` }
     }
   }
 
-  await prisma.department.update({ where: { id }, data: { isActive } })
+  try {
+    await prisma.department.update({ where: { id }, data: { isActive } })
+  } catch (error: any) {
+    return handleActionError(error)
+  }
   await logAudit({
     actorId,
     action: "DEPARTMENT_TOGGLE_ACTIVE",

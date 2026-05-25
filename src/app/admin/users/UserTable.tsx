@@ -104,7 +104,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
                 <td className={`sticky left-0 z-10 border-r border-gray-200 align-top whitespace-nowrap transition-all duration-300 ${isTerminated ? "bg-gray-50" : "bg-white"} ${isScrolled ? "px-1 py-1" : "px-6 py-4"}`}>
                   <div className="flex flex-col gap-1 overflow-hidden">
                     <span className="font-medium text-gray-900 flex items-center gap-2 whitespace-nowrap">
-                      <span className={`transition-all duration-300 ${isScrolled ? "max-w-[48px] truncate block" : ""}`}>{user.name || "未設定名稱"}</span>
+                      <span className={`transition-all duration-300 ${isScrolled ? "max-w-[68px] truncate block" : ""}`}>{user.name || "未設定名稱"}</span>
                       {user.chineseName && (
                         <span className={`text-xs text-gray-400 font-normal overflow-hidden whitespace-nowrap transition-all duration-300 ${isScrolled ? "max-w-0 opacity-0" : "max-w-xs opacity-100"}`}>
                           {user.chineseName}
@@ -250,7 +250,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
         type="button"
         onMouseEnter={() => startScroll(-12)}
         onMouseLeave={stopScroll}
-        className="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
+        className="hidden lg:flex absolute -left-6 lg:-left-8 xl:-left-12 top-6 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
         aria-label="向左捲動"
       >
         <ChevronLeft className="w-5 h-5" />
@@ -259,7 +259,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
         type="button"
         onMouseEnter={() => startScroll(12)}
         onMouseLeave={stopScroll}
-        className="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
+        className="hidden lg:flex absolute -right-6 lg:-right-8 xl:-right-12 top-6 -translate-y-1/2 items-center justify-center w-10 h-10 rounded-full bg-white/70 backdrop-blur shadow border border-gray-200 hover:bg-white text-gray-700 z-40 transition"
         aria-label="向右捲動"
       >
         <ChevronRight className="w-5 h-5" />

@@ -76,14 +76,70 @@ export default async function RootLayout({
                   )}
 
                   {isAdmin && (
-                    <>
-                      <a href="/admin/users" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">員工管理</a>
-                      <a href="/admin/departments" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">部門管理</a>
-                      <a href="/admin/leave-settings" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">假別設定</a>
-                      <a href="/admin/reports" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">報表</a>
-                      <a href="/admin/qa" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">QA 編輯</a>
-                      <a href="/admin/audit" className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition">稽核日誌</a>
-                    </>
+                    <div className="dropdown dropdown-hover z-50">
+                      <div
+                        tabIndex={0}
+                        role="button"
+                        className="px-3 py-2 rounded-md text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer flex items-center gap-1 select-none"
+                      >
+                        後台管理
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4 opacity-60"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </div>
+                      <ul
+                        tabIndex={0}
+                        className="dropdown-content menu bg-white text-gray-800 rounded-md shadow-xl z-50 py-1 border border-gray-100 mt-1 w-40 text-sm"
+                      >
+                        <li>
+                          <a href="/admin/users" className="block px-4 py-2 hover:bg-gray-100 transition rounded-none">
+                            員工管理
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            href="/admin/departments"
+                            className="block px-4 py-2 hover:bg-gray-100 transition rounded-none"
+                          >
+                            部門管理
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            href="/admin/leave-settings"
+                            className="block px-4 py-2 hover:bg-gray-100 transition rounded-none"
+                          >
+                            假別設定
+                          </a>
+                        </li>
+                        <li>
+                          <a href="/admin/reports" className="block px-4 py-2 hover:bg-gray-100 transition rounded-none">
+                            報表
+                          </a>
+                        </li>
+                        <li>
+                          <a href="/admin/qa" className="block px-4 py-2 hover:bg-gray-100 transition rounded-none">
+                            QA 編輯
+                          </a>
+                        </li>
+                        <li>
+                          <a href="/admin/audit" className="block px-4 py-2 hover:bg-gray-100 transition rounded-none">
+                            稽核日誌
+                          </a>
+                        </li>
+                      </ul>
+                    </div>
                   )}
                 </nav>
                 <details className="md:hidden relative ml-2">

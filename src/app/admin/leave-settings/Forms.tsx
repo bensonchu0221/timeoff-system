@@ -100,7 +100,7 @@ export function ToggleRequireProofSwitch({
         checked={checked}
         disabled={isPending}
         onChange={handleChange}
-        className="toggle toggle-sm toggle-primary"
+        className="toggle toggle-sm"
       />
       <span className="text-xs text-gray-500">{checked ? "需要" : "不需要"}</span>
     </label>
