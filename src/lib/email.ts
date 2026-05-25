@@ -82,6 +82,68 @@ export async function sendLeaveApplicationEmail(
   await sendBrevoEmail(toEmail, subject, html)
 }
 
+// 兩階段審核：第一關（主管）通過後，通知終審者（Boss）進行二審
+export async function sendBossReviewEmail(
+  toEmail: string,
+  applicantName: string,
+  managerName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  partOfDay: string,
+  durationDays: number,
+  link: string,
+) {
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const subject = `[終審待審核] ${applicantName} 的假單已通過一審（${range}）`
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+      <h2 style="color: #333;">假單待終審</h2>
+      <p style="color: #555; line-height: 1.5;">下列假單已通過第一關（主管）審核，待您終審：</p>
+      <p style="color: #555; line-height: 1.5;"><strong>申請人：</strong> ${escapeHtml(applicantName)}</p>
+      <p style="color: #555; line-height: 1.5;"><strong>一審主管：</strong> ${escapeHtml(managerName || "—")}</p>
+      <p style="color: #555; line-height: 1.5;"><strong>假別：</strong> ${escapeHtml(leaveType)}</p>
+      <p style="color: #555; line-height: 1.5;"><strong>期間：</strong> ${range}</p>
+      <p style="color: #555; line-height: 1.5;"><strong>天數：</strong> ${durationDays} 天</p>
+      <div style="margin-top: 30px;">
+        <a href="${link}" style="background-color: #7A9A8A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">前往系統終審</a>
+      </div>
+    </div>
+  `
+  await sendBrevoEmail(toEmail, subject, html)
+}
+
+// 兩階段審核：通知申請人「一審已通過，等待終審」
+export async function sendFirstApprovedEmail(
+  toEmail: string,
+  applicantName: string,
+  leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  partOfDay: string,
+  durationDays: number,
+) {
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const subject = `[一審通過] 您的請假申請已通過主管審核，等待終審（${range}）`
+  const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+      <h2 style="color: #7A9A8A;">一審通過，等待終審</h2>
+      <p style="color: #555; line-height: 1.5;">${escapeHtml(applicantName)} 您好，您的假單已通過第一關主管審核，目前送交終審者做最後核准：</p>
+      <ul style="color: #555; line-height: 1.7;">
+        <li>假別：<strong>${escapeHtml(leaveType)}</strong></li>
+        <li>期間：<strong>${range}</strong></li>
+        <li>天數：<strong>${durationDays} 天</strong></li>
+      </ul>
+      <p style="color: #888; line-height: 1.5; font-size: 13px;">終審完成後會再通知您最終結果。</p>
+      <div style="margin-top: 24px;">
+        <a href="${siteUrl}" style="background-color: #A9ADA9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">前往系統</a>
+      </div>
+    </div>
+  `
+  await sendBrevoEmail(toEmail, subject, html)
+}
+
 export async function sendLeaveResultEmail(
   toEmail: string,
   applicantName: string,

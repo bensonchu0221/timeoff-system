@@ -53,6 +53,31 @@ export async function updateUserManager(userId: string, managerId: string | null
   return { success: true, message: "已更新直屬主管" }
 }
 
+// 兩階段審核：設定 / 取消「終審者」（Boss）。全公司唯一一人，設定時會清掉其他人的旗標。
+export async function setFinalApprover(userId: string, isFinalApprover: boolean) {
+  const actorId = await requireActorId()
+
+  if (isFinalApprover) {
+    // 保證唯一：先把其他人的旗標清掉，再設這位
+    await prisma.$transaction([
+      prisma.user.updateMany({ where: { isFinalApprover: true, NOT: { id: userId } }, data: { isFinalApprover: false } }),
+      prisma.user.update({ where: { id: userId }, data: { isFinalApprover: true } }),
+    ])
+  } else {
+    await prisma.user.update({ where: { id: userId }, data: { isFinalApprover: false } })
+  }
+
+  await logAudit({
+    actorId,
+    action: "USER_SET_FINAL_APPROVER",
+    targetType: "User",
+    targetId: userId,
+    payload: { isFinalApprover },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: isFinalApprover ? "已設為終審者（Boss）" : "已取消終審者" }
+}
+
 export async function updateUserHireDate(userId: string, hireDate: string) {
   const actorId = await requireActorId()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { hireDate: true } })

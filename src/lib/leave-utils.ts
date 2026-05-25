@@ -182,7 +182,7 @@ export async function getUserLeaveBalance(
   userId: string,
   leaveTypeId: string,
   asOf: Date = new Date()
-): Promise<{ total: number, used: number, pending: number, remaining: number }> {
+): Promise<{ total: number, used: number, pending: number, pendingFirst: number, pendingSecond: number, remaining: number }> {
   const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId }});
   if (!leaveType) throw new Error("Leave type not found");
 
@@ -194,7 +194,7 @@ export async function getUserLeaveBalance(
   if (isAnnualLeave) {
     // 特休一定要有到職日才能算
     if (!user.hireDate) {
-      return { total: 0, used: 0, pending: 0, remaining: 0 };
+      return { total: 0, used: 0, pending: 0, pendingFirst: 0, pendingSecond: 0, remaining: 0 };
     }
 
     // 取所有 override（asc by year，calc 函數做分水嶺挑選）
@@ -224,7 +224,7 @@ export async function getUserLeaveBalance(
     // 確保同一年度內未來的請假（例如 6/17）也會正確在今天被扣除，且不影響跨年度預請的額度扣除。
     const endOfYear = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59, 999))
     const startFilter = opening ? { gte: opening.at, lte: endOfYear } : { lte: endOfYear }
-    const [usedAgg, pendingAgg] = await Promise.all([
+    const [usedAgg, pendingAgg, pendingSecondAgg] = await Promise.all([
       prisma.leaveRequest.aggregate({
         _sum: { durationDays: true },
         where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter }
@@ -232,13 +232,20 @@ export async function getUserLeaveBalance(
       prisma.leaveRequest.aggregate({
         _sum: { durationDays: true },
         where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter }
+      }),
+      // 兩階段審核：已過一審、等二審的待審天數（firstApprovedAt 非 null）
+      prisma.leaveRequest.aggregate({
+        _sum: { durationDays: true },
+        where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: startFilter }
       })
     ])
 
     const used = usedAgg._sum.durationDays || 0
     const pending = pendingAgg._sum.durationDays || 0
+    const pendingSecond = pendingSecondAgg._sum.durationDays || 0
+    const pendingFirst = pending - pendingSecond
 
-    return { total, used, pending, remaining: total - used - pending }
+    return { total, used, pending, pendingFirst, pendingSecond, remaining: total - used - pending }
   }
 
   // 非特休：以 hireDate 為基準的週年制（每期 reset）
@@ -251,7 +258,7 @@ export async function getUserLeaveBalance(
     })
     if (override) totalQuota = override.totalQuota
 
-    const [usedY, pendingY] = await Promise.all([
+    const [usedY, pendingY, pendingSecondY] = await Promise.all([
       prisma.leaveRequest.aggregate({
         _sum: { durationDays: true },
         where: {
@@ -265,11 +272,19 @@ export async function getUserLeaveBalance(
           userId, leaveTypeId, status: "PENDING",
           startDate: { gte: startOfYearUTC(year), lt: startOfYearUTC(year + 1) }
         }
+      }),
+      prisma.leaveRequest.aggregate({
+        _sum: { durationDays: true },
+        where: {
+          userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null },
+          startDate: { gte: startOfYearUTC(year), lt: startOfYearUTC(year + 1) }
+        }
       })
     ])
     const usedDays = usedY._sum.durationDays || 0
     const pendingDays = pendingY._sum.durationDays || 0
-    return { total: totalQuota, used: usedDays, pending: pendingDays, remaining: totalQuota - usedDays - pendingDays }
+    const pendingSecondDays = pendingSecondY._sum.durationDays || 0
+    return { total: totalQuota, used: usedDays, pending: pendingDays, pendingFirst: pendingDays - pendingSecondDays, pendingSecond: pendingSecondDays, remaining: totalQuota - usedDays - pendingDays }
   }
 
   // 有 hireDate：算當前所在週年期 [periodStart, periodEnd)
@@ -293,7 +308,7 @@ export async function getUserLeaveBalance(
   const totalQuota = stickyOverride ?? leaveType.defaultDays
 
   // used / pending 只算當前週年期內
-  const [used, pending] = await Promise.all([
+  const [used, pending, pendingSecondAgg] = await Promise.all([
     prisma.leaveRequest.aggregate({
       _sum: { durationDays: true },
       where: { userId, leaveTypeId, status: "APPROVED", startDate: { gte: periodStart, lt: periodEnd } }
@@ -301,9 +316,14 @@ export async function getUserLeaveBalance(
     prisma.leaveRequest.aggregate({
       _sum: { durationDays: true },
       where: { userId, leaveTypeId, status: "PENDING", startDate: { gte: periodStart, lt: periodEnd } }
+    }),
+    prisma.leaveRequest.aggregate({
+      _sum: { durationDays: true },
+      where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: { gte: periodStart, lt: periodEnd } }
     })
   ])
   const usedDays = used._sum.durationDays || 0
   const pendingDays = pending._sum.durationDays || 0
-  return { total: totalQuota, used: usedDays, pending: pendingDays, remaining: totalQuota - usedDays - pendingDays }
+  const pendingSecondDays = pendingSecondAgg._sum.durationDays || 0
+  return { total: totalQuota, used: usedDays, pending: pendingDays, pendingFirst: pendingDays - pendingSecondDays, pendingSecond: pendingSecondDays, remaining: totalQuota - usedDays - pendingDays }
 }

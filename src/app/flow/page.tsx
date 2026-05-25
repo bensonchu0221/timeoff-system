@@ -34,15 +34,23 @@ export default async function FlowPage() {
           />
           <FlowStep
             title="通知主管"
-            description="同步送出 Email + LINE 推播；LINE 訊息含「快速核准」「駁回」兩顆按鈕。"
+            description="同步送出 Email + LINE 推播；LINE 訊息含「核准（送交終審）」「駁回」兩顆按鈕。"
           />
           <FlowStep
-            title="主管審核"
-            description="可在「審核」頁面操作，也可直接在 LINE 一鍵核准；駁回可從預設理由清單選或自填理由（理由非必填）。"
+            title="主管一審"
+            description="第一關由直屬主管審核。通過 → 送交 Boss 終審；駁回 → 直接結束，不進第二關。"
+          />
+          <FlowStep
+            title="通知 Boss 終審"
+            description="一審通過後，系統通知終審者（Boss）；同時通知申請人「一審已通過、等待終審」。"
+          />
+          <FlowStep
+            title="Boss 終審"
+            description="第二關由 Boss 做最後核准或駁回；Boss 不在時 admin 可代為終審。額度在此關最終核准時才正式扣除。"
           />
           <FlowStep
             title="結果通知"
-            description="申請人收到 Email + LINE 結果；若核准，同部門同事收提醒；有代理人時，代理人收到正式通知。"
+            description="申請人收到 Email + LINE 最終結果；若核准，同部門同事收提醒、代理人收到正式通知。"
           />
           <FlowStep
             title="進入行事曆"
@@ -50,32 +58,43 @@ export default async function FlowPage() {
             isLast
           />
         </ul>
+
+        <div className="mt-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
+          <p className="font-medium text-gray-800">兩階段的例外情況：</p>
+          <p>• 若你的直屬主管本身就是 Boss，一審通過即為最終核准，不再重複跑第二關。</p>
+          <p>• Boss 本人送出的假單會自動核准（無上層可審）。</p>
+        </div>
       </section>
 
-      {/* ===== 特殊情境 ===== */}
+      {/* ===== 什麼時候系統會通知？ ===== */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">特殊情境</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">什麼時候系統會通知？</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <ScenarioCard
+            title="一審通過、送交終審"
+            trigger="主管完成第一關核准"
+            behavior="通知 Boss「有一審通過的假單待終審」（Email + LINE，LINE 可一鍵核准 / 駁回）；同時通知申請人「一審已通過、等待終審」"
+          />
+          <ScenarioCard
             title="員工修改待審假單"
-            trigger="員工在主管審核前到「修改假單」頁更動內容"
-            behavior="主管收到含 before / after 對照的修改通知（Email + LINE），改以最新版本審核"
+            trigger="員工在審核完成前到「修改假單」頁更動內容"
+            behavior="假單退回重跑一審：清除一審通過狀態，主管收到含 before / after 對照的修改通知，重新從第一關審核"
           />
           <ScenarioCard
             title="員工撤銷假單"
             trigger="員工在開始日前按「撤銷」"
-            behavior="原為「待審」→ 通知主管；原為「已核准」→ 主管 + 同部門 + 代理人都收到撤銷通知。員工該期間如常出勤"
+            behavior="待審 → 通知目前持單的審核者（一審主管或已進二審的 Boss）；已核准 → 主管 + Boss + 同部門 + 代理人都收到撤銷通知。員工該期間如常出勤"
           />
           <ScenarioCard
             title="24 小時未審核自動升級"
-            trigger="假單 PENDING 超過 24 小時"
-            behavior="cron 每小時檢查，自動將該單升級給所有 admin（每張單只升一次，不會重複騷擾）"
+            trigger="假單 PENDING（含等一審 / 等二審）超過 24 小時"
+            behavior="cron 每小時檢查，自動將該單升級給所有 admin（admin 兩關都能代審；每張單只升一次）"
           />
           <ScenarioCard
             title="每日 11:00 待審清單"
-            trigger="主管當下還有 PENDING 假單"
-            behavior="LINE 推播「您目前有 N 筆假單待審核」+ 審核連結"
+            trigger="審核者當下還有待審假單"
+            behavior="LINE 推播「您目前有 N 筆假單待審核」+ 審核連結；已進二審的單會算到 Boss 頭上，不再算主管"
           />
           <ScenarioCard
             title="每日 10:00 全公司請假名單"
@@ -85,9 +104,9 @@ export default async function FlowPage() {
         </div>
       </section>
 
-      {/* ===== 通知速查表 ===== */}
+      {/* ===== 通知誰會收到？ ===== */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">通知速查表</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">通知誰會收到？</h2>
         <p className="text-sm text-gray-500 mb-3">
           每位收件人需在「個人設定」綁定 LINE 才會收到推播；Email 一律會送。
         </p>
@@ -99,21 +118,23 @@ export default async function FlowPage() {
                 <th>事件</th>
                 <th className="text-center">申請人</th>
                 <th className="text-center">主管</th>
+                <th className="text-center">Boss</th>
                 <th className="text-center">同部門</th>
                 <th className="text-center">代理人</th>
                 <th className="text-center">Admin</th>
               </tr>
             </thead>
             <tbody>
-              <NotifyRow event="新申請" rcpts={["-", "✓", "-", "✓", "-"]} />
-              <NotifyRow event="核准" rcpts={["✓", "-", "✓", "✓", "-"]} />
-              <NotifyRow event="駁回" rcpts={["✓", "-", "-", "✓ 解除", "-"]} />
-              <NotifyRow event="修改（PENDING）" rcpts={["-", "✓", "-", "✓ *", "-"]} />
-              <NotifyRow event="撤銷（PENDING）" rcpts={["-", "✓", "-", "✓ 解除", "-"]} />
-              <NotifyRow event="撤銷（已核准）" rcpts={["-", "✓", "✓", "✓ 解除", "-"]} />
-              <NotifyRow event="24h 未審核升級" rcpts={["-", "-", "-", "-", "✓"]} />
-              <NotifyRow event="每日 11:00 待審清單" rcpts={["-", "✓", "-", "-", "-"]} />
-              <NotifyRow event="每日 10:00 全公司請假名單 **" rcpts={["✓", "✓", "✓", "✓", "✓"]} />
+              <NotifyRow event="新申請" rcpts={["-", "✓", "-", "-", "✓", "-"]} />
+              <NotifyRow event="一審通過（送二審）" rcpts={["✓", "-", "✓", "-", "-", "-"]} />
+              <NotifyRow event="最終核准" rcpts={["✓", "-", "-", "✓", "✓", "-"]} />
+              <NotifyRow event="駁回（一審或二審）" rcpts={["✓", "-", "-", "-", "✓ 解除", "-"]} />
+              <NotifyRow event="修改（退回一審）" rcpts={["-", "✓", "-", "-", "✓ *", "-"]} />
+              <NotifyRow event="撤銷（待審）" rcpts={["-", "✓", "✓ ***", "-", "✓ 解除", "-"]} />
+              <NotifyRow event="撤銷（已核准）" rcpts={["-", "✓", "✓", "✓", "✓ 解除", "-"]} />
+              <NotifyRow event="24h 未審核升級" rcpts={["-", "-", "-", "-", "-", "✓"]} />
+              <NotifyRow event="每日 11:00 待審清單" rcpts={["-", "✓", "✓", "-", "-", "-"]} />
+              <NotifyRow event="每日 10:00 全公司請假名單 **" rcpts={["✓", "✓", "✓", "✓", "✓", "✓"]} />
             </tbody>
           </table>
         </div>
@@ -123,17 +144,21 @@ export default async function FlowPage() {
         <p className="text-xs text-gray-500 mt-1">
           ** 全公司請假名單：所有在職且已綁定 LINE 的同仁皆會收到（自己今天請假則只看到其他人的名單）。
         </p>
+        <p className="text-xs text-gray-500 mt-1">
+          *** 撤銷待審單時，若已進入二審，Boss（目前持單者）也會收到通知。
+        </p>
       </section>
 
-      {/* ===== 員工自助提示 ===== */}
+      {/* ===== 小提示 ===== */}
       <section className="bg-[#7A9A8A]/10 border border-[#7A9A8A]/30 rounded-lg p-5">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">員工自助小提示</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">小提示</h2>
         <ul className="space-y-2 text-sm text-gray-700 list-disc list-inside">
-          <li>想關閉特定 LINE 通知？到「個人設定」逐項調整（9 種通知可獨立開關）</li>
+          <li>假單送出後，首頁列表會顯示橫式進度圖（申請 → 主管審核 → Boss 終審 → 完成），一眼看出審到哪一關</li>
+          <li>想關閉特定 LINE 通知？到「個人設定」逐項調整（多種通知可獨立開關）</li>
           <li>想查餘額？跟 LINE Bot 輸入「查假」即可，免登入網頁</li>
-          <li>駁回後想知道為什麼？看通知內容裡的「主管留言」段落（主管未填則沒有）</li>
+          <li>被駁回想知道為什麼？看「主管留言」（一審）或「終審留言」（Boss 二審）段落（未填則沒有）</li>
+          <li>一審通過後想改內容？修改會退回重跑一審，主管要重新審一次</li>
           <li>已核准但需要撤銷？只要在開始日前都可以撤；過了開始日請聯絡 admin</li>
-          <li>修改 / 撤銷 / 駁回 都會即時通知對應的同事，不會出現「資訊脫鉤」</li>
         </ul>
       </section>
     </div>

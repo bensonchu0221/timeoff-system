@@ -51,6 +51,10 @@ model User {
   // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
   terminatedDate DateTime?
 
+  // 兩階段審核：終審者（Boss）標記。全公司唯一一人為 true（目前 = Connie）。
+  // 與 role 權限脫鉤：第一關通過後，需二審的假單一律送交此人終審。
+  isFinalApprover Boolean  @default(false)
+
   // 特休 Opening Balance（資料遷移用）
   // 兩欄同存或同空，由 application code 保證 invariant
   // openingBalance: openingAt 那一刻「應有的累計可請特休」（已含歷史所有 grant/usage 抵銷）
@@ -90,6 +94,8 @@ model User {
   // Leaves and Quotas
   leaveRequests  LeaveRequest[]     @relation("UserLeaveRequests")
   approvedLeaves LeaveRequest[]     @relation("ApproverLeaveRequests")
+  // 兩階段審核：作為二審者（Boss）負責終審的假單
+  secondApprovedLeaves LeaveRequest[] @relation("SecondApproverLeaveRequests")
   backupRequests LeaveRequest[]     @relation("BackupLeaveRequests")
   leaveBalances  UserLeaveBalance[]
   auditLogs      AuditLog[]         @relation("AuditActor")
@@ -163,11 +169,20 @@ model LeaveRequest {
   durationDays   Float       // Calculated days, excluding holidays/weekends
   reason         String?     @db.Text
   status         LeaveStatus @default(PENDING)
-  // 主管在審核時填寫的訊息（駁回理由、核准備註）；員工 Dashboard 與通知信都會帶
+  // 第一關（主管）審核時填寫的訊息（駁回理由、核准備註）；員工 Dashboard 與通知信都會帶
   reviewMessage  String?     @db.Text
 
+  // 第一關審核者（主管）
   approverId     String?
   approver       User?       @relation("ApproverLeaveRequests", fields: [approverId], references: [id])
+
+  // 兩階段審核：第二關終審者（Boss）。null = 此單不需二審（單階段，主管核准即最終）。
+  secondApproverId String?
+  secondApprover   User?     @relation("SecondApproverLeaveRequests", fields: [secondApproverId], references: [id])
+  // 第一關通過時間；非 null 代表「已過一審、目前等二審」，用來推導階段（不另設 enum）
+  firstApprovedAt  DateTime?
+  // 第二關（Boss）審核留言（駁回理由 / 核准備註）
+  secondReviewMessage String? @db.Text
 
   // 代理人（選填）：員工請假期間請該人協助；有填則通知該代理人
   backupId       String?

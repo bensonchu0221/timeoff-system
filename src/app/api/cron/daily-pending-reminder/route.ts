@@ -14,16 +14,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 })
   }
 
-  // 撈所有 PENDING 假單依 approverId 分桶
+  // 撈所有 PENDING 假單，依「目前階段的審核者」分桶：
+  // 兩階段審核下，已過一審（firstApprovedAt 非 null）的單目前在終審者（secondApproverId）手上，
+  // 不該再算到一審主管頭上。
   const pending = await prisma.leaveRequest.findMany({
-    where: { status: "PENDING", approverId: { not: null } },
-    select: { approverId: true },
+    where: { status: "PENDING" },
+    select: { approverId: true, secondApproverId: true, firstApprovedAt: true },
   })
 
   const countByApprover = new Map<string, number>()
   for (const p of pending) {
-    if (!p.approverId) continue
-    countByApprover.set(p.approverId, (countByApprover.get(p.approverId) || 0) + 1)
+    const currentReviewerId = p.firstApprovedAt ? p.secondApproverId : p.approverId
+    if (!currentReviewerId) continue
+    countByApprover.set(currentReviewerId, (countByApprover.get(currentReviewerId) || 0) + 1)
   }
 
   if (countByApprover.size === 0) {

@@ -13,6 +13,7 @@ import {
   updateUserDepartment,
   setAnnualLeaveOpening,
   clearAnnualLeaveOpening,
+  setFinalApprover,
 } from "./actions"
 import toast from "react-hot-toast"
 
@@ -25,6 +26,7 @@ type UserNode = {
   departmentId: string | null
   department: { id: string; name: string } | null
   managerId: string | null
+  isFinalApprover: boolean
   hireDate: Date | null
   gender: string
   terminatedDate: Date | null
@@ -91,6 +93,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">性別</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">部門</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">直屬主管</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">終審者(Boss)</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">特休 Opening</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">離職日</th>
@@ -209,6 +212,16 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
                         </option>
                       ))}
                   </select>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap align-top text-center">
+                  <input
+                    type="checkbox"
+                    disabled={isPending || isTerminated}
+                    checked={user.isFinalApprover}
+                    onChange={(e) => wrap(() => setFinalApprover(user.id, e.target.checked))}
+                    className="checkbox checkbox-sm"
+                    title="設為全公司唯一終審者（Boss）；勾選會自動取消其他人"
+                  />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">
                   <input

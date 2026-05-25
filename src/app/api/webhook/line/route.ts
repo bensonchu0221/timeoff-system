@@ -92,8 +92,12 @@ async function handlePostback(
 
   if (action === "approve") {
     try {
-      await reviewLeaveAsUser(actor.id, requestId, "APPROVED")
-      await lineReply(replyToken, [{ type: "text", text: "已核准。" }])
+      const res = await reviewLeaveAsUser(actor.id, requestId, "APPROVED")
+      // 兩階段：主管的一審通過不是最終核准，回覆要講清楚已送交終審
+      const text = res.outcome === "FIRST_APPROVED"
+        ? "已通過一審，已送交終審者做最後核准。"
+        : "已核准。"
+      await lineReply(replyToken, [{ type: "text", text }])
     } catch (err: any) {
       const msg = err?.message || "核准失敗"
       await lineReply(replyToken, [{ type: "text", text: msg }])

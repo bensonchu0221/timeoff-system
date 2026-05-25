@@ -10,6 +10,7 @@ import { BalanceSummary } from "./components/BalanceSummary"
 import { HistoryLedgerDrawer } from "./components/HistoryLedgerDrawer"
 import { CalendarSubscribeButton } from "./components/CalendarSubscribeButton"
 import { MobileLeaveActions } from "./components/MobileLeaveActions"
+import { LeaveApprovalSteps } from "./components/LeaveApprovalSteps"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -152,53 +153,74 @@ export default async function DashboardPage() {
                         </div>
                         {req.reviewMessage && (
                           <div className={`mt-2 text-xs px-2 py-1 rounded border-l-2 max-w-xs whitespace-pre-wrap ${
-                            req.status === 'REJECTED'
+                            req.status === 'REJECTED' && !req.firstApprovedAt
                               ? 'bg-[#C48F8B]/10 border-l-[#C48F8B] text-[#a36863]'
                               : 'bg-[#7A9A8A]/10 border-l-[#7A9A8A] text-[#5c7a6b]'
                           }`}>
                             <span className="font-semibold">主管留言：</span>{req.reviewMessage}
                           </div>
                         )}
+                        {req.secondReviewMessage && (
+                          <div className={`mt-2 text-xs px-2 py-1 rounded border-l-2 max-w-xs whitespace-pre-wrap ${
+                            req.status === 'REJECTED'
+                              ? 'bg-[#C48F8B]/10 border-l-[#C48F8B] text-[#a36863]'
+                              : 'bg-[#7A9A8A]/10 border-l-[#7A9A8A] text-[#5c7a6b]'
+                          }`}>
+                            <span className="font-semibold">終審留言：</span>{req.secondReviewMessage}
+                          </div>
+                        )}
                       </td>
-                      <td className="px-6 py-4 flex items-center">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap
-                          ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' :
-                            req.status === 'PENDING' ? 'border border-[#A9ADA9] text-[#6d716f]' :
-                              req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' :
-                                'bg-gray-100 text-gray-800'}`}>
-                          {req.status === 'APPROVED' ? '核准' :
-                            req.status === 'PENDING' ? '待審' :
-                              req.status === 'REJECTED' ? '駁回' :
-                                req.status === 'CANCELLED' ? '銷假' : req.status}
-                        </span>
-                        {/* 桌機版：原本的 inline 操作；md 以下隱藏 */}
-                        <div className="hidden md:flex md:items-center">
-                          {req.status === 'PENDING' && (
-                            <Link
-                              href={`/apply?edit=${req.id}`}
-                              className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
-                            >
-                              修改
-                            </Link>
-                          )}
-                          {/* 附件入口：需要證明 / 已有附件 / PENDING+APPROVED 都顯示，方便補件與檢視 */}
-                          {(req.leaveType.requireProof || req._count.attachments > 0) && (
-                            <Link
-                              href={`/leave/${req.id}/attachments`}
-                              className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
-                              title="附件管理"
-                            >
-                              📎 附件{req._count.attachments > 0 ? ` (${req._count.attachments})` : ""}
-                            </Link>
-                          )}
-                          {(req.status === 'PENDING' || req.status === 'APPROVED') && (
-                            <CancelLeaveButton leaveId={req.id} />
-                          )}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap
+                            ${req.status === 'APPROVED' ? 'bg-[#7A9A8A]/20 text-[#5c7a6b]' :
+                              req.status === 'PENDING' ? 'border border-[#A9ADA9] text-[#6d716f]' :
+                                req.status === 'REJECTED' ? 'bg-[#C48F8B]/20 text-[#a36863]' :
+                                  'bg-gray-100 text-gray-800'}`}>
+                            {req.status === 'APPROVED' ? '核准' :
+                              req.status === 'PENDING' ? '待審' :
+                                req.status === 'REJECTED' ? '駁回' :
+                                  req.status === 'CANCELLED' ? '銷假' : req.status}
+                          </span>
+                          {/* 桌機版：原本的 inline 操作；md 以下隱藏 */}
+                          <div className="hidden md:flex md:items-center">
+                            {req.status === 'PENDING' && (
+                              <Link
+                                href={`/apply?edit=${req.id}`}
+                                className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                              >
+                                修改
+                              </Link>
+                            )}
+                            {/* 附件入口：需要證明 / 已有附件 / PENDING+APPROVED 都顯示，方便補件與檢視 */}
+                            {(req.leaveType.requireProof || req._count.attachments > 0) && (
+                              <Link
+                                href={`/leave/${req.id}/attachments`}
+                                className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                                title="附件管理"
+                              >
+                                📎 附件{req._count.attachments > 0 ? ` (${req._count.attachments})` : ""}
+                              </Link>
+                            )}
+                            {(req.status === 'PENDING' || req.status === 'APPROVED') && (
+                              <CancelLeaveButton leaveId={req.id} />
+                            )}
+                          </div>
+                          {/* 手機版：⋯ menu 收折，避免文字換行 */}
+                          <div className="md:hidden ml-2">
+                            <MobileLeaveActions leaveId={req.id} status={req.status} />
+                          </div>
                         </div>
-                        {/* 手機版：⋯ menu 收折，避免文字換行 */}
-                        <div className="md:hidden ml-2">
-                          <MobileLeaveActions leaveId={req.id} status={req.status} />
-                        </div>
+                        {/* 兩階段審核橫式進度圖：審核中一律顯示；被駁回的兩階段單也顯示（看出在哪一關被駁） */}
+                        {(req.status === 'PENDING' || (req.status === 'REJECTED' && req.secondApproverId)) && (
+                          <div className="mt-2">
+                            <LeaveApprovalSteps
+                              status={req.status}
+                              firstApprovedAt={req.firstApprovedAt}
+                              secondApproverId={req.secondApproverId}
+                            />
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -15,6 +15,8 @@ import {
   sendLeaveUpdatedEmail,
   sendBackupAssignedEmail,
   sendBackupRemovedEmail,
+  sendBossReviewEmail,
+  sendFirstApprovedEmail,
   displayName,
 } from "@/lib/email"
 import {
@@ -26,7 +28,10 @@ import {
   sendLineLeaveUpdated,
   sendLineBackupAssigned,
   sendLineBackupRemoved,
+  sendLineBossReview,
+  sendLineFirstApproved,
 } from "@/lib/line"
+import { getFinalApprover } from "@/lib/approval"
 import { assertNotImpersonating } from "@/lib/impersonation"
 
 export async function applyLeave(data: {
@@ -73,9 +78,8 @@ export async function applyLeave(data: {
   const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
   const leaveTypeName = leaveTypeObj?.name || "該假別";
 
-  // 先 fetch user：特休 3 個月 gate 與 manager 都要用
+  // 先 fetch user：特休 3 個月 gate 與 manager 都要用（審核路由在下方計算）
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  const approverId = user?.managerId;
 
   // 生理假 gate：男性不得申請
   if (user?.gender === "MALE" && leaveTypeObj?.name.includes("生理假")) {
@@ -103,6 +107,33 @@ export async function applyLeave(data: {
     if (!backup || backup.terminatedDate) backupId = null;
   }
 
+  // 兩階段審核路由：決定一審者(approverId) / 二審者(secondApproverId) / 是否自動核准。
+  // finalApprover = 全公司唯一的終審者（Boss）。
+  const finalApprover = await getFinalApprover()
+  const finalApproverId = finalApprover?.id ?? null
+  const managerId = user?.managerId ?? null
+
+  let approverId: string | null = managerId   // 一審者，預設為直屬主管
+  let secondApproverId: string | null = null  // 二審者；null = 不需二審（單階段）
+  let autoApprove = false                      // 終審者本人送單 → 自動核准
+
+  if (finalApproverId && userId === finalApproverId) {
+    // 終審者本人送單：沒有上層可審 → 自動核准
+    autoApprove = true
+    approverId = null
+  } else if (finalApproverId) {
+    if (!managerId || managerId === finalApproverId) {
+      // 沒主管，或主管本身就是終審者 → 單階段，由終審者擔任唯一審核者
+      approverId = finalApproverId
+      secondApproverId = null
+    } else {
+      // 標準兩階段：主管一審 → 終審者二審
+      approverId = managerId
+      secondApproverId = finalApproverId
+    }
+  }
+  // finalApproverId 為 null（尚未設定終審者）→ fail-safe：維持原單階段（approverId = managerId）
+
   const leaveRequest = await prisma.leaveRequest.create({
     data: {
       userId,
@@ -112,15 +143,16 @@ export async function applyLeave(data: {
       partOfDay: data.partOfDay,
       reason: data.reason,
       durationDays,
-      status: "PENDING",
+      status: autoApprove ? "APPROVED" : "PENDING",
       approverId,
+      secondApproverId,
       backupId,
     }
   });
 
   await logAudit({
     actorId: userId,
-    action: "LEAVE_APPLY",
+    action: autoApprove ? "LEAVE_AUTO_APPROVE" : "LEAVE_APPLY",
     targetType: "LeaveRequest",
     targetId: leaveRequest.id,
     payload: {
@@ -131,44 +163,96 @@ export async function applyLeave(data: {
     },
   })
 
-  if (approverId) {
-    const manager = await prisma.user.findUnique({ where: { id: approverId } });
-    const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
-    const reviewLink = `${siteUrl}/admin/approvals`;
-    const applicantName = displayName(user?.name, user?.chineseName);
+  const applicantName = displayName(user?.name, user?.chineseName);
 
-    if (manager?.email) {
-      await sendLeaveApplicationEmail(
-        manager.email,
-        applicantName,
-        leaveTypeName,
-        start,
-        end,
-        data.partOfDay,
-        durationDays,
-        reviewLink
-      );
-    }
-    // LINE 通知：依主管的 applicationToManager 偏好決定是否推
-    if (shouldSendLine(manager, "applicationToManager")) {
-      await sendLineLeaveApplication(
-        manager!.lineUserId!,
-        applicantName,
-        leaveTypeName,
-        durationDays,
-        reviewLink,
-        leaveRequest.id
-      );
-    }
-  }
+  if (autoApprove) {
+    // 終審者本人 → 直接核准：通知同部門 + 代理人（已核准）。申請人是本人，不另通知結果。
+    await sendApprovedNotifications({
+      applicantUserId: userId,
+      applicantName,
+      departmentId: user?.departmentId ?? null,
+      leaveTypeName,
+      start,
+      end,
+      partOfDay: data.partOfDay,
+      durationDays,
+      backupId,
+    })
+  } else {
+    // 通知一審者（主管，或單階段時的終審者）
+    if (approverId) {
+      const manager = await prisma.user.findUnique({ where: { id: approverId } });
+      const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
+      const reviewLink = `${siteUrl}/admin/approvals`;
 
-  // 代理人通知（選填；申請時尚未核准 = PENDING）
-  if (backupId) {
-    await notifyBackupAssigned(backupId, displayName(user?.name, user?.chineseName), leaveTypeName, start, end, data.partOfDay, durationDays, "PENDING")
+      if (manager?.email) {
+        await sendLeaveApplicationEmail(
+          manager.email,
+          applicantName,
+          leaveTypeName,
+          start,
+          end,
+          data.partOfDay,
+          durationDays,
+          reviewLink
+        );
+      }
+      // LINE 通知：依主管的 applicationToManager 偏好決定是否推
+      if (shouldSendLine(manager, "applicationToManager")) {
+        await sendLineLeaveApplication(
+          manager!.lineUserId!,
+          applicantName,
+          leaveTypeName,
+          durationDays,
+          reviewLink,
+          leaveRequest.id
+        );
+      }
+    }
+
+    // 代理人通知（選填；申請時尚未核准 = PENDING）
+    if (backupId) {
+      await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, data.partOfDay, durationDays, "PENDING")
+    }
   }
 
   revalidatePath("/dashboard")
   return { success: true, request: leaveRequest }
+}
+
+// 兩階段審核：最終核准後的共用通知（同部門 + 代理人「已核准」）。
+// 用於：reviewLeaveAsUser 的最終核准，以及 applyLeave 的終審者自動核准。
+async function sendApprovedNotifications(args: {
+  applicantUserId: string,
+  applicantName: string,
+  departmentId: string | null,
+  leaveTypeName: string,
+  start: Date,
+  end: Date,
+  partOfDay: string,
+  durationDays: number,
+  backupId: string | null,
+}) {
+  const { applicantUserId, applicantName, departmentId, leaveTypeName, start, end, partOfDay, durationDays, backupId } = args
+
+  // 同部門通知：提醒同部門同事誰會請假
+  if (departmentId) {
+    const teammates = await prisma.user.findMany({
+      where: { departmentId, terminatedDate: null, id: { not: applicantUserId } },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    })
+    await Promise.allSettled(teammates.flatMap((t) => {
+      const tasks: Promise<unknown>[] = []
+      if (t.email) tasks.push(sendDepartmentLeaveEmail(t.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
+      if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end))
+      return tasks
+    }))
+  }
+
+  // 代理人正式生效
+  if (backupId) {
+    await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, partOfDay, durationDays, "APPROVED")
+  }
 }
 
 // ----- 通知 helpers（在 actions 內共用，呼叫 email + LINE）-----
@@ -269,18 +353,24 @@ export async function cancelLeave(requestId: string) {
   const partOfDay = request.partOfDay
   const durationDays = request.durationDays
 
-  // 通知原審核主管（不管原狀態，都讓他知道）
-  if (request.approverId) {
-    const manager = await prisma.user.findUnique({
-      where: { id: request.approverId },
+  // 通知相關審核者：一審主管一律通知；若已進二審（firstApprovedAt 非 null）或原為已核准，
+  // 終審者（Boss）也是目前/曾經持有該單的人，一併通知。
+  const approverIds = new Set<string>()
+  if (request.approverId) approverIds.add(request.approverId)
+  if (request.secondApproverId && (request.firstApprovedAt || previousStatus === "APPROVED")) {
+    approverIds.add(request.secondApproverId)
+  }
+  if (approverIds.size > 0) {
+    const approvers = await prisma.user.findMany({
+      where: { id: { in: [...approverIds] } },
       select: { email: true, lineUserId: true, lineNotifyPrefs: true },
-    });
-    if (manager?.email) {
-      await sendLeaveCancelledEmail(manager.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus)
-    }
-    if (shouldSendLine(manager, "leaveCancelled")) {
-      await sendLineLeaveCancelled(manager!.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus)
-    }
+    })
+    await Promise.allSettled(approvers.flatMap((a) => {
+      const tasks: Promise<unknown>[] = []
+      if (a.email) tasks.push(sendLeaveCancelledEmail(a.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
+      if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
+      return tasks
+    }))
   }
 
   // 已核准 → 同部門也要通知（原本同部門已通知會請假，現在撤銷了）
@@ -396,6 +486,9 @@ export async function updateLeave(requestId: string, data: {
       reason: data.reason,
       durationDays: newDuration,
       backupId: newBackupId,
+      // 兩階段審核：員工修改內容 → 退回重跑一審（清掉一審通過狀態與二審留言，由主管重新審）
+      firstApprovedAt: null,
+      secondReviewMessage: null,
     }
   });
 
@@ -507,13 +600,6 @@ export async function reviewLeaveAsUser(
   const dbUser = await prisma.user.findUnique({ where: { id: actorId } });
   if (!dbUser || dbUser.terminatedDate) throw new Error("Unauthorized");
 
-  const isAssignedManager = request.approverId === actorId;
-  const hasPrivilegedRole = dbUser.role === "ADMIN" || dbUser.role === "MANAGER";
-
-  if (!isAssignedManager && !hasPrivilegedRole) {
-    throw new Error("Forbidden");
-  }
-
   // 只能審核「待審核」狀態的假單，避免對已核准/已駁回/已銷假的單再次審核
   if (request.status !== "PENDING") {
     throw new Error("此假單目前狀態為「" + (
@@ -523,111 +609,151 @@ export async function reviewLeaveAsUser(
     ) + "」，無法再次審核！");
   }
 
+  // 兩階段審核：用 firstApprovedAt 推導目前階段。
+  // firstApprovedAt 為 null → 等一審；非 null → 等二審。secondApproverId 為 null → 此單單階段（一審即最終）。
+  const isTwoStage = request.secondApproverId != null
+  const inFirstStage = request.firstApprovedAt == null
+  const isAdmin = dbUser.role === "ADMIN"
+
+  // 權限：一審 = 指定一審者(approverId) 或 ADMIN；二審 = 指定二審者(secondApproverId) 或 ADMIN（代審）
+  const allowed = inFirstStage
+    ? (request.approverId === actorId || isAdmin)
+    : (request.secondApproverId === actorId || isAdmin)
+  if (!allowed) {
+    throw new Error("Forbidden");
+  }
+
+  // 一審通過但此單仍需二審 → 不是最終核准，僅推進到二審
+  const isFirstStagePass = status === "APPROVED" && inFirstStage && isTwoStage
+  // 最終核准：單階段的一審核准、或兩階段的二審核准
+  const isFinalApprove = status === "APPROVED" && !isFirstStagePass
+
   // 用 transaction 確保「讀取額度 → 檢查可用 → 更新狀態」是原子操作，
-  // 避免兩位主管同時審核兩張單時各自讀到舊資料，雙雙通過導致超支。
-  // updateMany 加上 status: PENDING 的條件，若已被別人改掉會回 count=0 並中止。
+  // updateMany 的 where 帶階段條件（firstApprovedAt），若已被別人改掉會回 count=0 並中止。
   await prisma.$transaction(async (tx) => {
-    if (status === "APPROVED") {
-      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
-      const actualAvailable = balance.total - balance.used;
-      if (request.durationDays > actualAvailable) {
-        throw new Error(`${request.leaveType.name}不足！${request.leaveType.name} 目前可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
-      }
+    if (status === "REJECTED") {
+      // 任何階段駁回 → 直接 REJECTED 結束（一審寫 reviewMessage、二審寫 secondReviewMessage）
+      const result = await tx.leaveRequest.updateMany({
+        where: { id: requestId, status: "PENDING" },
+        data: inFirstStage
+          ? { status: "REJECTED", reviewMessage: trimmedMessage ?? null }
+          : { status: "REJECTED", secondReviewMessage: trimmedMessage ?? null },
+      });
+      if (result.count === 0) throw new Error("此假單已被其他人處理過，請重新整理頁面！");
+      return
     }
 
-    const result = await tx.leaveRequest.updateMany({
-      where: { id: requestId, status: "PENDING" },
-      data: { status, reviewMessage: trimmedMessage ?? null }
-    });
-    if (result.count === 0) {
-      throw new Error("此假單已被其他人處理過，請重新整理頁面！");
+    if (isFirstStagePass) {
+      // 一審通過（兩階段）：硬擋用「一審算式」total - used - pendingSecond，
+      // 把已過一審、等二審的其他單也預留掉，先擋掉未來二審必然不足的單。
+      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
+      const available = balance.total - balance.used - balance.pendingSecond;
+      if (request.durationDays > available) {
+        throw new Error(`${request.leaveType.name}不足！一審可核准天數為 ${available} 天（您正嘗試核准 ${request.durationDays} 天）。`);
+      }
+      const result = await tx.leaveRequest.updateMany({
+        where: { id: requestId, status: "PENDING", firstApprovedAt: null },
+        data: { firstApprovedAt: new Date(), reviewMessage: trimmedMessage ?? null },
+      });
+      if (result.count === 0) throw new Error("此假單已被其他人處理過，請重新整理頁面！");
+      return
     }
+
+    // 最終核准：硬擋用「二審算式」total - used（不扣 pending，避免把正在核准的自己扣掉）
+    const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
+    const actualAvailable = balance.total - balance.used;
+    if (request.durationDays > actualAvailable) {
+      throw new Error(`${request.leaveType.name}不足！${request.leaveType.name} 目前可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
+    }
+    const result = await tx.leaveRequest.updateMany({
+      where: inFirstStage
+        ? { id: requestId, status: "PENDING", firstApprovedAt: null }
+        : { id: requestId, status: "PENDING", firstApprovedAt: { not: null } },
+      data: inFirstStage
+        ? { status: "APPROVED", reviewMessage: trimmedMessage ?? null }
+        : { status: "APPROVED", secondReviewMessage: trimmedMessage ?? null },
+    });
+    if (result.count === 0) throw new Error("此假單已被其他人處理過，請重新整理頁面！");
   });
 
   await logAudit({
     actorId,
-    action: status === "APPROVED" ? "LEAVE_APPROVE" : "LEAVE_REJECT",
+    action: status === "REJECTED" ? "LEAVE_REJECT"
+      : isFirstStagePass ? "LEAVE_APPROVE_L1"
+      : isTwoStage ? "LEAVE_APPROVE_L2" : "LEAVE_APPROVE",
     targetType: "LeaveRequest",
     targetId: requestId,
-    payload: trimmedMessage ? { message: trimmedMessage } : undefined,
+    payload: { stage: inFirstStage ? 1 : 2, ...(trimmedMessage ? { message: trimmedMessage } : {}) },
   })
 
-  // 通知申請人本人：Email + LINE 雙軌
-  const applicantNameForResult = displayName(request.user?.name, request.user?.chineseName)
-  if (request.user?.email) {
-    await sendLeaveResultEmail(
-      request.user.email,
-      applicantNameForResult,
-      request.leaveType.name,
-      request.startDate,
-      request.endDate,
-      request.partOfDay,
-      request.durationDays,
-      status,
-      trimmedMessage,
-    );
-  }
-  if (shouldSendLine(request.user, "reviewResult")) {
-    await sendLineLeaveResult(
-      request.user.lineUserId!,
-      request.leaveType.name,
-      status,
-      trimmedMessage
-    );
-  }
+  const applicantName = displayName(request.user?.name, request.user?.chineseName)
+  const leaveTypeName = request.leaveType.name
+  const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
+  const reviewLink = `${siteUrl}/admin/approvals`
 
-  // 同部門通知：只在「核准」後送，提醒同部門同事誰會請假
-  if (status === "APPROVED" && request.user.departmentId) {
-    const teammates = await prisma.user.findMany({
-      where: {
+  if (isFirstStagePass) {
+    // 一審通過 → 通知終審者（Boss）進二審；並通知申請人「一審通過、等待終審」
+    const boss = await prisma.user.findUnique({
+      where: { id: request.secondApproverId! },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    })
+    const managerName = displayName(dbUser.name, dbUser.chineseName)
+    if (boss?.email) {
+      await sendBossReviewEmail(boss.email, applicantName, managerName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, reviewLink)
+    }
+    if (shouldSendLine(boss, "bossReview")) {
+      await sendLineBossReview(boss!.lineUserId!, applicantName, leaveTypeName, request.durationDays, reviewLink, requestId)
+    }
+    if (request.user?.email) {
+      await sendFirstApprovedEmail(request.user.email, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
+    }
+    if (shouldSendLine(request.user, "firstApproved")) {
+      await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName)
+    }
+  } else {
+    // 最終結果（核准或駁回）→ 通知申請人本人：Email + LINE 雙軌
+    if (request.user?.email) {
+      await sendLeaveResultEmail(
+        request.user.email,
+        applicantName,
+        leaveTypeName,
+        request.startDate,
+        request.endDate,
+        request.partOfDay,
+        request.durationDays,
+        status,
+        trimmedMessage,
+      );
+    }
+    if (shouldSendLine(request.user, "reviewResult")) {
+      await sendLineLeaveResult(request.user.lineUserId!, leaveTypeName, status, trimmedMessage)
+    }
+
+    if (isFinalApprove) {
+      // 最終核准 → 通知同部門 + 代理人「已核准」
+      await sendApprovedNotifications({
+        applicantUserId: request.userId,
+        applicantName,
         departmentId: request.user.departmentId,
-        terminatedDate: null,
-        id: { not: request.userId },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        lineUserId: true,
-        lineNotifyPrefs: true,
-      },
-    });
-
-    const applicantName = applicantNameForResult
-    const leaveTypeName = request.leaveType.name
-    const start = request.startDate
-    const end = request.endDate
-    const partOfDay = request.partOfDay
-    const durationDays = request.durationDays
-
-    // 並行送、單一失敗不擋其他人，也不擋主流程
-    await Promise.allSettled(
-      teammates.flatMap((t) => {
-        const tasks: Promise<unknown>[] = []
-        if (t.email) {
-          tasks.push(sendDepartmentLeaveEmail(t.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
-        }
-        if (shouldSendLine(t, "departmentLeave")) {
-          tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end))
-        }
-        return tasks
+        leaveTypeName,
+        start: request.startDate,
+        end: request.endDate,
+        partOfDay: request.partOfDay,
+        durationDays: request.durationDays,
+        backupId: request.backupId,
       })
-    )
-  }
-
-  // 代理人通知：核准後正式生效；駁回則解除代理
-  if (request.backupId) {
-    if (status === "APPROVED") {
-      await notifyBackupAssigned(request.backupId, applicantNameForResult, request.leaveType.name, request.startDate, request.endDate, request.partOfDay, request.durationDays, "APPROVED")
-    } else {
-      await notifyBackupRemoved(request.backupId, applicantNameForResult, request.leaveType.name, request.startDate, request.endDate, request.partOfDay, request.durationDays, "REJECTED")
+    } else if (request.backupId) {
+      // 駁回 → 解除代理
+      await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, "REJECTED")
     }
   }
 
   revalidatePath("/admin/approvals")
   revalidatePath("/dashboard")
   revalidatePath("/gantt")
-  return { success: true }
+  // outcome：FIRST_APPROVED = 一審通過待二審；APPROVED = 最終核准；REJECTED = 駁回
+  const outcome = status === "REJECTED" ? "REJECTED" : isFirstStagePass ? "FIRST_APPROVED" : "APPROVED"
+  return { success: true, outcome }
 }
 
 // 批次審核：對每張單獨立呼叫 reviewLeave，失敗（如已被別人改、額度不足）獨立回報但不中止整批

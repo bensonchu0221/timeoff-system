@@ -18,6 +18,19 @@ type PendingRequest = {
   leaveType: { name: string; requireProof: boolean }
   // 已上傳附件數；0 表示尚未上傳
   attachmentCount: number
+  // 兩階段審核：目前待審階段（1=主管一審、2=Boss 二審）；isTwoStage 此單是否需二審
+  stage: number
+  isTwoStage: boolean
+}
+
+// 階段標籤：兩階段單顯示「一審 / 二審」；單階段不顯示
+function StageBadge({ stage, isTwoStage }: { stage: number; isTwoStage: boolean }) {
+  if (!isTwoStage) return null
+  return stage === 2 ? (
+    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-[#7A9A8A]/20 text-[#5c7a6b] font-medium">二審待終審</span>
+  ) : (
+    <span className="inline-block px-2 py-0.5 text-xs rounded-full border border-[#A9ADA9] text-[#6d716f] font-medium">一審</span>
+  )
 }
 
 // 單日就只秀一個日期，多日才顯示區間（與 LINE / email 通知的格式一致）
@@ -181,7 +194,10 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                       <div className="h-8 w-8 rounded-full bg-gray-200 mr-3"></div>
                     )}
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{req.user.name}</div>
+                      <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                        {req.user.name}
+                        <StageBadge stage={req.stage} isTwoStage={req.isTwoStage} />
+                      </div>
                       <div className="text-sm text-gray-500">{req.user.department?.name || "未設定部門"}</div>
                     </div>
                   </div>
@@ -268,7 +284,10 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                 <div className="h-9 w-9 rounded-full bg-gray-200" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-900 truncate">{req.user.name}</div>
+                <div className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
+                  {req.user.name}
+                  <StageBadge stage={req.stage} isTwoStage={req.isTwoStage} />
+                </div>
                 <div className="text-xs text-gray-500 truncate">{req.user.department?.name || "未設定部門"}</div>
               </div>
             </div>

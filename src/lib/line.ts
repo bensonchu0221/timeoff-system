@@ -11,6 +11,8 @@ export type LineNotifyKey =
   | "leaveUpdated"           // 主管：員工修改了 PENDING 假單
   | "backupAssigned"         // 被指定為代理人
   | "escalation"             // admin：24h 未審核升級
+  | "bossReview"             // 終審者（Boss）：一審通過、待二審終審
+  | "firstApproved"          // 申請人：一審已通過、等待終審
 
 /**
  * 判斷是否該發 LINE 給該使用者。
@@ -137,13 +139,42 @@ export async function sendLineLeaveApplication(
   await linePush(toLineUserId, [{ type: "flex", altText, contents: flex }])
 }
 
+/**
+ * 兩階段審核：通知終審者（Boss）— 一審已通過、待二審。
+ * 沿用申請的 Flex（核准/駁回 postback 走同一條 reviewLeaveAsUser，會依 actor+階段自動判斷為二審）。
+ */
+export async function sendLineBossReview(
+  toLineUserId: string,
+  applicantName: string,
+  leaveType: string,
+  duration: number,
+  link: string,
+  requestId: string
+): Promise<void> {
+  const altText = `📩 ${applicantName} 的假單已過一審，待您終審`
+  const flex = buildLeaveApplicationFlex(applicantName, leaveType, duration, link, requestId, "📩 終審待審核（一審已通過）")
+  await linePush(toLineUserId, [{ type: "flex", altText, contents: flex }])
+}
+
+/**
+ * 兩階段審核：通知申請人 — 一審已通過、等待終審。
+ */
+export async function sendLineFirstApproved(
+  toLineUserId: string,
+  leaveType: string,
+): Promise<void> {
+  const text = `🕓 一審通過\n假別：${leaveType}\n\n已通過主管審核，送交終審者做最後核准，結果出爐會再通知您。`
+  await linePush(toLineUserId, [{ type: "text", text }])
+}
+
 // Flex Message bubble：含申請資訊 + 「快速核准」+「駁回」+「前往網頁」三顆 button
 function buildLeaveApplicationFlex(
   applicantName: string,
   leaveType: string,
   duration: number,
   link: string,
-  requestId: string
+  requestId: string,
+  title: string = "📩 新假單待審核"
 ) {
   return {
     type: "bubble",
@@ -153,7 +184,7 @@ function buildLeaveApplicationFlex(
       contents: [
         {
           type: "text",
-          text: "📩 新假單待審核",
+          text: title,
           weight: "bold",
           size: "md",
           color: "#ffffff",

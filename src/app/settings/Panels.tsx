@@ -311,6 +311,18 @@ const PREF_DEFS: PrefDef[] = [
     managerOnly: false,
   },
   {
+    key: "firstApproved",
+    label: "我的假單一審通過",
+    description: "我的假單通過主管一審、送交 Boss 終審時推播",
+    managerOnly: false,
+  },
+  {
+    key: "bossReview",
+    label: "待我終審（Boss）",
+    description: "有假單通過一審、等我做最後核准時推播",
+    managerOnly: true,
+  },
+  {
     key: "departmentLeave",
     label: "同部門請假提醒",
     description: "同部門有人請假核准時推播",
