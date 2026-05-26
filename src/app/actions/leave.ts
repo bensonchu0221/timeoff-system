@@ -653,7 +653,8 @@ export async function reviewLeaveAsUser(
       }
       const result = await tx.leaveRequest.updateMany({
         where: { id: requestId, status: "PENDING", firstApprovedAt: null },
-        data: { firstApprovedAt: new Date(), reviewMessage: trimmedMessage ?? null },
+        // escalatedAt 歸零：超時提醒對二審重新計時（從 firstApprovedAt 起算 2 天）
+        data: { firstApprovedAt: new Date(), reviewMessage: trimmedMessage ?? null, escalatedAt: null },
       });
       if (result.count === 0) throw new Error("此假單已被其他人處理過，請重新整理頁面！");
       return

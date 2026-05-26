@@ -10,7 +10,7 @@ export type LineNotifyKey =
   | "leaveCancelled"         // 主管 / 同部門：收到撤銷通知
   | "leaveUpdated"           // 主管：員工修改了 PENDING 假單
   | "backupAssigned"         // 被指定為代理人
-  | "escalation"             // admin：24h 未審核升級
+  | "escalation"             // 當前審核者：該階段超過 2 天未審的超時提醒
   | "bossReview"             // 終審者（Boss）：一審通過、待二審終審
   | "firstApproved"          // 申請人：一審已通過、等待終審
 
@@ -417,7 +417,7 @@ export async function sendLineBackupRemoved(
 }
 
 /**
- * 24 小時未審核升級（給 admin）
+ * 超時未審核提醒（給當前階段審核者：一審主管 / 二審 Boss）
  */
 export async function sendLineEscalation(
   toLineUserId: string,

@@ -87,9 +87,9 @@ export default async function FlowPage() {
             behavior="待審 → 通知目前持單的審核者（一審主管或已進二審的 Boss）；已核准 → 主管 + Boss + 同部門 + 代理人都收到撤銷通知。員工該期間如常出勤"
           />
           <ScenarioCard
-            title="24 小時未審核自動升級"
-            trigger="假單 PENDING（含等一審 / 等二審）超過 24 小時"
-            behavior="cron 每小時檢查，自動將該單升級給所有 admin（admin 兩關都能代審；每張單只升一次）"
+            title="超時未審核提醒"
+            trigger="假單在某一審核階段（等一審 / 等二審）超過 2 天未處理"
+            behavior="cron 平日 09–18 每小時檢查，提醒「目前該審的人」（一審→主管、二審→Boss）；每階段各算 2 天、每階段只提醒一次"
           />
           <ScenarioCard
             title="每日 11:00 待審清單"
@@ -132,7 +132,7 @@ export default async function FlowPage() {
               <NotifyRow event="修改（退回一審）" rcpts={["-", "✓", "-", "-", "✓ *", "-"]} />
               <NotifyRow event="撤銷（待審）" rcpts={["-", "✓", "✓ ***", "-", "✓ 解除", "-"]} />
               <NotifyRow event="撤銷（已核准）" rcpts={["-", "✓", "✓", "✓", "✓ 解除", "-"]} />
-              <NotifyRow event="24h 未審核升級" rcpts={["-", "-", "-", "-", "-", "✓"]} />
+              <NotifyRow event="超時未審核提醒（每階段 2 天）" rcpts={["-", "✓", "✓", "-", "-", "-"]} />
               <NotifyRow event="每日 11:00 待審清單" rcpts={["-", "✓", "✓", "-", "-", "-"]} />
               <NotifyRow event="每日 10:00 全公司請假名單 **" rcpts={["✓", "✓", "✓", "✓", "✓", "✓"]} />
             </tbody>

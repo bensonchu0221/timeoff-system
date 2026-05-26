@@ -172,8 +172,11 @@ npx prisma db push --accept-data-loss
 |---|---|---|
 | `timeoff-daily-leave-roster` | `0 10 * * *` Asia/Taipei | `/api/cron/daily-leave-roster` |
 | `timeoff-daily-pending-reminder` | `0 11 * * *` Asia/Taipei | `/api/cron/daily-pending-reminder` |
+| `timeoff-escalate-pending` | `0 9-18 * * 1-5` Asia/Taipei（平日 09–18 每小時） | `/api/cron/escalate-pending` |
 
-兩個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+三個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+
+`escalate-pending`：找出當前審核階段已超過 2 天未處理的待審單，通知「目前該審的人」（一審→主管、二審→Boss），每階段各算 2 天、每階段只通知一次。
 
 ---
 

@@ -312,7 +312,7 @@ export async function sendBackupRemovedEmail(
   await sendBrevoEmail(toEmail, subject, html)
 }
 
-// 24 小時未審核升級通知（給 admin）
+// 超時未審核提醒（給當前階段審核者：一審主管 / 二審 Boss）
 export async function sendEscalationEmail(
   toEmail: string,
   applicantName: string,
@@ -326,10 +326,10 @@ export async function sendEscalationEmail(
   link: string
 ) {
   const range = formatLeavePeriod(startDate, endDate, partOfDay)
-  const subject = `[未審核升級] ${applicantName} 的假單已 ${hoursPending}h 未審（${range}）`
+  const subject = `[超時未審核] ${applicantName} 的假單已 ${hoursPending}h 待你審核（${range}）`
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-      <h2 style="color: #C48F8B;">假單未審核升級提醒</h2>
+      <h2 style="color: #C48F8B;">假單超時未審核提醒</h2>
       <p style="color: #555; line-height: 1.5;">下列假單超過 2 天未審核：</p>
       <ul style="color: #555; line-height: 1.7;">
         <li>申請人：<strong>${escapeHtml(applicantName)}</strong></li>

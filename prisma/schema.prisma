@@ -188,7 +188,8 @@ model LeaveRequest {
   backupId       String?
   backup         User?       @relation("BackupLeaveRequests", fields: [backupId], references: [id])
 
-  // 24 小時未審核升級用：當 cron 把 pending 單升級給 admin 後寫入時間，避免重複升級
+  // 超時未審提醒用：cron 通知當前審核者後寫入時間，避免同階段重複提醒。
+  // 每階段各算 2 天，一審通過時會歸零讓二審重新計時（一審看 createdAt、二審看 firstApprovedAt）。
   escalatedAt    DateTime?
 
   user           User        @relation("UserLeaveRequests", fields: [userId], references: [id])
