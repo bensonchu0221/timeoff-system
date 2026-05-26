@@ -100,7 +100,7 @@ export default async function RootLayout({
                       </div>
                       <ul
                         tabIndex={0}
-                        className="dropdown-content menu bg-white text-gray-800 rounded-md shadow-xl z-50 py-1 border border-gray-100 mt-1 w-40 text-sm"
+                        className="dropdown-content menu bg-white text-gray-800 rounded-md shadow-xl z-50 py-1 border border-gray-100 mt-1 w-40 text-sm before:absolute before:w-full before:h-2 before:-top-2 before:left-0"
                       >
                         <li>
                           <a href="/admin/users" className="block px-4 py-2 hover:bg-gray-100 transition rounded-none">
