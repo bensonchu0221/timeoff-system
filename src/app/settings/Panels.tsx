@@ -348,8 +348,8 @@ const PREF_DEFS: PrefDef[] = [
   },
   {
     key: "escalation",
-    label: "假單超時未審核提醒",
-    description: "我經手的假單在某審核階段超過 2 天未審時推播提醒（一審找主管、二審找 Boss）",
+    label: "48 小時未審假單提醒",
+    description: "我經手的假單超過 48 小時未審時，提醒我撥空處理（一審找主管、二審找 Boss）",
     managerOnly: true, // admin / manager 才看得到
   },
 ]

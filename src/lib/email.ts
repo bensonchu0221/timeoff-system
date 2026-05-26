@@ -326,11 +326,11 @@ export async function sendEscalationEmail(
   link: string
 ) {
   const range = formatLeavePeriod(startDate, endDate, partOfDay)
-  const subject = `[超時未審核] ${applicantName} 的假單已 ${hoursPending}h 待你審核（${range}）`
+  const subject = `[假單待審提醒] ${applicantName} 的假單已 ${hoursPending}h 待你審核（${range}）`
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-      <h2 style="color: #C48F8B;">假單超時未審核提醒</h2>
-      <p style="color: #555; line-height: 1.5;">下列假單超過 2 天未審核：</p>
+      <h2 style="color: #C48F8B;">48 小時未審假單提醒</h2>
+      <p style="color: #555; line-height: 1.5;">以下假單已超過 48 小時尚未審核，再麻煩您撥空處理：</p>
       <ul style="color: #555; line-height: 1.7;">
         <li>申請人：<strong>${escapeHtml(applicantName)}</strong></li>
         <li>原指派主管：${escapeHtml(managerName || "未指派")}</li>

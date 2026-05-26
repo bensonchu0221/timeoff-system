@@ -431,7 +431,7 @@ export async function sendLineEscalation(
 ): Promise<void> {
   const range = formatDateRange(startDate, endDate)
   const text =
-    `🚨 假單超時未審核\n` +
+    `⏰ 48 小時未審假單提醒\n` +
     `申請人：${applicantName}\n` +
     `原主管：${managerName || "未指派"}\n` +
     `假別：${leaveType}（${range}）\n` +
