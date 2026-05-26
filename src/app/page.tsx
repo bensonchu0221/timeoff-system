@@ -31,6 +31,9 @@ export default async function DashboardPage() {
 
   const year = new Date().getFullYear()
 
+  // Impersonate 模式：admin 以員工視角檢視時，額外顯示資料庫 id 方便除錯
+  const isImpersonating = !!(session as any).impersonating
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email! },
     include: { manager: true, department: { select: { name: true } } }
@@ -86,6 +89,11 @@ export default async function DashboardPage() {
           <p className="mt-2 text-gray-600">
             部門：{user.department?.name || '未設定'} | 直屬主管：{user.manager?.name || '無'}
           </p>
+          {isImpersonating && (
+            <p className="mt-1 inline-block text-xs font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+              User ID: {user.id}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <CalendarSubscribeButton />
@@ -143,6 +151,9 @@ export default async function DashboardPage() {
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">{req.leaveType.name}</div>
                         <div className="text-gray-500 text-xs">{req.durationDays} 天</div>
+                        {isImpersonating && (
+                          <div className="mt-1 text-[10px] font-mono text-amber-700">ID: {req.id}</div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-gray-900">

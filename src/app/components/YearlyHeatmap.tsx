@@ -59,14 +59,15 @@ export function YearlyHeatmap({ leaves, year }: {
 
   return (
     <div className="hidden sm:block bg-white p-6 rounded-lg shadow border border-gray-100 mb-8 overflow-hidden">
-      <ScrollContainer className="flex justify-between w-full overflow-x-auto pb-4 gap-1 select-none" hideScrollbars={false}>
+      <ScrollContainer className="flex justify-between w-full overflow-x-auto pb-4 gap-[2px] select-none" hideScrollbars={false}>
         {months.map(month => {
           const days = getDaysInMonth(month)
           const firstDay = days[0].date.getDay() // 0 (Sun) to 6 (Sat)
-          const padding = firstDay
+          // 週一作為每週開頭：getDay() 從週日起算，轉成週一起算（週一=0 ... 週日=6）
+          const padding = (firstDay + 6) % 7
 
           return (
-            <div key={month} className="grid grid-cols-7 gap-0 h-fit border-l border-white first:border-l-0 flex-1 min-w-[60px]">
+            <div key={month} className="grid grid-cols-7 gap-0 h-fit flex-1 min-w-[60px]">
               {/* 補足月份開頭的空白 */}
               {Array.from({ length: padding }).map((_, i) => (
                 <div key={`pad-${i}`} className="w-full aspect-square bg-transparent" />
