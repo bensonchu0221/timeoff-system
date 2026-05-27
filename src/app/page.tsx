@@ -89,7 +89,7 @@ export default async function DashboardPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            {user.name} 的個人儀表板
+            {user.name} 的請假紀錄表
           </h1>
           <p className="mt-2 text-gray-600">
             部門：{user.department?.name || '未設定'} | 直屬主管：{user.manager?.name || '無'}

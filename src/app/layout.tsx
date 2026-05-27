@@ -36,10 +36,20 @@ export default async function RootLayout({
 
   let pendingCount = 0;
   if (session?.user?.id && (isAdmin || isManager)) {
+    // 兩階段審核分流（與 /admin/approvals、LINE 推播一致）：
+    // - ADMIN：全公司所有 PENDING（兩關都能代審）。
+    // - 其他人：自己待審的一審（approverId 本人且 firstApprovedAt=null）
+    //   ＋自己待審的二審（secondApproverId 本人且 firstApprovedAt 非 null，終審者才有）。
+    // 修正前只看 approverId+PENDING，導致一審過、單已進二審後仍把該單算給一審主管。
     pendingCount = await prisma.leaveRequest.count({
       where: {
-        approverId: session.user.id,
-        status: "PENDING"
+        status: "PENDING",
+        ...(isAdmin ? {} : {
+          OR: [
+            { approverId: session.user.id, firstApprovedAt: null },
+            { secondApproverId: session.user.id, firstApprovedAt: { not: null } },
+          ],
+        }),
       }
     });
   }

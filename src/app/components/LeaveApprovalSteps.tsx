@@ -54,10 +54,11 @@ export function LeaveApprovalSteps({
   ]
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-start gap-1">
       {steps.map((step, i) => (
         <Fragment key={i}>
-          {i > 0 && <div className={`h-0.5 w-4 rounded ${connectorClass(steps[i - 1].state)}`} />}
+          {/* 連接線對齊圓圈垂直中心：圓圈 h-5=20px，中心約 10px，連接線 h-0.5=2px → mt-[9px] */}
+          {i > 0 && <div className={`mt-[9px] h-0.5 w-4 rounded ${connectorClass(steps[i - 1].state)}`} />}
           <div className="flex flex-col items-center gap-0.5">
             <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] leading-none ${dotClass(step.state)}`}>
               {step.state === "done" ? "✓" : step.state === "rejected" ? "✕" : i + 1}

@@ -68,8 +68,8 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
     current.setDate(current.getDate() + 1)
   }
 
-  // 員工版不可審核 PENDING 假單；只有 MANAGER/ADMIN 才允許在格子點開審核 modal
-  const canReview = user.role === "MANAGER" || user.role === "ADMIN"
+  // 甘特圖逐格審核權限由 GanttChart 依「該單當前階段的指定審核者」判斷（與 reviewLeaveAsUser 一致）：
+  // 主管只能審自己的部屬（approverId 本人），終審者審二審單（secondApproverId 本人），admin 全可。
   // 銷假（含刪附件、不發通知）僅限 ADMIN（HR）
   const isAdmin = user.role === "ADMIN"
 
@@ -87,7 +87,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
         targetUsers={targetUsers}
         leaves={leaves}
         today={today}
-        canReview={canReview}
+        currentUserId={user.id}
         isAdmin={isAdmin}
       />
     </div>

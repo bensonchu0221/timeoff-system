@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { formatTaipeiDate } from "@/lib/date-format"
 import { X, CalendarDays, TrendingUp, TrendingDown } from "lucide-react"
 import { fetchUserLeaveLedger } from "@/app/actions/ledger"
@@ -18,9 +18,6 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
   const [ledger, setLedger] = useState<LedgerEvent[]>([])
   const [hireDate, setHireDate] = useState<Date | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  
-  // Use a ref to scroll to the bottom of the timeline
-  const timelineEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen && activeTypeId) {
@@ -37,14 +34,6 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
       })
     }
   }, [isOpen, activeTypeId])
-
-  useEffect(() => {
-    if (isOpen && !isLoading && ledger.length > 0) {
-      setTimeout(() => {
-        timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-      }, 100)
-    }
-  }, [isOpen, isLoading, ledger])
 
   return (
     <>
@@ -184,8 +173,6 @@ export function HistoryLedgerDrawer({ leaveTypes }: { leaveTypes: LeaveTypeMinim
               </li>
             </ul>
           )}
-          {/* Invisible element to scroll to */}
-          <div ref={timelineEndRef} className="h-4"></div>
         </div>
       </div>
     </>

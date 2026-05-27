@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DragScrollContainer } from "@/app/components/DragScrollContainer"
 import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react"
@@ -11,14 +11,14 @@ export function GanttChart({
   targetUsers,
   leaves,
   today,
-  canReview = false,
+  currentUserId,
   isAdmin = false,
 }: {
   days: Date[],
   targetUsers: any[],
   leaves: any[],
   today: Date,
-  canReview?: boolean,
+  currentUserId: string,
   isAdmin?: boolean,
 }) {
   const router = useRouter()
@@ -26,6 +26,13 @@ export function GanttChart({
   const scrollRef = useRef<any>(null)
   const todayRef = useRef<HTMLTableHeaderCellElement>(null)
   const firstOfMonthRef = useRef<HTMLTableHeaderCellElement>(null)
+
+  // 三個前端篩選器（條件疊加 AND）：網域、部門過濾員工列；假別過濾假單色塊。
+  const [selectedDomain, setSelectedDomain] = useState("")   // "" = 全部網域
+  const [selectedDept, setSelectedDept] = useState("")       // "" = 全部部門
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]) // [] = 全部假別（多選）
+  const toggleType = (name: string) =>
+    setSelectedTypes(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])
 
   // 依年-月分組 days，計算每個月份佔用的天數 (colSpan)
   const monthGroups: { year: number; month: number; count: number }[] = []
@@ -85,6 +92,24 @@ export function GanttChart({
   const currentMonthStr = searchParams.get("month") || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
   const currentMonthLabel = currentMonthStr
 
+  // 從已載入資料動態產生篩選選項（去重）
+  const domainOptions = Array.from(new Set(targetUsers.map(u => u.email?.split("@")[1]).filter(Boolean)))
+  const deptOptions = Array.from(new Set(targetUsers.map(u => u.department?.name ?? "未設定")))
+  const leaveTypeOptions = Array.from(new Set(leaves.map(l => l.leaveType.name)))
+
+  // 假別篩選作用在色塊：選了假別只保留該假別的假單
+  const visibleLeaves = selectedTypes.length === 0
+    ? leaves
+    : leaves.filter(l => selectedTypes.includes(l.leaveType.name))
+
+  // 員工列篩選（三條件 AND）：網域、部門過濾本人；假別啟用時隱藏此窗口內無符合假單的員工
+  const filteredUsers = targetUsers.filter(u => {
+    if (selectedDomain && u.email?.split("@")[1] !== selectedDomain) return false
+    if (selectedDept && (u.department?.name ?? "未設定") !== selectedDept) return false
+    if (selectedTypes.length > 0 && !visibleLeaves.some(l => l.userId === u.id)) return false
+    return true
+  })
+
   return (
     <div className="space-y-4">
       {/* Navigation Controls */}
@@ -110,7 +135,7 @@ export function GanttChart({
         </div>
 
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={goToToday}
             className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-medium rounded-md hover:bg-gray-50 border border-gray-200 transition shadow-sm"
           >
@@ -118,6 +143,54 @@ export function GanttChart({
             回今天
           </button>
         </div>
+      </div>
+
+      {/* 篩選器：網域、部門（單選下拉）＋ 假別（多選膠囊），三者條件疊加 */}
+      <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+        <select
+          value={selectedDomain}
+          onChange={e => setSelectedDomain(e.target.value)}
+          className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
+        >
+          <option value="">所有網域</option>
+          {domainOptions.map(d => (
+            <option key={d} value={d}>@{d}</option>
+          ))}
+        </select>
+
+        <select
+          value={selectedDept}
+          onChange={e => setSelectedDept(e.target.value)}
+          className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
+        >
+          <option value="">所有部門</option>
+          {deptOptions.map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+
+        {leaveTypeOptions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-gray-500">假別：</span>
+            {leaveTypeOptions.map(name => {
+              const active = selectedTypes.includes(name)
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => toggleType(name)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition ${
+                    active
+                      ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {name}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200 relative">
@@ -176,9 +249,16 @@ export function GanttChart({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {targetUsers.map(u => {
-                const userLeaves = leaves.filter(l => l.userId === u.id)
-                
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={days.length + 1} className="px-6 py-10 text-center text-sm text-gray-500">
+                    無符合篩選條件的成員
+                  </td>
+                </tr>
+              )}
+              {filteredUsers.map(u => {
+                const userLeaves = visibleLeaves.filter(l => l.userId === u.id)
+
                 return (
                   <tr key={u.id} className="hover:bg-gray-50 group">
                     <td className="sticky left-0 z-20 bg-white px-3 py-2 border-r border-gray-200 text-xs text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50 transition-colors">
@@ -229,11 +309,21 @@ export function GanttChart({
 
                       if (leaveOnDay && !isWeekend) {
                         const isPending = leaveOnDay.status === 'PENDING'
+                        // 逐格審核權限與 server reviewLeaveAsUser 一致：
+                        // admin 全可；否則只有「該單當前階段的指定審核者」本人可審
+                        // （一審→approverId；二審→secondApproverId，即 Boss 終審者）。
+                        const canReviewThis = isAdmin || (
+                          isPending && (
+                            leaveOnDay.firstApprovedAt == null
+                              ? leaveOnDay.approverId === currentUserId
+                              : leaveOnDay.secondApproverId === currentUserId
+                          )
+                        )
                         cellContent = (
                           <GanttLeaveCell
                             leaveOnDay={leaveOnDay}
                             isPending={isPending}
-                            canReview={canReview}
+                            canReview={canReviewThis}
                             isAdmin={isAdmin}
                             userName={u.name || ''}
                             roundedLeft={roundedLeft}
