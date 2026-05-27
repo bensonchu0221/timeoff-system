@@ -34,6 +34,11 @@ enum PartOfDay {
   AFTERNOON
 }
 
+enum Company {
+  POPIN
+  BROADCIEL
+}
+
 model User {
   id             String    @id @default(uuid())
   email          String    @unique
@@ -48,6 +53,8 @@ model User {
   department     Department @relation("UserDepartment", fields: [departmentId], references: [id])
   hireDate       DateTime?
   gender         Gender    @default(FEMALE)
+  // 所屬公司：POPIN=博英、BROADCIEL=鉑芯。與 email 後綴脫鉤（兩者不一致），由 HR 隸屬表為準。
+  company        Company?
   // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
   terminatedDate DateTime?
 

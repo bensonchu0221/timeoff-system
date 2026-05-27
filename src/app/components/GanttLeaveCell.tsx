@@ -82,11 +82,19 @@ export function GanttLeaveCell({
   const leftClass = extendLeft ? "-left-px" : "left-0"
   const rightClass = extendRight ? "-right-px" : "right-0"
 
+  // 半天假（上/下半天）只會是單日（duration：partOfDay≠ALL_DAY 且工作天=1 才算 0.5），
+  // 故在該格內畫半格區分：上半天靠左、下半天靠右；全天維持整格。
+  const isHalfDay = leaveOnDay.partOfDay !== "ALL_DAY"
+  const positionClass = isHalfDay
+    ? (leaveOnDay.partOfDay === "MORNING" ? "left-0 right-1/2" : "left-1/2 right-0")
+    : `${leftClass} ${rightClass}`
+  const finalRounded = isHalfDay ? "rounded-md" : roundedClass
+
   return (
     <>
       <div
         onClick={() => { if (clickable) setIsOpen(true) }}
-        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${clickable ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
+        className={`absolute top-0 bottom-0 ${positionClass} ${finalRounded} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${clickable ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
         title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
       >
         {leaveOnDay.leaveType.name.substring(0,1)}

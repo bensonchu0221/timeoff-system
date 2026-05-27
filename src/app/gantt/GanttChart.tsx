@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { DragScrollContainer } from "@/app/components/DragScrollContainer"
 import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react"
+import { ChevronLeft, ChevronRight, Calendar, X } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
 export function GanttChart({
@@ -27,12 +27,16 @@ export function GanttChart({
   const todayRef = useRef<HTMLTableHeaderCellElement>(null)
   const firstOfMonthRef = useRef<HTMLTableHeaderCellElement>(null)
 
-  // 三個前端篩選器（條件疊加 AND）：網域、部門過濾員工列；假別過濾假單色塊。
-  const [selectedDomain, setSelectedDomain] = useState("")   // "" = 全部網域
-  const [selectedDept, setSelectedDept] = useState("")       // "" = 全部部門
+  // 三個前端篩選器（條件疊加 AND）：公司、部門過濾員工列；假別過濾假單色塊。
+  const [selectedCompany, setSelectedCompany] = useState("")  // "" = 全部公司
+  const [selectedDept, setSelectedDept] = useState("")        // "" = 全部部門
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]) // [] = 全部假別（多選）
   const toggleType = (name: string) =>
     setSelectedTypes(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])
+  const hasActiveFilter = selectedCompany !== "" || selectedDept !== "" || selectedTypes.length > 0
+  const clearFilters = () => { setSelectedCompany(""); setSelectedDept(""); setSelectedTypes([]) }
+  // 公司代號 → 顯示名稱
+  const COMPANY_LABELS: Record<string, string> = { POPIN: "博英", BROADCIEL: "鉑芯" }
 
   // 依年-月分組 days，計算每個月份佔用的天數 (colSpan)
   const monthGroups: { year: number; month: number; count: number }[] = []
@@ -93,7 +97,7 @@ export function GanttChart({
   const currentMonthLabel = currentMonthStr
 
   // 從已載入資料動態產生篩選選項（去重）
-  const domainOptions = Array.from(new Set(targetUsers.map(u => u.email?.split("@")[1]).filter(Boolean)))
+  const companyOptions = Array.from(new Set(targetUsers.map(u => u.company).filter(Boolean)))
   const deptOptions = Array.from(new Set(targetUsers.map(u => u.department?.name ?? "未設定")))
   const leaveTypeOptions = Array.from(new Set(leaves.map(l => l.leaveType.name)))
 
@@ -102,9 +106,9 @@ export function GanttChart({
     ? leaves
     : leaves.filter(l => selectedTypes.includes(l.leaveType.name))
 
-  // 員工列篩選（三條件 AND）：網域、部門過濾本人；假別啟用時隱藏此窗口內無符合假單的員工
+  // 員工列篩選（三條件 AND）：公司、部門過濾本人；假別啟用時隱藏此窗口內無符合假單的員工
   const filteredUsers = targetUsers.filter(u => {
-    if (selectedDomain && u.email?.split("@")[1] !== selectedDomain) return false
+    if (selectedCompany && u.company !== selectedCompany) return false
     if (selectedDept && (u.department?.name ?? "未設定") !== selectedDept) return false
     if (selectedTypes.length > 0 && !visibleLeaves.some(l => l.userId === u.id)) return false
     return true
@@ -145,16 +149,16 @@ export function GanttChart({
         </div>
       </div>
 
-      {/* 篩選器：網域、部門（單選下拉）＋ 假別（多選膠囊），三者條件疊加 */}
+      {/* 篩選器：公司、部門（單選下拉）＋ 假別（多選膠囊），三者條件疊加 */}
       <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
         <select
-          value={selectedDomain}
-          onChange={e => setSelectedDomain(e.target.value)}
+          value={selectedCompany}
+          onChange={e => setSelectedCompany(e.target.value)}
           className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
         >
-          <option value="">所有網域</option>
-          {domainOptions.map(d => (
-            <option key={d} value={d}>@{d}</option>
+          <option value="">所有公司</option>
+          {companyOptions.map(c => (
+            <option key={c} value={c!}>{COMPANY_LABELS[c!] ?? c}</option>
           ))}
         </select>
 
@@ -190,6 +194,18 @@ export function GanttChart({
               )
             })}
           </div>
+        )}
+
+        {/* 一鍵清除：有任一篩選條件時才顯示，靠右對齊 */}
+        {hasActiveFilter && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-auto flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 rounded-md transition"
+          >
+            <X className="w-4 h-4" />
+            清除篩選
+          </button>
         )}
       </div>
 

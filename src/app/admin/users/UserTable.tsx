@@ -1,6 +1,6 @@
 "use client"
 
-import { Role } from "@prisma/client"
+import { Role, Company } from "@prisma/client"
 import { useState, useRef, useEffect, useTransition } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
@@ -11,6 +11,7 @@ import {
   updateUserTerminatedDate,
   updateUserChineseName,
   updateUserDepartment,
+  updateUserCompany,
   setAnnualLeaveOpening,
   clearAnnualLeaveOpening,
   setFinalApprover,
@@ -25,6 +26,7 @@ type UserNode = {
   role: Role
   departmentId: string | null
   department: { id: string; name: string } | null
+  company: Company | null
   managerId: string | null
   isFinalApprover: boolean
   hireDate: Date | null
@@ -92,6 +94,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">角色權限</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">性別</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">部門</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">所屬公司</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">直屬主管</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">終審者(Boss)</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
@@ -194,6 +197,18 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
+                  </select>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap align-top">
+                  <select
+                    disabled={isPending}
+                    value={user.company ?? ""}
+                    onChange={(e) => wrap(() => updateUserCompany(user.id, e.target.value as Company))}
+                    className="select select-bordered select-sm w-full bg-gray-50"
+                  >
+                    <option value="" disabled>請選擇</option>
+                    <option value="POPIN">博英 (POPIN)</option>
+                    <option value="BROADCIEL">鉑芯 (BROADCIEL)</option>
                   </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">

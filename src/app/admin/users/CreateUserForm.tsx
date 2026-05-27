@@ -49,6 +49,14 @@ export function CreateUserForm({ departments }: { departments: DepartmentOption[
         </select>
       </div>
       <div>
+        <label className="block text-xs font-medium text-gray-700">所屬公司</label>
+        <select name="company" required defaultValue="" className="select select-bordered select-sm mt-1 w-32 bg-white">
+          <option value="" disabled>請選擇</option>
+          <option value="POPIN">博英 (POPIN)</option>
+          <option value="BROADCIEL">鉑芯 (BROADCIEL)</option>
+        </select>
+      </div>
+      <div>
         <label className="block text-xs font-medium text-gray-700">角色</label>
         <select name="role" className="select select-bordered select-sm mt-1 w-32 bg-white">
           <option value="EMPLOYEE">員工</option>

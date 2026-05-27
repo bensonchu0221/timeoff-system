@@ -31,6 +31,7 @@ export default async function AdminUsersPage() {
       role: true,
       departmentId: true,
       department: { select: { id: true, name: true } },
+      company: true,
       managerId: true,
       isFinalApprover: true,
       hireDate: true,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
-import { Role } from "@prisma/client"
+import { Role, Company } from "@prisma/client"
 import { assertNotImpersonating } from "@/lib/impersonation"
 
 async function requireActorId(): Promise<string> {
@@ -31,6 +31,25 @@ export async function updateUserRole(userId: string, role: Role) {
   })
   revalidatePath("/admin/users")
   return { success: true, message: "已更新角色權限" }
+}
+
+export async function updateUserCompany(userId: string, company: Company) {
+  const actorId = await requireActorId()
+  if (!["POPIN", "BROADCIEL"].includes(company)) throw new Error("無效的公司代號")
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { company: true } })
+  await prisma.user.update({
+    where: { id: userId },
+    data: { company },
+  })
+  await logAudit({
+    actorId,
+    action: "USER_UPDATE_COMPANY",
+    targetType: "User",
+    targetId: userId,
+    payload: { from: before?.company ?? null, to: company },
+  })
+  revalidatePath("/admin/users")
+  return { success: true, message: "已更新所屬公司" }
 }
 
 export async function updateUserManager(userId: string, managerId: string | null) {
@@ -168,12 +187,16 @@ export async function createUser(data: FormData) {
   const role = data.get("role") as Role
   const hireDateStr = data.get("hireDate") as string
   const gender = data.get("gender") as any
+  const company = data.get("company") as Company
 
   if (!name || !email) {
     throw new Error("姓名與 Email 為必填欄位")
   }
   if (!departmentId) {
     throw new Error("部門為必填欄位")
+  }
+  if (!company || !["POPIN", "BROADCIEL"].includes(company)) {
+    throw new Error("所屬公司為必填欄位")
   }
 
   // 驗證部門存在且啟用（避免前端傳入失效 id）
@@ -197,7 +220,8 @@ export async function createUser(data: FormData) {
       departmentId,
       role: role || "EMPLOYEE",
       hireDate: hireDateStr ? new Date(hireDateStr) : null,
-      gender: gender || "FEMALE"
+      gender: gender || "FEMALE",
+      company,
     }
   })
 
@@ -206,7 +230,7 @@ export async function createUser(data: FormData) {
     action: "USER_CREATE",
     targetType: "User",
     targetId: created.id,
-    payload: { name, chineseName: chineseName || null, email, departmentId, role: role || "EMPLOYEE", hireDate: hireDateStr || null },
+    payload: { name, chineseName: chineseName || null, email, departmentId, role: role || "EMPLOYEE", hireDate: hireDateStr || null, company },
   })
 
   revalidatePath("/admin/users")
