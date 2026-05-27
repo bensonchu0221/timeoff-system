@@ -33,6 +33,7 @@ import {
 } from "@/lib/line"
 import { getFinalApprover } from "@/lib/approval"
 import { assertNotImpersonating } from "@/lib/impersonation"
+import { deleteObjects } from "@/lib/gcs"
 
 export async function applyLeave(data: {
   leaveTypeId: string,
@@ -325,9 +326,10 @@ export async function cancelLeave(requestId: string) {
     throw new Error("只能撤銷「待審核」或「已核准」狀態的假單！");
   }
 
-  // 已過開始日的假單不可撤銷（員工實際已經請過，撤銷會憑空退回額度造成補請假漏洞）
-  if (request.startDate < todayStartUTCFromTaipei()) {
-    throw new Error("此假單的開始日期已過，無法撤銷！如需修正請聯絡管理員。");
+  // 已過開始日的假單，一般員工/主管不可自行撤銷（已實際請過，撤銷會憑空退回額度造成補請假漏洞）；
+  // 僅 admin（HR）可代為撤銷過期假單做事後修正
+  if (request.startDate < todayStartUTCFromTaipei() && !isAdmin) {
+    throw new Error("此假單已開始，無法自行銷假！如需撤銷請聯絡管理者（HR）協助處理。");
   }
 
   const previousStatus = request.status as "PENDING" | "APPROVED";
@@ -399,6 +401,57 @@ export async function cancelLeave(requestId: string) {
   revalidatePath("/dashboard")
   revalidatePath("/admin/approvals")
   revalidatePath("/gantt")
+  return { success: true }
+}
+
+// admin（HR）在甘特圖代為銷假：不發任何通知、不限日期（過期假也能銷）、一併刪除附件。
+// 與員工自助的 cancelLeave 區隔：此處只允許 ADMIN，且刻意略過所有 email/LINE 通知。
+export async function adminCancelLeave(requestId: string) {
+  await assertNotImpersonating()
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Unauthorized")
+
+  // 由 DB 取最新 role，避免 session 過時或被竄改
+  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id } })
+  if (dbUser?.role !== "ADMIN") throw new Error("Forbidden")
+
+  const request = await prisma.leaveRequest.findUnique({
+    where: { id: requestId },
+    include: { attachments: { select: { objectPath: true } } },
+  })
+  if (!request) throw new Error("Request not found")
+  if (request.status !== "PENDING" && request.status !== "APPROVED") {
+    throw new Error("只能銷「待審核」或「已核准」狀態的假單！")
+  }
+
+  const previousStatus = request.status
+  const objectPaths = request.attachments.map((a) => a.objectPath)
+
+  // 先做 DB：刪附件記錄 + 改狀態，包在 transaction 內確保一致。
+  // 失敗則整個 throw、不動 GCS，假單與檔案維持原狀。
+  await prisma.$transaction([
+    prisma.leaveAttachment.deleteMany({ where: { leaveRequestId: requestId } }),
+    prisma.leaveRequest.update({ where: { id: requestId }, data: { status: "CANCELLED" } }),
+  ])
+
+  // DB 成功後再刪 GCS 實體檔（best-effort，個別失敗不擋流程；殘檔由 bucket lifecycle 兜底）
+  if (objectPaths.length > 0) {
+    const { failed } = await deleteObjects(objectPaths)
+    if (failed.length > 0) {
+      console.error(`[adminCancelLeave] GCS 刪檔失敗 ${failed.length} 筆：`, failed)
+    }
+  }
+
+  await logAudit({
+    actorId: session.user.id,
+    action: "LEAVE_ADMIN_CANCEL",
+    targetType: "LeaveRequest",
+    targetId: requestId,
+    payload: { previousStatus, deletedAttachments: objectPaths.length, silent: true },
+  })
+
+  revalidatePath("/gantt")
+  revalidatePath("/dashboard")
   return { success: true }
 }
 

@@ -70,6 +70,8 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
 
   // 員工版不可審核 PENDING 假單；只有 MANAGER/ADMIN 才允許在格子點開審核 modal
   const canReview = user.role === "MANAGER" || user.role === "ADMIN"
+  // 銷假（含刪附件、不發通知）僅限 ADMIN（HR）
+  const isAdmin = user.role === "ADMIN"
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -86,6 +88,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
         leaves={leaves}
         today={today}
         canReview={canReview}
+        isAdmin={isAdmin}
       />
     </div>
   )

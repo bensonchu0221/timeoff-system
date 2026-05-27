@@ -12,12 +12,14 @@ export function GanttChart({
   leaves,
   today,
   canReview = false,
+  isAdmin = false,
 }: {
   days: Date[],
   targetUsers: any[],
   leaves: any[],
   today: Date,
   canReview?: boolean,
+  isAdmin?: boolean,
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -232,6 +234,7 @@ export function GanttChart({
                             leaveOnDay={leaveOnDay}
                             isPending={isPending}
                             canReview={canReview}
+                            isAdmin={isAdmin}
                             userName={u.name || ''}
                             roundedLeft={roundedLeft}
                             roundedRight={roundedRight}

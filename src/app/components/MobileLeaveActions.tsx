@@ -10,12 +10,11 @@ type Status = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
 
 // 手機版假單列表的「修改 / 銷假」收折 menu。
 // 桌機（md+）走原本平鋪寫法；本元件僅在 md:hidden 容器內出現。
-export function MobileLeaveActions({ leaveId, status }: { leaveId: string; status: Status }) {
+export function MobileLeaveActions({ leaveId, status, canCancel }: { leaveId: string; status: Status; canCancel: boolean }) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const canEdit = status === "PENDING"
-  const canCancel = status === "PENDING" || status === "APPROVED"
   if (!canEdit && !canCancel) return null
 
   const handleCancel = () => {

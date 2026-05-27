@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { reviewLeave } from "@/app/actions/leave"
+import { useRouter } from "next/navigation"
+import { reviewLeave, adminCancelLeave } from "@/app/actions/leave"
 import toast from "react-hot-toast"
 import { LeaveRequest, LeaveType, User } from "@prisma/client"
 import { formatTaipeiDate } from "@/lib/date-format"
@@ -14,6 +15,7 @@ export function GanttLeaveCell({
   leaveOnDay,
   isPending,
   canReview = true,
+  isAdmin = false,
   userName,
   roundedLeft = true,
   roundedRight = true,
@@ -23,14 +25,20 @@ export function GanttLeaveCell({
   leaveOnDay: LeaveWithRelations,
   isPending: boolean,
   canReview?: boolean,
+  isAdmin?: boolean,
   userName: string,
   roundedLeft?: boolean,
   roundedRight?: boolean,
   extendLeft?: boolean,
   extendRight?: boolean,
 }) {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isPendingAction, startTransition] = useTransition()
+
+  // 待審且有審核權 → 可開核准/駁回；admin → 可開銷假。兩者皆可時 modal 同時顯示。
+  const canCancel = isAdmin
+  const clickable = (isPending && canReview) || canCancel
 
   const handleReview = (status: "APPROVED" | "REJECTED") => {
     setIsOpen(false)
@@ -40,6 +48,23 @@ export function GanttLeaveCell({
         if (res?.success) toast.success(`假單已${status === 'APPROVED' ? '核准' : '駁回'}`)
       } catch (err: any) {
         toast.error(err.message || "更新失敗")
+      }
+    })
+  }
+
+  // admin 銷假：刪附件、不發任何通知；破壞性操作，需二次確認
+  const handleCancel = () => {
+    if (!confirm("確定要銷假嗎？將一併刪除此假單的附件，且不會發送任何通知。")) return
+    setIsOpen(false)
+    startTransition(async () => {
+      try {
+        const res = await adminCancelLeave(leaveOnDay.id)
+        if (res?.success) {
+          toast.success("已銷假")
+          router.refresh()
+        }
+      } catch (err: any) {
+        toast.error(err.message || "銷假失敗")
       }
     })
   }
@@ -60,23 +85,23 @@ export function GanttLeaveCell({
   return (
     <>
       <div
-        onClick={() => { if (isPending && canReview) setIsOpen(true) }}
-        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${isPending && canReview ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
+        onClick={() => { if (clickable) setIsOpen(true) }}
+        className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${clickable ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
         title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
       >
         {leaveOnDay.leaveType.name.substring(0,1)}
       </div>
 
-      {isOpen && isPending && canReview && (
-        <div 
+      {isOpen && clickable && (
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/30 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         >
-          <div 
-            className="bg-white rounded-lg shadow-xl border border-gray-100 p-5 max-w-sm w-full flex flex-col gap-4" 
+          <div
+            className="bg-white rounded-lg shadow-xl border border-gray-100 p-5 max-w-sm w-full flex flex-col gap-4"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="text-lg font-medium text-gray-900">審核假單 - {userName}</h3>
+            <h3 className="text-lg font-medium text-gray-900">假單 - {userName}</h3>
             <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-100">
               <p className="mb-1"><strong>假別：</strong>{leaveOnDay.leaveType.name} ({leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'})</p>
               <p className="mb-1"><strong>期間：</strong>{formatTaipeiDate(leaveOnDay.startDate)} ~ {formatTaipeiDate(leaveOnDay.endDate)}</p>
@@ -84,25 +109,41 @@ export function GanttLeaveCell({
               {leaveOnDay.reason && <p className="mt-2 text-gray-500 italic">"{leaveOnDay.reason}"</p>}
             </div>
             
-            <div className="flex gap-3 justify-end mt-2">
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-md text-sm transition font-medium"
-              >
-                取消
-              </button>
-              <button 
-                onClick={() => handleReview("REJECTED")}
-                className="px-4 py-2 bg-[#C48F8B] text-white rounded-md text-sm hover:bg-[#b0807c] transition font-medium shadow-sm"
-              >
-                駁回
-              </button>
-              <button 
-                onClick={() => handleReview("APPROVED")}
-                className="px-4 py-2 bg-[#7A9A8A] text-white rounded-md text-sm hover:bg-[#6c8879] transition font-medium shadow-sm"
-              >
-                核准
-              </button>
+            <div className="flex gap-3 items-center mt-2 flex-wrap">
+              {/* admin 限定：銷假（刪附件、不發通知）。靠左、紅色，與右側審核動作區隔 */}
+              {canCancel && (
+                <button
+                  onClick={handleCancel}
+                  disabled={isPendingAction}
+                  className="px-4 py-2 border border-[#C48F8B] text-[#a36863] rounded-md text-sm hover:bg-[#C48F8B]/10 transition font-medium disabled:opacity-50"
+                >
+                  銷假
+                </button>
+              )}
+              <div className="flex gap-3 justify-end ml-auto">
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-md text-sm transition font-medium"
+                >
+                  關閉
+                </button>
+                {isPending && canReview && (
+                  <>
+                    <button
+                      onClick={() => handleReview("REJECTED")}
+                      className="px-4 py-2 bg-[#C48F8B] text-white rounded-md text-sm hover:bg-[#b0807c] transition font-medium shadow-sm"
+                    >
+                      駁回
+                    </button>
+                    <button
+                      onClick={() => handleReview("APPROVED")}
+                      className="px-4 py-2 bg-[#7A9A8A] text-white rounded-md text-sm hover:bg-[#6c8879] transition font-medium shadow-sm"
+                    >
+                      核准
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

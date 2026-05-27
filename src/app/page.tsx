@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
-import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
+import { formatTaipeiDate, startOfYearUTC, todayStartUTCFromTaipei } from "@/lib/date-format"
 import { Calendar, Info } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
@@ -34,12 +34,17 @@ export default async function DashboardPage() {
   // Impersonate 模式：admin 以員工視角檢視時，額外顯示資料庫 id 方便除錯
   const isImpersonating = !!(session as any).impersonating
 
+  // 銷假權限：開始日已過的假單，只有 admin（HR）能撤銷；員工/主管則隱藏按鈕（須找 HR）
+  const todayStart = todayStartUTCFromTaipei()
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email! },
     include: { manager: true, department: { select: { name: true } } }
   })
 
   if (!user) return null;
+
+  const isAdmin = user.role === "ADMIN"
 
   const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
 
@@ -146,7 +151,12 @@ export default async function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {history.map(req => (
+                  {history.map(req => {
+                    // 開始日已過的假單：只有 admin 還能銷假，員工/主管隱藏按鈕（須找 HR）
+                    const canCancel =
+                      (req.status === 'PENDING' || req.status === 'APPROVED') &&
+                      (isAdmin || req.startDate >= todayStart)
+                    return (
                     <tr key={req.id} className="hover:bg-gray-50 transition">
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">{req.leaveType.name}</div>
@@ -213,13 +223,13 @@ export default async function DashboardPage() {
                                 📎 附件{req._count.attachments > 0 ? ` (${req._count.attachments})` : ""}
                               </Link>
                             )}
-                            {(req.status === 'PENDING' || req.status === 'APPROVED') && (
+                            {canCancel && (
                               <CancelLeaveButton leaveId={req.id} />
                             )}
                           </div>
                           {/* 手機版：⋯ menu 收折，避免文字換行 */}
                           <div className="md:hidden ml-2">
-                            <MobileLeaveActions leaveId={req.id} status={req.status} />
+                            <MobileLeaveActions leaveId={req.id} status={req.status} canCancel={canCancel} />
                           </div>
                         </div>
                         {/* 兩階段審核橫式進度圖：審核中一律顯示；被駁回的兩階段單也顯示（看出在哪一關被駁） */}
@@ -234,7 +244,8 @@ export default async function DashboardPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             )}

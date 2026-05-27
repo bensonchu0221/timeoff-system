@@ -81,3 +81,16 @@ export async function getSignedReadUrl(objectPath: string, expiresInSeconds = 30
     })
   return url
 }
+
+// 刪除單一 GCS 物件；ignoreNotFound 讓重複刪 / 檔案已不在時不會 throw
+export async function deleteObject(objectPath: string): Promise<void> {
+  if (!BUCKET) throw new Error("GCS_BUCKET not configured")
+  await storage.bucket(BUCKET).file(objectPath).delete({ ignoreNotFound: true })
+}
+
+// 批次刪除 GCS 物件；個別失敗不互相影響，回傳失敗的 path 供呼叫端記錄
+export async function deleteObjects(objectPaths: string[]): Promise<{ failed: string[] }> {
+  const results = await Promise.allSettled(objectPaths.map((p) => deleteObject(p)))
+  const failed = objectPaths.filter((_, i) => results[i].status === "rejected")
+  return { failed }
+}

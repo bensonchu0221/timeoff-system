@@ -9,6 +9,7 @@ export type AuditAction =
   | "LEAVE_APPROVE_L2"
   | "LEAVE_REJECT"
   | "LEAVE_CANCEL"
+  | "LEAVE_ADMIN_CANCEL"
   | "LEAVE_UPDATE"
   | "USER_CREATE"
   | "USER_UPDATE_ROLE"
