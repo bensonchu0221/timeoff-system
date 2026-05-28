@@ -38,20 +38,24 @@ export function YearlyHeatmap({ leaves, year, holidays = [] }: {
         status = "WEEKEND"
       }
 
-      const dayLeaves = leaves.filter(leave => {
-        const s = new Date(leave.startDate).setHours(0,0,0,0)
-        const e = new Date(leave.endDate).setHours(0,0,0,0)
-        const c = new Date(current).setHours(0,0,0,0)
-        return c >= s && c <= e
-      })
+      // 週末／國定假日本來就不算請假，要優先顯示為假日色；只有工作日才被假單覆蓋
+      const isNonWorkDay = status === "WEEKEND" || status === "HOLIDAY"
+      if (!isNonWorkDay) {
+        const dayLeaves = leaves.filter(leave => {
+          const s = new Date(leave.startDate).setHours(0,0,0,0)
+          const e = new Date(leave.endDate).setHours(0,0,0,0)
+          const c = new Date(current).setHours(0,0,0,0)
+          return c >= s && c <= e
+        })
 
-      if (dayLeaves.length > 0) {
-        if (dayLeaves.some(l => l.status === "APPROVED")) {
-          status = "APPROVED"
-        } else if (dayLeaves.some(l => l.status === "PENDING")) {
-          status = "PENDING"
-        } else {
-          status = dayLeaves[0].status
+        if (dayLeaves.length > 0) {
+          if (dayLeaves.some(l => l.status === "APPROVED")) {
+            status = "APPROVED"
+          } else if (dayLeaves.some(l => l.status === "PENDING")) {
+            status = "PENDING"
+          } else {
+            status = dayLeaves[0].status
+          }
         }
       }
       days.push({ date: new Date(current), status, holidayName: h?.name })
