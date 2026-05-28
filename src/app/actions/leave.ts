@@ -8,11 +8,11 @@ import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import {
+  shouldSendEmail,
   sendLeaveApplicationEmail,
   sendLeaveResultEmail,
   sendDepartmentLeaveEmail,
   sendLeaveCancelledEmail,
-  sendLeaveUpdatedEmail,
   sendBackupAssignedEmail,
   sendBackupRemovedEmail,
   sendBossReviewEmail,
@@ -25,7 +25,6 @@ import {
   sendLineLeaveResult,
   sendLineSameDepartment,
   sendLineLeaveCancelled,
-  sendLineLeaveUpdated,
   sendLineBackupAssigned,
   sendLineBackupRemoved,
   sendLineBossReview,
@@ -186,9 +185,9 @@ export async function applyLeave(data: {
       const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080";
       const reviewLink = `${siteUrl}/admin/approvals`;
 
-      if (manager?.email) {
+      if (shouldSendEmail(manager, "applicationToManager")) {
         await sendLeaveApplicationEmail(
-          manager.email,
+          manager!.email!,
           applicantName,
           leaveTypeName,
           start,
@@ -240,11 +239,11 @@ async function sendApprovedNotifications(args: {
   if (departmentId) {
     const teammates = await prisma.user.findMany({
       where: { departmentId, terminatedDate: null, id: { not: applicantUserId } },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     await Promise.allSettled(teammates.flatMap((t) => {
       const tasks: Promise<unknown>[] = []
-      if (t.email) tasks.push(sendDepartmentLeaveEmail(t.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
+      if (shouldSendEmail(t, "departmentLeave")) tasks.push(sendDepartmentLeaveEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
       if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end))
       return tasks
     }))
@@ -270,11 +269,11 @@ async function notifyBackupAssigned(
 ) {
   const backup = await prisma.user.findUnique({
     where: { id: backupUserId },
-    select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
   })
   if (!backup) return
-  if (backup.email) {
-    await sendBackupAssignedEmail(backup.email, applicantName, leaveType, start, end, partOfDay, durationDays, status)
+  if (shouldSendEmail(backup, "backupAssigned")) {
+    await sendBackupAssignedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, status)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
     await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, status)
@@ -293,11 +292,11 @@ async function notifyBackupRemoved(
 ) {
   const backup = await prisma.user.findUnique({
     where: { id: backupUserId },
-    select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
   })
   if (!backup) return
-  if (backup.email) {
-    await sendBackupRemovedEmail(backup.email, applicantName, leaveType, start, end, partOfDay, durationDays, reason)
+  if (shouldSendEmail(backup, "backupAssigned")) {
+    await sendBackupRemovedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, reason)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
     await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, reason)
@@ -365,11 +364,11 @@ export async function cancelLeave(requestId: string) {
   if (approverIds.size > 0) {
     const approvers = await prisma.user.findMany({
       where: { id: { in: [...approverIds] } },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     await Promise.allSettled(approvers.flatMap((a) => {
       const tasks: Promise<unknown>[] = []
-      if (a.email) tasks.push(sendLeaveCancelledEmail(a.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
+      if (shouldSendEmail(a, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(a.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
       if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
       return tasks
     }))
@@ -383,11 +382,11 @@ export async function cancelLeave(requestId: string) {
         terminatedDate: null,
         id: { not: request.userId },
       },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     await Promise.allSettled(teammates.flatMap(t => {
       const tasks: Promise<unknown>[] = []
-      if (t.email) tasks.push(sendLeaveCancelledEmail(t.email, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
+      if (shouldSendEmail(t, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
       if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
       return tasks
     }))
@@ -477,9 +476,10 @@ export async function updateLeave(requestId: string, data: {
   // 權限：只有本人可以修改自己的單
   if (request.userId !== userId) return { error: "Forbidden" };
 
-  // 狀態：只能修改 PENDING；已核准的請走「撤銷後重申」
-  if (request.status !== "PENDING") {
-    return { error: "只能修改「待審核」狀態的假單；已核准請先撤銷再重新申請。" };
+  // 狀態：只能修改尚未進入審核的假單（status=PENDING 且未過一審）
+  // 一審通過後就鎖死，需走「撤銷後重申」流程
+  if (request.status !== "PENDING" || request.firstApprovedAt != null) {
+    return { error: "只能修改尚未進入審核的假單；一審通過後請先撤銷再重新申請。" };
   }
 
   // 時間：startDate 已過去的不能改（避免事後竄改歷史）
@@ -572,29 +572,8 @@ export async function updateLeave(requestId: string, data: {
     },
   })
 
-  // --- 通知主管：員工修改了待審內容 ---
+  // 修改通知（給主管）已移除：員工只能在一審前修改，主管屆時會直接看到最新版本
   const applicantName = displayName(request.user?.name, request.user?.chineseName)
-  const newLeaveType = data.leaveTypeId === request.leaveTypeId
-    ? request.leaveType
-    : await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
-  const newLeaveTypeName = newLeaveType?.name || "該假別"
-  const before = `${request.leaveType.name}（${formatRange(request.startDate, request.endDate)}，${request.durationDays} 天）`
-  const after = `${newLeaveTypeName}（${formatRange(start, end)}，${newDuration} 天）`
-  const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
-  const reviewLink = `${siteUrl}/admin/approvals`
-
-  if (request.approverId) {
-    const manager = await prisma.user.findUnique({
-      where: { id: request.approverId },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
-    });
-    if (manager?.email) {
-      await sendLeaveUpdatedEmail(manager.email, applicantName, start, end, data.partOfDay, newDuration, before, after, reviewLink)
-    }
-    if (shouldSendLine(manager, "leaveUpdated")) {
-      await sendLineLeaveUpdated(manager!.lineUserId!, applicantName, before, after, reviewLink)
-    }
-  }
 
   // --- 代理人變化通知 ---
   if (request.backupId !== newBackupId) {
@@ -602,8 +581,12 @@ export async function updateLeave(requestId: string, data: {
     if (request.backupId) {
       await notifyBackupRemoved(request.backupId, applicantName, request.leaveType.name, request.startDate, request.endDate, request.partOfDay, request.durationDays, "REMOVED_BY_EDIT")
     }
-    // 新代理人 → 指派（用新假單資料）
+    // 新代理人 → 指派（用新假單資料：可能改了假別）
     if (newBackupId) {
+      const newLeaveType = data.leaveTypeId === request.leaveTypeId
+        ? request.leaveType
+        : await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } })
+      const newLeaveTypeName = newLeaveType?.name || "該假別"
       await notifyBackupAssigned(newBackupId, applicantName, newLeaveTypeName, start, end, data.partOfDay, newDuration, "PENDING")
     }
   }
@@ -611,17 +594,6 @@ export async function updateLeave(requestId: string, data: {
   revalidatePath("/dashboard")
   revalidatePath("/admin/approvals")
   return { success: true }
-}
-
-// 簡單的日期區間顯示（給通知用，Asia/Taipei）
-function formatRange(start: Date, end: Date): string {
-  const toTW = (d: Date) => {
-    const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }))
-    return `${tw.getMonth() + 1}/${tw.getDate()}`
-  }
-  const s = toTW(start)
-  const e = toTW(end)
-  return s === e ? s : `${s}–${e}`
 }
 
 // 對外的 reviewLeave：從 session 拿 actorId 後委派 reviewLeaveAsUser
@@ -749,26 +721,26 @@ export async function reviewLeaveAsUser(
     // 一審通過 → 通知終審者（Boss）進二審；並通知申請人「一審通過、等待終審」
     const boss = await prisma.user.findUnique({
       where: { id: request.secondApproverId! },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     const managerName = displayName(dbUser.name, dbUser.chineseName)
-    if (boss?.email) {
-      await sendBossReviewEmail(boss.email, applicantName, managerName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, reviewLink)
+    if (shouldSendEmail(boss, "bossReview")) {
+      await sendBossReviewEmail(boss!.email!, applicantName, managerName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, reviewLink)
     }
     if (shouldSendLine(boss, "bossReview")) {
       await sendLineBossReview(boss!.lineUserId!, applicantName, leaveTypeName, request.durationDays, reviewLink, requestId)
     }
-    if (request.user?.email) {
-      await sendFirstApprovedEmail(request.user.email, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
+    if (shouldSendEmail(request.user, "firstApproved")) {
+      await sendFirstApprovedEmail(request.user.email!, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
     }
     if (shouldSendLine(request.user, "firstApproved")) {
       await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName)
     }
   } else {
     // 最終結果（核准或駁回）→ 通知申請人本人：Email + LINE 雙軌
-    if (request.user?.email) {
+    if (shouldSendEmail(request.user, "reviewResult")) {
       await sendLeaveResultEmail(
-        request.user.email,
+        request.user.email!,
         applicantName,
         leaveTypeName,
         request.startDate,

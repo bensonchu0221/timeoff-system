@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineEscalation } from "@/lib/line"
-import { sendEscalationEmail, displayName } from "@/lib/email"
+import { shouldSendEmail, sendEscalationEmail, displayName } from "@/lib/email"
 
 // 由外部 cron 觸發（平日 09–18 每小時）：找出「當前階段」已超過 2 天未處理的 PENDING 假單，
 // 依兩階段審核通知「當前該審的人」：未過一審→一審主管(approverId)；已過一審→終審者(secondApproverId)。
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
   )
   const reviewers = await prisma.user.findMany({
     where: { id: { in: reviewerIds }, terminatedDate: null },
-    select: { id: true, email: true, lineUserId: true, lineNotifyPrefs: true },
+    select: { id: true, email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
   })
   const reviewerById = new Map(reviewers.map((u) => [u.id, u]))
 
@@ -72,9 +72,9 @@ export async function GET(req: NextRequest) {
     const leaveTypeName = req.leaveType.name
 
     const tasks: Promise<unknown>[] = []
-    if (reviewer.email) {
+    if (shouldSendEmail(reviewer, "escalation")) {
       tasks.push(sendEscalationEmail(
-        reviewer.email,
+        reviewer.email!,
         applicantName,
         managerName,
         leaveTypeName,

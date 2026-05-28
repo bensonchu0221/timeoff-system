@@ -88,6 +88,9 @@ model User {
   // 各類 LINE 通知個別開關，JSON 結構，null 視為全 true
   // 例：{ applicationToManager: true, reviewResult: true, departmentLeave: true, dailyPending: true, dailyRoster: true }
   lineNotifyPrefs   Json?
+  // 各類 Email 通知個別開關，JSON 結構，null 視為全 true（既有使用者預設全收）
+  // 支援的 key 與 LINE 重疊但少了 dailyPending / dailyRoster（這兩個只走 LINE）
+  emailNotifyPrefs  Json?
 
   // NextAuth
   accounts       Account[]

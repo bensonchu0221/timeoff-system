@@ -8,7 +8,6 @@ export type LineNotifyKey =
   | "dailyPending"           // 主管每日 11:00 待審清單
   | "dailyRoster"            // 每日 10:00 全公司請假名單
   | "leaveCancelled"         // 主管 / 同部門：收到撤銷通知
-  | "leaveUpdated"           // 主管：員工修改了 PENDING 假單
   | "backupAssigned"         // 被指定為代理人
   | "escalation"             // 當前審核者：該階段超過 2 天未審的超時提醒
   | "bossReview"             // 終審者（Boss）：一審通過、待二審終審
@@ -353,25 +352,6 @@ export async function sendLineLeaveCancelled(
     ? `\n員工該期間將如常出勤，請依此調整工作安排。`
     : `\n員工已自行撤銷，無需再審核。`
   const text = `${head}\n${applicantName}：${leaveType}（${range}）${tail}`
-  await linePush(toLineUserId, [{ type: "text", text }])
-}
-
-/**
- * 修改通知 — 給原審核主管。只在 PENDING 修改後觸發。
- */
-export async function sendLineLeaveUpdated(
-  toLineUserId: string,
-  applicantName: string,
-  beforeSummary: string,
-  afterSummary: string,
-  link: string
-): Promise<void> {
-  const text =
-    `✏️ 待審假單已修改\n` +
-    `${applicantName} 修改了內容：\n\n` +
-    `修改前：${beforeSummary}\n` +
-    `修改後：${afterSummary}\n\n` +
-    `前往審核：${link}`
   await linePush(toLineUserId, [{ type: "text", text }])
 }
 

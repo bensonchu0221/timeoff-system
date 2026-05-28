@@ -6,6 +6,7 @@ import {
   generateLineBindingCode,
   unbindLine,
   updateLineNotifyPref,
+  updateEmailNotifyPref,
 } from "./actions"
 
 // ----------- LINE 綁定區塊 -----------
@@ -276,105 +277,130 @@ function LineChatIllustration({ codeToShow }: { codeToShow: string }) {
   )
 }
 
-// ----------- 通知偏好區塊 -----------
+// ----------- 通知偏好區塊（Email + LINE 並排兩欄）-----------
 
 type PrefDef = {
   key: string
   label: string
   description: string
   managerOnly: boolean
+  // 此事件 email 是否有對應通知；dailyPending / dailyRoster 只走 LINE，沒有 email 版本
+  supportsEmail: boolean
 }
 
 const PREF_DEFS: PrefDef[] = [
   {
     key: "applicationToManager",
     label: "收到員工假單",
-    description: "部屬遞假單給我審核時推播",
+    description: "部屬遞假單給我審核時通知",
     managerOnly: true,
-  },
-  {
-    key: "leaveUpdated",
-    label: "員工修改待審假單",
-    description: "部屬在我審核前修改假單內容時推播",
-    managerOnly: true,
+    supportsEmail: true,
   },
   {
     key: "leaveCancelled",
     label: "假單撤銷通知",
-    description: "員工撤銷假單時推播（主管收到部屬撤銷、同部門收到同事撤銷）",
+    description: "員工撤銷假單時通知（主管收到部屬撤銷、同部門收到同事撤銷）",
     managerOnly: false,
+    supportsEmail: true,
   },
   {
     key: "reviewResult",
     label: "我的假單結果",
-    description: "我的假單被核准或駁回時推播",
+    description: "我的假單被核准或駁回時通知",
     managerOnly: false,
+    supportsEmail: true,
   },
   {
     key: "firstApproved",
     label: "我的假單一審通過",
-    description: "我的假單通過主管一審、送交 Boss 終審時推播",
+    description: "我的假單通過主管一審、送交 Boss 終審時通知",
     managerOnly: false,
+    supportsEmail: true,
   },
   {
     key: "bossReview",
     label: "待我終審（Boss）",
-    description: "有假單通過一審、等我做最後核准時推播",
+    description: "有假單通過一審、等我做最後核准時通知",
     managerOnly: true,
+    supportsEmail: true,
   },
   {
     key: "departmentLeave",
     label: "同部門請假提醒",
-    description: "同部門有人請假核准時推播",
+    description: "同部門有人請假核准時通知",
     managerOnly: false,
+    supportsEmail: true,
   },
   {
     key: "backupAssigned",
     label: "我被指定為代理人",
-    description: "同事請假時把我列為代理人會推播",
+    description: "同事請假時把我列為代理人會通知",
     managerOnly: false,
+    supportsEmail: true,
   },
   {
     key: "dailyPending",
     label: "每日 11:00 待審清單",
-    description: "每日 11:00 推播當下有幾筆待我審的假單",
+    description: "每日 11:00 推播當下有幾筆待我審的假單（僅 LINE）",
     managerOnly: true,
+    supportsEmail: false,
   },
   {
     key: "dailyRoster",
     label: "每日 10:00 全公司請假名單",
-    description: "每日 10:00 推播全公司今天有誰請假",
+    description: "每日 10:00 推播全公司今天有誰請假（僅 LINE）",
     managerOnly: false,
+    supportsEmail: false,
   },
   {
     key: "escalation",
     label: "48 小時未審假單提醒",
     description: "我經手的假單超過 48 小時未審時，提醒我撥空處理（一審找主管、二審找 Boss）",
-    managerOnly: true, // admin / manager 才看得到
+    managerOnly: true,
+    supportsEmail: true,
   },
 ]
 
-export function NotifyPrefsPanel({
-  prefs,
+export function UnifiedNotifyPrefsPanel({
+  emailPrefs,
+  linePrefs,
+  isLineBound,
   isManager,
 }: {
-  prefs: Record<string, boolean>
+  emailPrefs: Record<string, boolean>
+  linePrefs: Record<string, boolean>
+  isLineBound: boolean
   isManager: boolean
 }) {
   const visible = PREF_DEFS.filter((p) => !p.managerOnly || isManager)
 
   return (
     <section className="bg-white rounded-lg shadow border border-gray-200 p-6">
-      <h2 className="text-lg font-medium mb-2">LINE 通知偏好</h2>
+      <h2 className="text-lg font-medium mb-2">通知偏好</h2>
       <p className="text-sm text-gray-500 mb-4">
-        關閉後不影響 Email 通知，您仍會收到信件。
+        各類事件可分別決定要收 Email 通知、LINE 推播或兩者都收。
       </p>
+      {!isLineBound && (
+        <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-sm text-amber-800">
+          ⚠️ 尚未綁定 LINE，LINE 欄位暫時無法調整；請先到上方完成綁定。
+        </div>
+      )}
+
+      {/* Header 列：欄位標題 */}
+      <div className="hidden sm:flex items-center py-2 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div className="flex-1">事件</div>
+        <div className="w-20 text-center">Email</div>
+        <div className="w-20 text-center">LINE</div>
+      </div>
+
       <div className="divide-y divide-gray-100">
         {visible.map((def) => (
-          <PrefToggle
+          <PrefRow
             key={def.key}
             def={def}
-            initialEnabled={prefs[def.key] !== false}
+            initialEmailEnabled={emailPrefs[def.key] !== false}
+            initialLineEnabled={linePrefs[def.key] !== false}
+            isLineBound={isLineBound}
           />
         ))}
       </div>
@@ -382,12 +408,62 @@ export function NotifyPrefsPanel({
   )
 }
 
-function PrefToggle({
+function PrefRow({
   def,
-  initialEnabled,
+  initialEmailEnabled,
+  initialLineEnabled,
+  isLineBound,
 }: {
   def: PrefDef
+  initialEmailEnabled: boolean
+  initialLineEnabled: boolean
+  isLineBound: boolean
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center py-3 gap-2 sm:gap-4">
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-gray-900">{def.label}</div>
+        <div className="text-xs text-gray-500 mt-0.5">{def.description}</div>
+      </div>
+      <div className="flex items-center gap-6 sm:gap-0">
+        <div className="w-20 flex items-center justify-center">
+          {/* mobile 上加標籤；desktop 由表頭顯示欄位名 */}
+          <span className="sm:hidden text-xs text-gray-500 mr-2">Email</span>
+          {def.supportsEmail ? (
+            <ChannelToggle
+              channel="email"
+              prefKey={def.key}
+              initialEnabled={initialEmailEnabled}
+              disabled={false}
+            />
+          ) : (
+            <span className="text-gray-300 text-lg leading-none" title="此事件無 email 通知">—</span>
+          )}
+        </div>
+        <div className="w-20 flex items-center justify-center">
+          <span className="sm:hidden text-xs text-gray-500 mr-2">LINE</span>
+          <ChannelToggle
+            channel="line"
+            prefKey={def.key}
+            initialEnabled={initialLineEnabled}
+            disabled={!isLineBound}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChannelToggle({
+  channel,
+  prefKey,
+  initialEnabled,
+  disabled,
+}: {
+  channel: "email" | "line"
+  prefKey: string
   initialEnabled: boolean
+  disabled: boolean
 }) {
   const [enabled, setEnabled] = useState(initialEnabled)
   const [isPending, startTransition] = useTransition()
@@ -397,7 +473,11 @@ function PrefToggle({
     setEnabled(next) // 樂觀更新
     startTransition(async () => {
       try {
-        await updateLineNotifyPref(def.key as any, next)
+        if (channel === "email") {
+          await updateEmailNotifyPref(prefKey as any, next)
+        } else {
+          await updateLineNotifyPref(prefKey as any, next)
+        }
       } catch (err: any) {
         setEnabled(!next) // 失敗回滾
         toast.error(err.message || "更新失敗")
@@ -406,18 +486,12 @@ function PrefToggle({
   }
 
   return (
-    <div className="flex items-center justify-between py-3 gap-4">
-      <div className="flex-1">
-        <div className="font-medium text-gray-900">{def.label}</div>
-        <div className="text-xs text-gray-500 mt-0.5">{def.description}</div>
-      </div>
-      <input
-        type="checkbox"
-        className="toggle toggle-success"
-        checked={enabled}
-        onChange={handleToggle}
-        disabled={isPending}
-      />
-    </div>
+    <input
+      type="checkbox"
+      className="toggle toggle-success"
+      checked={enabled}
+      onChange={handleToggle}
+      disabled={disabled || isPending}
+    />
   )
 }

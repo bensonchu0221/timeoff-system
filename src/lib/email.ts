@@ -1,3 +1,32 @@
+// ----------- 通知偏好類型 -----------
+// 對照 LINE 的 LineNotifyKey，但少了 dailyPending / dailyRoster（這兩個只走 LINE）
+// 也不含 leaveUpdated（一審後不能改、修改通知已移除）
+export type EmailNotifyKey =
+  | "applicationToManager"  // 主管收到員工的請假申請
+  | "reviewResult"           // 員工的假單被核准/駁回
+  | "departmentLeave"        // 同部門有人請假成功
+  | "leaveCancelled"         // 主管 / 同部門：收到撤銷通知
+  | "backupAssigned"         // 被指定為代理人（含解除通知）
+  | "escalation"             // 當前審核者：該階段超過 2 天未審的超時提醒
+  | "bossReview"             // 終審者（Boss）：一審通過、待二審終審
+  | "firstApproved"          // 申請人：一審已通過、等待終審
+
+/**
+ * 判斷是否該發 Email 給該使用者。
+ * - 沒 email 直接 false
+ * - emailNotifyPrefs 為 null 視為全 true（既有使用者預設全收，避免突然漏信）
+ * - 明確 false 才當作關閉
+ */
+export function shouldSendEmail(
+  user: { email?: string | null; emailNotifyPrefs?: any } | null | undefined,
+  key: EmailNotifyKey
+): boolean {
+  if (!user?.email) return false
+  const prefs = user.emailNotifyPrefs as Record<string, boolean> | null | undefined
+  if (!prefs) return true
+  return prefs[key] !== false
+}
+
 type BrevoPerson = {
   name?: string
   email: string
@@ -219,36 +248,6 @@ export async function sendLeaveCancelledEmail(
         <li>天數：<strong>${durationDays} 天</strong></li>
       </ul>
       <p style="color: #555; line-height: 1.5;">${note}</p>
-    </div>
-  `
-  await sendBrevoEmail(toEmail, subject, html)
-}
-
-// 修改通知（給原審核主管）— 只在 PENDING 修改後觸發
-export async function sendLeaveUpdatedEmail(
-  toEmail: string,
-  applicantName: string,
-  startDate: Date,
-  endDate: Date,
-  partOfDay: string,
-  durationDays: number,
-  beforeSummary: string,
-  afterSummary: string,
-  link: string
-) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
-  const subject = `[假單修改] ${applicantName} 修改了待審核假單（${range}）`
-  const html = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-      <h2 style="color: #333;">假單修改通知</h2>
-      <p style="color: #555; line-height: 1.5;"><strong>${escapeHtml(applicantName)}</strong> 在您審核前修改了內容（最新：${range}，${durationDays} 天），請以下列最新版本為準：</p>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
-        <tr><td style="padding: 8px; color: #888; width: 80px;">修改前</td><td style="padding: 8px; color: #999; text-decoration: line-through;">${escapeHtml(beforeSummary)}</td></tr>
-        <tr><td style="padding: 8px; color: #333; font-weight: bold;">修改後</td><td style="padding: 8px; color: #333;">${escapeHtml(afterSummary)}</td></tr>
-      </table>
-      <div style="margin-top: 24px;">
-        <a href="${link}" style="background-color: #7A9A8A; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">前往審核</a>
-      </div>
     </div>
   `
   await sendBrevoEmail(toEmail, subject, html)

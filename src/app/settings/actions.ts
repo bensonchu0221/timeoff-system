@@ -3,6 +3,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { generateBindingCode, LineNotifyKey } from "@/lib/line"
+import { EmailNotifyKey } from "@/lib/email"
 import { revalidatePath } from "next/cache"
 import { assertNotImpersonating } from "@/lib/impersonation"
 
@@ -69,7 +70,7 @@ export async function unbindLine() {
 }
 
 /**
- * 更新單一通知偏好 key
+ * 更新單一 LINE 通知偏好 key
  */
 export async function updateLineNotifyPref(key: LineNotifyKey, enabled: boolean) {
   await assertNotImpersonating()
@@ -87,6 +88,31 @@ export async function updateLineNotifyPref(key: LineNotifyKey, enabled: boolean)
   await prisma.user.update({
     where: { id: session.user.id },
     data: { lineNotifyPrefs: prefs },
+  })
+
+  revalidatePath("/settings")
+  return { success: true }
+}
+
+/**
+ * 更新單一 Email 通知偏好 key
+ */
+export async function updateEmailNotifyPref(key: EmailNotifyKey, enabled: boolean) {
+  await assertNotImpersonating()
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Unauthorized")
+
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { emailNotifyPrefs: true },
+  })
+
+  const prefs = (me?.emailNotifyPrefs as Record<string, boolean>) || {}
+  prefs[key] = enabled
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { emailNotifyPrefs: prefs },
   })
 
   revalidatePath("/settings")
