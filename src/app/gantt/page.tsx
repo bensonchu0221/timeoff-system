@@ -1,6 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
+import { formatTaipeiDateISO } from "@/lib/date-format"
 import { GanttChart } from "./GanttChart"
 
 export const metadata = {
@@ -60,6 +61,17 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
     }
   })
 
+  // 國定假日 / 補班日（沿用 leave 查詢的同一個區間）：用來在甘特圖標示假日並讓色塊跳過
+  const holidays = await prisma.holiday.findMany({
+    where: { date: { gte: startDate, lte: endDate } },
+  })
+  // 一律用台北時區 ISO 字串當對齊 key，避免 server(UTC)/client(UTC+8) 位移
+  const holidayList = holidays.map(h => ({
+    date: formatTaipeiDateISO(h.date),
+    name: h.name,
+    isWorkDay: h.isWorkDay,
+  }))
+
   // 產生 X 軸的日期陣列
   const days: Date[] = []
   const current = new Date(startDate)
@@ -86,6 +98,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
         days={days}
         targetUsers={targetUsers}
         leaves={leaves}
+        holidays={holidayList}
         today={today}
         currentUserId={user.id}
         isAdmin={isAdmin}

@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
-import { formatTaipeiDate, startOfYearUTC, todayStartUTCFromTaipei } from "@/lib/date-format"
+import { formatTaipeiDate, formatTaipeiDateISO, startOfYearUTC, todayStartUTCFromTaipei } from "@/lib/date-format"
 import { Calendar, Info } from "lucide-react"
 import Link from "next/link"
 import { YearlyHeatmap } from "./components/YearlyHeatmap"
@@ -83,6 +83,17 @@ export default async function DashboardPage() {
     select: { startDate: true, endDate: true, status: true }
   })
 
+  // 國定假日（含補班日）：給熱圖標示平日國定假日；補班日 (isWorkDay=true) 把週六/日視為工作日
+  const yearHolidays = await prisma.holiday.findMany({
+    where: { date: { gte: startOfYearUTC(year), lt: startOfYearUTC(year + 1) } },
+    select: { date: true, isWorkDay: true, name: true },
+  })
+  const holidayList = yearHolidays.map(h => ({
+    date: formatTaipeiDateISO(h.date),
+    isWorkDay: h.isWorkDay,
+    name: h.name,
+  }))
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Header Section */}
@@ -119,7 +130,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* 年度熱圖 (手機版隱藏) */}
-      <YearlyHeatmap leaves={allLeavesThisYear} year={year} />
+      <YearlyHeatmap leaves={allLeavesThisYear} year={year} holidays={holidayList} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 

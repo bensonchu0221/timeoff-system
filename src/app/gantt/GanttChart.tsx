@@ -5,11 +5,15 @@ import { DragScrollContainer } from "@/app/components/DragScrollContainer"
 import { GanttLeaveCell } from "@/app/components/GanttLeaveCell"
 import { ChevronLeft, ChevronRight, Calendar, X } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { formatTaipeiDateISO } from "@/lib/date-format"
+
+type Holiday = { date: string; name: string; isWorkDay: boolean }
 
 export function GanttChart({
   days,
   targetUsers,
   leaves,
+  holidays = [],
   today,
   currentUserId,
   isAdmin = false,
@@ -17,6 +21,7 @@ export function GanttChart({
   days: Date[],
   targetUsers: any[],
   leaves: any[],
+  holidays?: Holiday[],
   today: Date,
   currentUserId: string,
   isAdmin?: boolean,
@@ -91,6 +96,20 @@ export function GanttChart({
     const s = new Date(leaveStart).setHours(0,0,0,0)
     const e = new Date(leaveEnd).setHours(0,0,0,0)
     return d >= s && d <= e
+  }
+
+  // 國定假日查表（key 用台北時區 ISO，與 server 下傳格式一致）
+  const holidayMap = new Map(holidays.map(h => [h.date, h]))
+
+  // 判斷某日的「有效工作日」狀態，與 leave-utils.calculateDurationDays 等價：
+  // 國定假日(isWorkDay=false)＝非工作日（可能落在平日）；補班日(isWorkDay=true)＝週末也算工作日。
+  const getDayInfo = (day: Date) => {
+    const isWeekendBase = day.getDay() === 0 || day.getDay() === 6
+    const h = holidayMap.get(formatTaipeiDateISO(day))
+    const isMakeupWorkday = !!h && h.isWorkDay
+    const isPublicHoliday = !!h && !h.isWorkDay
+    const isNonWorkDay = isPublicHoliday || (isWeekendBase && !isMakeupWorkday)
+    return { isNonWorkDay, isPublicHoliday, isMakeupWorkday, holidayName: h?.name }
   }
 
   const currentMonthStr = searchParams.get("month") || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
@@ -236,22 +255,28 @@ export function GanttChart({
                   成員 (部門)
                 </th>
                 {days.map((day, idx) => {
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
+                  const { isNonWorkDay, isPublicHoliday, isMakeupWorkday, holidayName } = getDayInfo(day)
                   const isToday = day.toDateString() === today.toDateString()
                   const isFirstOfMonth = day.getDate() === 1
-                  
+
                   const selectedMonth = currentMonthStr.split("-").map(Number)[1]
                   const isTargetFirstOfMonth = day.getDate() === 1 && (day.getMonth() + 1) === selectedMonth
 
+                  // 國定假日用淡紅（與週末灰區隔，平日假日也能一眼看出）；補班日呈白底工作日
+                  const headerTone = isPublicHoliday
+                    ? 'bg-rose-50 text-rose-600'
+                    : isNonWorkDay ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-600'
+
                   return (
-                    <th 
-                      key={idx} 
+                    <th
+                      key={idx}
                       ref={(el) => {
                         if (isToday) todayRef.current = el
                         if (isTargetFirstOfMonth) firstOfMonthRef.current = el
                       }}
-                      className={`px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px] 
-                        ${isWeekend ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-600'} 
+                      title={isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined}
+                      className={`px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px]
+                        ${headerTone}
                         ${isToday ? 'bg-yellow-50 ring-2 ring-yellow-400 ring-inset z-10' : ''}
                         ${isFirstOfMonth ? 'border-l-2 border-l-gray-300' : ''}`}
                     >
@@ -285,13 +310,13 @@ export function GanttChart({
                     </td>
                     
                     {days.map((day, idx) => {
-                      const isWeekend = day.getDay() === 0 || day.getDay() === 6
+                      const { isNonWorkDay, isPublicHoliday, isMakeupWorkday, holidayName } = getDayInfo(day)
                       const isToday = day.toDateString() === today.toDateString()
                       const isFirstOfMonth = day.getDate() === 1
 
                       const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
 
-                      // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨週末時仍是方角，
+                      // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨非工作日（週末/國定假日）時仍是方角，
                       // 象徵「邏輯上還在同一張假單，只是被假日切開」
                       // 延伸規則：相鄰那格也是同色塊才向外延伸 -1px 蓋過 td border；
                       // 接到空白格時不延伸，避免色塊邊緣突出
@@ -299,7 +324,7 @@ export function GanttChart({
                       let roundedRight = true
                       let extendLeft = false
                       let extendRight = false
-                      if (leaveOnDay && !isWeekend) {
+                      if (leaveOnDay && !isNonWorkDay) {
                         const dayMs = new Date(day).setHours(0, 0, 0, 0)
                         const startMs = new Date(leaveOnDay.startDate).setHours(0, 0, 0, 0)
                         const endMs = new Date(leaveOnDay.endDate).setHours(0, 0, 0, 0)
@@ -308,22 +333,23 @@ export function GanttChart({
 
                         const prevDay = new Date(day)
                         prevDay.setDate(day.getDate() - 1)
-                        const prevIsWeekend = prevDay.getDay() === 0 || prevDay.getDay() === 6
-                        extendLeft = !prevIsWeekend && isDateInLeave(prevDay, leaveOnDay.startDate, leaveOnDay.endDate)
+                        const prevIsNonWorkDay = getDayInfo(prevDay).isNonWorkDay
+                        extendLeft = !prevIsNonWorkDay && isDateInLeave(prevDay, leaveOnDay.startDate, leaveOnDay.endDate)
 
                         const nextDay = new Date(day)
                         nextDay.setDate(day.getDate() + 1)
-                        const nextIsWeekend = nextDay.getDay() === 0 || nextDay.getDay() === 6
-                        extendRight = !nextIsWeekend && isDateInLeave(nextDay, leaveOnDay.startDate, leaveOnDay.endDate)
+                        const nextIsNonWorkDay = getDayInfo(nextDay).isNonWorkDay
+                        extendRight = !nextIsNonWorkDay && isDateInLeave(nextDay, leaveOnDay.startDate, leaveOnDay.endDate)
                       }
 
                       let cellContent = null
-                      let bgColorClass = isWeekend ? 'bg-gray-100' : 'bg-white'
+                      // 國定假日用淡紅、其餘非工作日(週末)用灰、補班日與平日白底
+                      let bgColorClass = isPublicHoliday ? 'bg-rose-50' : isNonWorkDay ? 'bg-gray-100' : 'bg-white'
 
                       if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
                       if (isFirstOfMonth) bgColorClass += ' border-l-2 border-l-gray-50'
 
-                      if (leaveOnDay && !isWeekend) {
+                      if (leaveOnDay && !isNonWorkDay) {
                         const isPending = leaveOnDay.status === 'PENDING'
                         // 逐格審核權限與 server reviewLeaveAsUser 一致：
                         // admin 全可；否則只有「該單當前階段的指定審核者」本人可審
@@ -351,7 +377,7 @@ export function GanttChart({
                       }
 
                       return (
-                        <td key={idx} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
+                        <td key={idx} title={!leaveOnDay ? (isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined) : undefined} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
                           {cellContent}
                         </td>
                       )
