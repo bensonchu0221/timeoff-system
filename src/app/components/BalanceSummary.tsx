@@ -7,7 +7,7 @@ type Balance = {
   remaining: number
 }
 
-// 特休改週年制累計後，「年度」概念對特休不再適用；標題改為「假別額度（截至今日）」
+// 特休改曆年制累計後，「年度」概念對特休不再適用；標題改為「假別額度（截至今日）」
 export function BalanceSummary({ balances }: { balances: Balance[] }) {
   return (
     <div className="space-y-4">
