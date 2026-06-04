@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2500" height="1686" viewBox="0 0 2500 1686">
+  <style>
+    .label { font-family: "PingFang TC", "Microsoft JhengHei", "Heiti TC", "Noto Sans CJK TC", sans-serif; font-weight: 700; fill: #2f3b35; }
+    .sub   { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; font-weight: 400; fill: #8a948f; }
+  </style>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="2500" height="1686" fill="#ffffff"/>
+
+  <!-- 6 格底色（上排綠調、下排粉調，與品牌色相近的淡色） -->
+  <rect x="0"    y="0"   width="833" height="843" fill="#e9f0ec"/>
+  <rect x="833"  y="0"   width="834" height="843" fill="#dfeae4"/>
+  <rect x="1667" y="0"   width="833" height="843" fill="#e9f0ec"/>
+  <rect x="0"    y="843" width="833" height="843" fill="#f4eae9"/>
+  <rect x="833"  y="843" width="834" height="843" fill="#efe2e1"/>
+  <rect x="1667" y="843" width="833" height="843" fill="#f4eae9"/>
+
+  <!-- 每格頂端色條（綠 / 粉） -->
+  <rect x="0"    y="0"   width="833" height="14" fill="#7A9A8A"/>
+  <rect x="833"  y="0"   width="834" height="14" fill="#7A9A8A"/>
+  <rect x="1667" y="0"   width="833" height="14" fill="#7A9A8A"/>
+  <rect x="0"    y="843" width="833" height="14" fill="#C48F8B"/>
+  <rect x="833"  y="843" width="834" height="14" fill="#C48F8B"/>
+  <rect x="1667" y="843" width="833" height="14" fill="#C48F8B"/>
+
+  <!-- 白色格線 -->
+  <line x1="833"  y1="0" x2="833"  y2="1686" stroke="#ffffff" stroke-width="8"/>
+  <line x1="1667" y1="0" x2="1667" y2="1686" stroke="#ffffff" stroke-width="8"/>
+  <line x1="0" y1="843" x2="2500" y2="843" stroke="#ffffff" stroke-width="8"/>
+
+  <!-- 文字標籤 -->
+  <text class="label" x="416"  y="430"  font-size="130" text-anchor="middle">請假申請</text>
+  <text class="sub"   x="416"  y="510"  font-size="54"  text-anchor="middle">Apply</text>
+
+  <text class="label" x="1250" y="430"  font-size="130" text-anchor="middle">我的假單</text>
+  <text class="sub"   x="1250" y="510"  font-size="54"  text-anchor="middle">My Leaves</text>
+
+  <text class="label" x="2083" y="430"  font-size="130" text-anchor="middle">團隊甘特圖</text>
+  <text class="sub"   x="2083" y="510"  font-size="54"  text-anchor="middle">Team Gantt</text>
+
+  <text class="label" x="416"  y="1273" font-size="130" text-anchor="middle">快速查假</text>
+  <text class="sub"   x="416"  y="1353" font-size="54"  text-anchor="middle">Balance</text>
+
+  <text class="label" x="1250" y="1273" font-size="130" text-anchor="middle">個人設定</text>
+  <text class="sub"   x="1250" y="1353" font-size="54"  text-anchor="middle">Settings</text>
+
+  <text class="label" x="2083" y="1273" font-size="130" text-anchor="middle">使用說明</text>
+  <text class="sub"   x="2083" y="1353" font-size="54"  text-anchor="middle">Help</text>
+</svg>

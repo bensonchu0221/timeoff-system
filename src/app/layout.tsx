@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import { LiffProvider } from "@/components/LiffProvider";
 import { UserAuth } from "@/components/UserAuth";
 import { Toaster } from "react-hot-toast";
 import { auth } from "@/auth";
@@ -22,6 +23,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Time Off System",
   description: "Internal Time Off Management System",
+};
+
+// LINE in-app browser（LIFF）內的縮放表現
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 export default async function RootLayout({
   children,
@@ -65,6 +72,7 @@ export default async function RootLayout({
           }}
         />
         <Providers>
+          <LiffProvider>
           <ImpersonationBanner />
           <header className="bg-[var(--brand-primary)] text-white shadow-md sticky top-0 z-30">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -191,6 +199,7 @@ export default async function RootLayout({
           <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
             {children}
           </main>
+          </LiffProvider>
         </Providers>
       </body>
     </html>

@@ -2,9 +2,12 @@
 
 import { signIn, signOut, useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
+import { useIsLiff } from "@/components/LiffProvider"
 
 export function UserAuth() {
   const { data: session, status } = useSession()
+  // LINE in-app browser（LIFF）模式：登出/Google 登入在 LINE 內沒意義，且易誤觸 OAuth，隱藏
+  const isLiff = useIsLiff()
   // 從 URL 讀 callbackUrl（例如 email 點 /gantt 未登入 → 跳 /?callbackUrl=/gantt）
   // 登入完成後 NextAuth 會自動轉導到該 URL
   const searchParams = useSearchParams()
@@ -30,15 +33,20 @@ export function UserAuth() {
             <span className="text-xs text-blue-200">{(session.user as any).role}</span>
           </div>
         </div>
-        <button
-          onClick={() => signOut()}
-          className="text-sm bg-white text-[var(--brand-primary)] px-3 py-1.5 rounded font-medium hover:bg-gray-100 transition-colors"
-        >
-          登出
-        </button>
+        {!isLiff && (
+          <button
+            onClick={() => signOut()}
+            className="text-sm bg-white text-[var(--brand-primary)] px-3 py-1.5 rounded font-medium hover:bg-gray-100 transition-colors"
+          >
+            登出
+          </button>
+        )}
       </div>
     )
   }
+
+  // LIFF 模式下不顯示 Google 登入（自動登入由 LiffProvider 處理）
+  if (isLiff) return null
 
   return (
     <button
