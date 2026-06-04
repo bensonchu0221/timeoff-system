@@ -244,7 +244,7 @@ async function sendApprovedNotifications(args: {
     await Promise.allSettled(teammates.flatMap((t) => {
       const tasks: Promise<unknown>[] = []
       if (shouldSendEmail(t, "departmentLeave")) tasks.push(sendDepartmentLeaveEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
-      if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end))
+      if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay))
       return tasks
     }))
   }
@@ -276,7 +276,7 @@ async function notifyBackupAssigned(
     await sendBackupAssignedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, status)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
-    await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, status)
+    await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, partOfDay, status)
   }
 }
 
@@ -299,7 +299,7 @@ async function notifyBackupRemoved(
     await sendBackupRemovedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, reason)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
-    await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, reason)
+    await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, partOfDay, reason)
   }
 }
 
@@ -369,7 +369,7 @@ export async function cancelLeave(requestId: string) {
     await Promise.allSettled(approvers.flatMap((a) => {
       const tasks: Promise<unknown>[] = []
       if (shouldSendEmail(a, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(a.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
-      if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
+      if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay, previousStatus))
       return tasks
     }))
   }
@@ -387,7 +387,7 @@ export async function cancelLeave(requestId: string) {
     await Promise.allSettled(teammates.flatMap(t => {
       const tasks: Promise<unknown>[] = []
       if (shouldSendEmail(t, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
-      if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, previousStatus))
+      if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay, previousStatus))
       return tasks
     }))
   }
@@ -734,7 +734,7 @@ export async function reviewLeaveAsUser(
       await sendFirstApprovedEmail(request.user.email!, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
     }
     if (shouldSendLine(request.user, "firstApproved")) {
-      await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName)
+      await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
     }
   } else {
     // 最終結果（核准或駁回）→ 通知申請人本人：Email + LINE 雙軌
@@ -752,7 +752,7 @@ export async function reviewLeaveAsUser(
       );
     }
     if (shouldSendLine(request.user, "reviewResult")) {
-      await sendLineLeaveResult(request.user.lineUserId!, leaveTypeName, status, trimmedMessage)
+      await sendLineLeaveResult(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, status, trimmedMessage)
     }
 
     if (isFinalApprove) {

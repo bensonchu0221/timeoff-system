@@ -161,8 +161,18 @@ export async function sendLineBossReview(
 export async function sendLineFirstApproved(
   toLineUserId: string,
   leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  partOfDay: string,
+  durationDays: number,
 ): Promise<void> {
-  const text = `🕓 一審通過\n假別：${leaveType}\n\n已通過主管審核，送交終審者做最後核准，結果出爐會再通知您。`
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const text =
+    `🕓 一審通過\n` +
+    `假別：${leaveType}\n` +
+    `期間：${range}\n` +
+    `天數：${durationDays} 天\n\n` +
+    `已通過主管審核，送交終審者做最後核准，結果出爐會再通知您。`
   await linePush(toLineUserId, [{ type: "text", text }])
 }
 
@@ -323,13 +333,22 @@ function infoRow(label: string, value: string) {
 export async function sendLineLeaveResult(
   toLineUserId: string,
   leaveType: string,
+  startDate: Date,
+  endDate: Date,
+  partOfDay: string,
+  durationDays: number,
   status: "APPROVED" | "REJECTED",
   message?: string
 ): Promise<void> {
   const isApproved = status === "APPROVED"
   const head = isApproved ? "✅ 假單已核准" : "❌ 假單已駁回"
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
   const messageBlock = message?.trim() ? `\n\n主管留言：\n${message.trim()}` : ""
-  const text = `${head}\n假別：${leaveType}${messageBlock}`
+  const text =
+    `${head}\n` +
+    `假別：${leaveType}\n` +
+    `期間：${range}\n` +
+    `天數：${durationDays} 天${messageBlock}`
 
   await linePush(toLineUserId, [{ type: "text", text }])
 }
@@ -344,9 +363,10 @@ export async function sendLineLeaveCancelled(
   leaveType: string,
   startDate: Date,
   endDate: Date,
+  partOfDay: string,
   previousStatus: "PENDING" | "APPROVED"
 ): Promise<void> {
-  const range = formatDateRange(startDate, endDate)
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
   const head = previousStatus === "APPROVED" ? "⚠️ 已核准假單被撤銷" : "🚫 待審假單已撤銷"
   const tail = previousStatus === "APPROVED"
     ? `\n員工該期間將如常出勤，請依此調整工作安排。`
@@ -364,9 +384,10 @@ export async function sendLineBackupAssigned(
   leaveType: string,
   startDate: Date,
   endDate: Date,
+  partOfDay: string,
   status: "PENDING" | "APPROVED"
 ): Promise<void> {
-  const range = formatDateRange(startDate, endDate)
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
   const statusLabel = status === "APPROVED" ? "已核准" : "待審核"
   const text =
     `🤝 代理人通知\n` +
@@ -386,9 +407,10 @@ export async function sendLineBackupRemoved(
   leaveType: string,
   startDate: Date,
   endDate: Date,
+  partOfDay: string,
   reason: "REMOVED_BY_EDIT" | "CANCELLED" | "REJECTED"
 ): Promise<void> {
-  const range = formatDateRange(startDate, endDate)
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
   const reasonLabel = reason === "CANCELLED" ? "已撤銷" : reason === "REJECTED" ? "已駁回" : "已改指定他人"
   const text =
     `↩️ 代理人解除\n` +
@@ -406,10 +428,11 @@ export async function sendLineEscalation(
   leaveType: string,
   startDate: Date,
   endDate: Date,
+  partOfDay: string,
   hoursPending: number,
   link: string
 ): Promise<void> {
-  const range = formatDateRange(startDate, endDate)
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
   const text =
     `⏰ 48 小時未審假單提醒\n` +
     `申請人：${applicantName}\n` +
@@ -428,10 +451,11 @@ export async function sendLineSameDepartment(
   applicantName: string,
   leaveType: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  partOfDay: string
 ): Promise<void> {
-  const range = formatDateRange(startDate, endDate)
-  const text = `📅 團隊請假提醒\n${applicantName} 將於 ${range} 請${leaveType}`
+  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const text = `📅 部門請假提醒\n${applicantName} 將於 ${range} 請${leaveType}`
 
   await linePush(toLineUserId, [{ type: "text", text }])
 }
@@ -544,6 +568,16 @@ function formatDateRange(start: Date, end: Date): string {
   const s = formatDate(start)
   const e = formatDate(end)
   return s === e ? s : `${s}–${e}`
+}
+
+// 含半天時段標記的日期區間（鏡像 email.ts 的 formatLeavePeriod）。例：「6/3 (下半天)」
+function formatLeavePeriod(start: Date, end: Date, partOfDay: string): string {
+  const range = formatDateRange(start, end)
+  const partLabel =
+    partOfDay === "MORNING" ? " (上半天)" :
+    partOfDay === "AFTERNOON" ? " (下半天)" :
+    ""
+  return `${range}${partLabel}`
 }
 
 function formatDate(d: Date): string {
