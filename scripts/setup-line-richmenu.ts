@@ -4,8 +4,8 @@
  * 執行：  npx tsx scripts/setup-line-richmenu.ts
  * 需環境變數：LINE_CHANNEL_ACCESS_TOKEN、NEXT_PUBLIC_LIFF_ID
  *
- * 選單為 2 列 × 3 欄：上排走 LIFF 網頁（點了在 LINE 內開、自動登入），
- * 下排「快速查假 / 使用說明」沿用現有 bot webhook 指令（type: message）。
+ * 選單為 2 列 × 3 欄：多數格走 LIFF 網頁（點了在 LINE 內開、自動登入），
+ * 「快速查假」沿用現有 bot webhook 指令（type: message，回覆各假別餘額）。
  * 選單圖在 scripts/richmenu.png（佔位圖，正式上線可換設計稿，座標不變）。
  */
 import { readFile } from "fs/promises"
@@ -32,7 +32,7 @@ const richMenu = {
     // 下排：沿用現有 bot 指令
     { bounds: { x: 0, y: 843, width: 833, height: 843 }, action: { type: "message", label: "快速查假", text: "查假" } },
     { bounds: { x: 833, y: 843, width: 834, height: 843 }, action: { type: "uri", label: "個人設定", uri: liffUrl("/settings") } },
-    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "message", label: "使用說明", text: "說明" } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "uri", label: "審核假單", uri: liffUrl("/admin/approvals") } },
   ],
 }
 

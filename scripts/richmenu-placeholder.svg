@@ -44,6 +44,6 @@
   <text class="label" x="1250" y="1273" font-size="130" text-anchor="middle">個人設定</text>
   <text class="sub"   x="1250" y="1353" font-size="54"  text-anchor="middle">Settings</text>
 
-  <text class="label" x="2083" y="1273" font-size="130" text-anchor="middle">使用說明</text>
-  <text class="sub"   x="2083" y="1353" font-size="54"  text-anchor="middle">Help</text>
+  <text class="label" x="2083" y="1273" font-size="130" text-anchor="middle">審核假單</text>
+  <text class="sub"   x="2083" y="1353" font-size="54"  text-anchor="middle">Approvals</text>
 </svg>
