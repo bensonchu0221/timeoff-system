@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
         leaveTypeName,
         req.startDate,
         req.endDate,
+        req.partOfDay,
         hours,
         reviewLink
       ))
