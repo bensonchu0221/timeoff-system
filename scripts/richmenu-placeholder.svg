@@ -44,6 +44,15 @@
   <text class="label" x="1250" y="1273" font-size="130" text-anchor="middle">個人設定</text>
   <text class="sub"   x="1250" y="1353" font-size="54"  text-anchor="middle">Settings</text>
 
-  <text class="label" x="2083" y="1273" font-size="130" text-anchor="middle">審核假單</text>
-  <text class="sub"   x="2083" y="1353" font-size="54"  text-anchor="middle">Approvals</text>
+  <!-- 審核假單：白底黑字漫畫氣泡「staff only」（主管限定） -->
+  <g>
+    <rect x="1895" y="980" width="376" height="124" rx="62" ry="62" fill="#ffffff" stroke="#2f3b35" stroke-width="6"/>
+    <!-- 氣泡小尾巴（蓋掉底邊一段框線，畫兩條斜邊，做出漫畫尾巴） -->
+    <polygon points="1978,1096 2052,1096 1958,1170" fill="#ffffff"/>
+    <line x1="1980" y1="1102" x2="1958" y2="1170" stroke="#2f3b35" stroke-width="6" stroke-linecap="round"/>
+    <line x1="2050" y1="1102" x2="1958" y2="1170" stroke="#2f3b35" stroke-width="6" stroke-linecap="round"/>
+    <text x="2083" y="1060" font-size="56" font-weight="700" text-anchor="middle" fill="#1a1a1a"
+          font-family="'PingFang TC','Microsoft JhengHei',sans-serif">staff only</text>
+  </g>
+  <text class="label" x="2083" y="1320" font-size="130" text-anchor="middle">審核假單</text>
 </svg>
