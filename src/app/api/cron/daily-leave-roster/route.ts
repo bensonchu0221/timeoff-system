@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyRoster } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
+import { isTaipeiWorkDay } from "@/lib/leave-utils"
 
 // 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「全公司在職員工」
 // 認證：x-cron-secret header
@@ -17,6 +18,12 @@ export async function GET(req: NextRequest) {
 
   // 今天的範圍：以台北時區 00:00 為界
   const today = todayStartUTCFromTaipei()
+
+  // 非工作日（六日 / 國定假日）沒人上班，整支跳過不推播
+  if (!(await isTaipeiWorkDay(today))) {
+    return NextResponse.json({ pushed: 0, reason: "today is not a work day" })
+  }
+
   const tomorrow = new Date(today)
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
 

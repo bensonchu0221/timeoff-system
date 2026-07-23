@@ -239,9 +239,11 @@ async function sendApprovedNotifications(args: {
   if (departmentId) {
     const teammates = await prisma.user.findMany({
       where: { departmentId, terminatedDate: null, id: { not: applicantUserId } },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+      select: { id: true, email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     await Promise.allSettled(teammates.flatMap((t) => {
+      // 代理人本人若同部門，跳過部門通知：代理人通知已涵蓋同樣資訊，避免收到 2 則
+      if (t.id === backupId) return []
       const tasks: Promise<unknown>[] = []
       if (shouldSendEmail(t, "departmentLeave")) tasks.push(sendDepartmentLeaveEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
       if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay))

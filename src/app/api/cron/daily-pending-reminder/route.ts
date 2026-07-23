@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyPending } from "@/lib/line"
+import { todayStartUTCFromTaipei } from "@/lib/date-format"
+import { isTaipeiWorkDay } from "@/lib/leave-utils"
 
 // 每日 11:00 由外部 cron 觸發：把每位主管當下還有幾筆待審 push 到 LINE
 // 認證：header x-cron-secret 必須等於 CRON_SECRET（避免被外部任意呼叫）
@@ -12,6 +14,11 @@ export async function GET(req: NextRequest) {
   const supplied = req.headers.get("x-cron-secret")
   if (supplied !== cronSecret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+  }
+
+  // 非工作日（六日 / 國定假日）沒人上班，整支跳過不推播
+  if (!(await isTaipeiWorkDay(todayStartUTCFromTaipei()))) {
+    return NextResponse.json({ pushed: 0, reason: "today is not a work day" })
   }
 
   // 撈所有 PENDING 假單，依「目前階段的審核者」分桶：

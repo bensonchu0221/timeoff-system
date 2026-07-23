@@ -56,6 +56,24 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
   return workDays;
 }
 
+// 判斷「某一天」是不是台北時區的上班日。
+// 規則須與 calculateDurationDays 內的逐日判斷保持一致：
+//   預設六日為非工作日；若 Holiday 表有該日，用 isWorkDay 覆蓋（補班日 true、國定假日 false）。
+// 用於每日提醒 cron：非工作日整支跳過，不推播。
+export async function isTaipeiWorkDay(date: Date): Promise<boolean> {
+  const day = new Date(date)
+  day.setUTCHours(0, 0, 0, 0)
+
+  // date 有 @unique，用 findMany 取單筆以沿用既有測試 mock（與 calculateDurationDays 一致）
+  const holidays = await prisma.holiday.findMany({ where: { date: day } })
+  if (holidays.length > 0) {
+    return holidays[0].isWorkDay // 補班日 true / 國定假日 false
+  }
+
+  const dayOfWeek = day.getUTCDay() // 0 = 週日, 6 = 週六
+  return dayOfWeek !== 0 && dayOfWeek !== 6
+}
+
 // 勞基法 §38 特休對照表（來源：2017 修正版本 + HR 2026-05-18 確認）
 // 僅在年資 >= 2 時被呼叫（年資 0~1 走公司前 2 年政策）
 export function getStatutoryAnnualDays(seniorityYears: number): number {

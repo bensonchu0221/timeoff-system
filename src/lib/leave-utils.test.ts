@@ -16,6 +16,7 @@ import {
   monthsBetween,
   addYearsUTC,
   calcCalendarYearCumulative,
+  isTaipeiWorkDay,
 } from "./leave-utils"
 import { prisma } from "./db"
 
@@ -380,6 +381,38 @@ describe("calcCalendarYearCumulative（曆年制特休累計總額）", () => {
       const hire = utcDate("2025-01-01")
       expect(calcCalendarYearCumulative(hire, utcDate("2026-01-01"), 10, [], noAdj)).toBe(20)
     })
+  })
+})
+
+describe("isTaipeiWorkDay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(prisma.holiday.findMany as any).mockResolvedValue([]) // 預設沒有國定假日
+  })
+
+  it("平日（週一）= true", async () => {
+    // 2026-07-20 是星期一
+    expect(await isTaipeiWorkDay(utcDate("2026-07-20"))).toBe(true)
+  })
+
+  it("週六 = false", async () => {
+    // 2026-07-25 是星期六
+    expect(await isTaipeiWorkDay(utcDate("2026-07-25"))).toBe(false)
+  })
+
+  it("週日 = false", async () => {
+    // 2026-07-26 是星期日
+    expect(await isTaipeiWorkDay(utcDate("2026-07-26"))).toBe(false)
+  })
+
+  it("補班日（週六但 Holiday.isWorkDay=true）= true", async () => {
+    ;(prisma.holiday.findMany as any).mockResolvedValue([{ isWorkDay: true }])
+    expect(await isTaipeiWorkDay(utcDate("2026-07-25"))).toBe(true)
+  })
+
+  it("國定假日（平日但 Holiday.isWorkDay=false）= false", async () => {
+    ;(prisma.holiday.findMany as any).mockResolvedValue([{ isWorkDay: false }])
+    expect(await isTaipeiWorkDay(utcDate("2026-07-20"))).toBe(false)
   })
 })
 
