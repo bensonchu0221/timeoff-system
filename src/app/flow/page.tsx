@@ -93,12 +93,12 @@ export default async function FlowPage() {
           />
           <ScenarioCard
             title="每日 11:00 待審清單"
-            trigger="審核者當下還有待審假單"
+            trigger="工作日、審核者當下還有待審假單（六日 / 國定假日不推）"
             behavior="LINE 推播「您目前有 N 筆假單待審核」+ 審核連結；已進二審的單會算到 Boss 頭上，不再算主管"
           />
           <ScenarioCard
             title="每日 10:00 全公司請假名單"
-            trigger="今天有人請假（APPROVED）"
+            trigger="工作日、今天有人請假（APPROVED）；六日 / 國定假日沒人上班故不推"
             behavior="LINE 推播「今日請假：A 特休、B 事假上午」給全公司在職且已綁定 LINE 的同仁（自己今天請假則不會看到自己）"
           />
         </div>
@@ -146,6 +146,9 @@ export default async function FlowPage() {
         </p>
         <p className="text-xs text-gray-500 mt-1">
           *** 撤銷待審單時，若已進入二審，Boss（目前持單者）也會收到通知。
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          最終核准時，若代理人剛好也是同部門同仁，只會收到一則「代理人通知」（不再另發部門提醒，避免重複）。
         </p>
       </section>
 
