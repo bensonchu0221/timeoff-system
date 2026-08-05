@@ -27,6 +27,9 @@ export function CreateLeaveTypeForm() {
         if (result?.success) {
           toast.success(result.message)
           form.reset()
+        } else {
+          // production build 會把 throw 的訊息抹成通用文案，所以可預期的失敗改用回傳值
+          toast.error(result?.message || "新增失敗")
         }
       } catch (err: any) {
         toast.error(err.message || "新增失敗")

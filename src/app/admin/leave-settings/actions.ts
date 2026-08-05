@@ -26,26 +26,42 @@ export async function createLeaveType(data: FormData) {
 
   if (!name || isNaN(defaultDays)) throw new Error("Invalid input")
 
+  // 刪除假別是 soft delete（isActive=false），但 name 是 DB 層 @unique：
+  // 列表看不到那筆，直接 create 同名卻會撞 P2002。先查含已刪除的同名假別。
+  const existing = await prisma.leaveType.findUnique({ where: { name } })
+
+  if (existing?.isActive) {
+    return { success: false, message: `假別「${name}」已存在，請直接修改或改用其他名稱` }
+  }
+
   let created
   try {
-    created = await prisma.leaveType.create({
-      data: { name, defaultDays, isPaid, requireProof, isActive: true }
-    })
+    created = existing
+      // 同名但已被軟刪除 → 復活並套用這次填的設定（等同「刪掉重建」的預期行為）
+      ? await prisma.leaveType.update({
+          where: { id: existing.id },
+          data: { defaultDays, isPaid, requireProof, isActive: true },
+        })
+      : await prisma.leaveType.create({
+          data: { name, defaultDays, isPaid, requireProof, isActive: true },
+        })
   } catch (error: any) {
+    // 併發下仍可能撞 unique（兩人同時新增同名）
     if (error.code === 'P2002') {
-      throw new Error("同樣假別異常，請聯絡系統管理員")
+      return { success: false, message: `假別「${name}」已存在，請重新整理後再試` }
     }
     throw error
   }
+
   await logAudit({
     actorId,
     action: "LEAVE_TYPE_CREATE",
     targetType: "LeaveType",
     targetId: created.id,
-    payload: { name, defaultDays, isPaid, requireProof },
+    payload: { name, defaultDays, isPaid, requireProof, revived: Boolean(existing) },
   })
   revalidatePath("/admin/leave-settings")
-  return { success: true, message: "已新增假別" }
+  return { success: true, message: existing ? "已重新啟用假別" : "已新增假別" }
 }
 
 // 切換某假別的「需要證明文件」開關；前端使用 optimistic toggle 即時反應
