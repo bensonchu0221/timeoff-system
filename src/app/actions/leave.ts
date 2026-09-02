@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
-import { calculateDurationDays, getUserLeaveBalance, monthsBetween } from "@/lib/leave-utils"
+import { calculateDurationDays, getUserLeaveBalance, monthsBetween, partsOfDayConflict } from "@/lib/leave-utils"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
@@ -52,23 +52,19 @@ export async function applyLeave(data: {
 
   if (start > end) return { error: "Start date cannot be after end date" };
 
-  // Check for overlapping leaves
+  // Check for overlapping leaves：日期區間重疊，且時段衝突才擋。
+  // 上半天 + 下半天可並存；全天與任一時段衝突（全天已佔滿 1 天）。
   const overlappingLeaves = await prisma.leaveRequest.findMany({
     where: {
       userId,
       status: { in: ["PENDING", "APPROVED"] },
-      OR: [
-        // overlap condition: (new_start <= existing_end) AND (new_end >= existing_start)
-        {
-          startDate: { lte: end },
-          endDate: { gte: start }
-        }
-      ]
+      startDate: { lte: end },
+      endDate: { gte: start },
     }
   });
 
-  if (overlappingLeaves.length > 0) {
-    return { error: "此時間區間您已經有申請過假單（待審核或已核准），請勿重複申請！" };
+  if (overlappingLeaves.some((l) => partsOfDayConflict(l.partOfDay, data.partOfDay))) {
+    return { error: "此日期與時段您已經有申請過假單（待審核或已核准），請勿重複申請！" };
   }
 
   const durationDays = await calculateDurationDays(start, end, data.partOfDay);
@@ -496,7 +492,7 @@ export async function updateLeave(requestId: string, data: {
     return { error: "請假開始日期不可早於今天。" };
   }
 
-  // 排除自己這張，重新檢查是否與其他單重疊
+  // 排除自己這張，重新檢查是否與其他單重疊（日期 + 時段）
   const overlappingLeaves = await prisma.leaveRequest.findMany({
     where: {
       userId,
@@ -506,8 +502,8 @@ export async function updateLeave(requestId: string, data: {
       endDate: { gte: start }
     }
   });
-  if (overlappingLeaves.length > 0) {
-    return { error: "此時間區間您已經有另一張假單，請避開重疊區間。" };
+  if (overlappingLeaves.some((l) => partsOfDayConflict(l.partOfDay, data.partOfDay))) {
+    return { error: "此日期與時段您已經有另一張假單，請避開重疊時段。" };
   }
 
   const newDuration = await calculateDurationDays(start, end, data.partOfDay);

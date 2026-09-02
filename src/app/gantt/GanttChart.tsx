@@ -314,70 +314,69 @@ export function GanttChart({
                       const isToday = day.toDateString() === today.toDateString()
                       const isFirstOfMonth = day.getDate() === 1
 
-                      const leaveOnDay = userLeaves.find(l => isDateInLeave(day, l.startDate, l.endDate))
-
-                      // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨非工作日（週末/國定假日）時仍是方角，
-                      // 象徵「邏輯上還在同一張假單，只是被假日切開」
-                      // 延伸規則：相鄰那格也是同色塊才向外延伸 -1px 蓋過 td border；
-                      // 接到空白格時不延伸，避免色塊邊緣突出
-                      let roundedLeft = true
-                      let roundedRight = true
-                      let extendLeft = false
-                      let extendRight = false
-                      if (leaveOnDay && !isNonWorkDay) {
-                        const dayMs = new Date(day).setHours(0, 0, 0, 0)
-                        const startMs = new Date(leaveOnDay.startDate).setHours(0, 0, 0, 0)
-                        const endMs = new Date(leaveOnDay.endDate).setHours(0, 0, 0, 0)
-                        roundedLeft = dayMs <= startMs
-                        roundedRight = dayMs >= endMs
-
-                        const prevDay = new Date(day)
-                        prevDay.setDate(day.getDate() - 1)
-                        const prevIsNonWorkDay = getDayInfo(prevDay).isNonWorkDay
-                        extendLeft = !prevIsNonWorkDay && isDateInLeave(prevDay, leaveOnDay.startDate, leaveOnDay.endDate)
-
-                        const nextDay = new Date(day)
-                        nextDay.setDate(day.getDate() + 1)
-                        const nextIsNonWorkDay = getDayInfo(nextDay).isNonWorkDay
-                        extendRight = !nextIsNonWorkDay && isDateInLeave(nextDay, leaveOnDay.startDate, leaveOnDay.endDate)
-                      }
+                      const leavesOnDay = userLeaves.filter(l => isDateInLeave(day, l.startDate, l.endDate))
+                      const hasLeaveOnDay = leavesOnDay.length > 0
 
                       let cellContent = null
                       // 國定假日用淡紅、其餘非工作日(週末)用灰、補班日與平日白底
                       let bgColorClass = isPublicHoliday ? 'bg-rose-50' : isNonWorkDay ? 'bg-gray-100' : 'bg-white'
 
-                      if (isToday && !leaveOnDay) bgColorClass = 'bg-yellow-50/30'
+                      if (isToday && !hasLeaveOnDay) bgColorClass = 'bg-yellow-50/30'
                       if (isFirstOfMonth) bgColorClass += ' border-l-2 border-l-gray-50'
 
-                      if (leaveOnDay && !isNonWorkDay) {
-                        const isPending = leaveOnDay.status === 'PENDING'
-                        // 逐格審核權限與 server reviewLeaveAsUser 一致：
-                        // admin 全可；否則只有「該單當前階段的指定審核者」本人可審
-                        // （一審→approverId；二審→secondApproverId，即 Boss 終審者）。
-                        const canReviewThis = isAdmin || (
-                          isPending && (
-                            leaveOnDay.firstApprovedAt == null
-                              ? leaveOnDay.approverId === currentUserId
-                              : leaveOnDay.secondApproverId === currentUserId
+                      if (hasLeaveOnDay && !isNonWorkDay) {
+                        // 同一天可有上半天 + 下半天兩張單；色塊元件各畫一個對角三角
+                        cellContent = leavesOnDay.map(leaveOnDay => {
+                          // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨非工作日（週末/國定假日）時仍是方角，
+                          // 象徵「邏輯上還在同一張假單，只是被假日切開」
+                          // 延伸規則：相鄰那格也是同色塊才向外延伸 -1px 蓋過 td border；
+                          // 接到空白格時不延伸，避免色塊邊緣突出
+                          const dayMs = new Date(day).setHours(0, 0, 0, 0)
+                          const startMs = new Date(leaveOnDay.startDate).setHours(0, 0, 0, 0)
+                          const endMs = new Date(leaveOnDay.endDate).setHours(0, 0, 0, 0)
+                          const roundedLeft = dayMs <= startMs
+                          const roundedRight = dayMs >= endMs
+
+                          const prevDay = new Date(day)
+                          prevDay.setDate(day.getDate() - 1)
+                          const prevIsNonWorkDay = getDayInfo(prevDay).isNonWorkDay
+                          const extendLeft = !prevIsNonWorkDay && isDateInLeave(prevDay, leaveOnDay.startDate, leaveOnDay.endDate)
+
+                          const nextDay = new Date(day)
+                          nextDay.setDate(day.getDate() + 1)
+                          const nextIsNonWorkDay = getDayInfo(nextDay).isNonWorkDay
+                          const extendRight = !nextIsNonWorkDay && isDateInLeave(nextDay, leaveOnDay.startDate, leaveOnDay.endDate)
+
+                          const isPending = leaveOnDay.status === 'PENDING'
+                          // 逐格審核權限與 server reviewLeaveAsUser 一致：
+                          // admin 全可；否則只有「該單當前階段的指定審核者」本人可審
+                          // （一審→approverId；二審→secondApproverId，即 Boss 終審者）。
+                          const canReviewThis = isAdmin || (
+                            isPending && (
+                              leaveOnDay.firstApprovedAt == null
+                                ? leaveOnDay.approverId === currentUserId
+                                : leaveOnDay.secondApproverId === currentUserId
+                            )
                           )
-                        )
-                        cellContent = (
-                          <GanttLeaveCell
-                            leaveOnDay={leaveOnDay}
-                            isPending={isPending}
-                            canReview={canReviewThis}
-                            isAdmin={isAdmin}
-                            userName={u.name || ''}
-                            roundedLeft={roundedLeft}
-                            roundedRight={roundedRight}
-                            extendLeft={extendLeft}
-                            extendRight={extendRight}
-                          />
-                        )
+                          return (
+                            <GanttLeaveCell
+                              key={leaveOnDay.id}
+                              leaveOnDay={leaveOnDay}
+                              isPending={isPending}
+                              canReview={canReviewThis}
+                              isAdmin={isAdmin}
+                              userName={u.name || ''}
+                              roundedLeft={roundedLeft}
+                              roundedRight={roundedRight}
+                              extendLeft={extendLeft}
+                              extendRight={extendRight}
+                            />
+                          )
+                        })
                       }
 
                       return (
-                        <td key={idx} title={!leaveOnDay ? (isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined) : undefined} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
+                        <td key={idx} title={!hasLeaveOnDay ? (isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined) : undefined} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
                           {cellContent}
                         </td>
                       )

@@ -82,23 +82,37 @@ export function GanttLeaveCell({
   const leftClass = extendLeft ? "-left-px" : "left-0"
   const rightClass = extendRight ? "-right-px" : "right-0"
 
-  // 半天假（上/下半天）只會是單日（duration：partOfDay≠ALL_DAY 且工作天=1 才算 0.5），
-  // 故在該格內畫半格區分：上半天靠左、下半天靠右；全天維持整格。
+  // 半天假只會是單日。上半天：貼上邊 + 貼左邊 + 斜線閉合（左上三角）；
+  // 下半天：貼下邊 + 貼右邊 + 斜線閉合（右下三角）。兩張互補單會沿對角線拼滿整格。
+  // clip-path 會蓋掉同一元素的 border-radius，所以半天用外層 rounded-md + overflow 裁出與全天相同的圓角。
   const isHalfDay = leaveOnDay.partOfDay !== "ALL_DAY"
-  const positionClass = isHalfDay
-    ? (leaveOnDay.partOfDay === "MORNING" ? "left-0 right-1/2" : "left-1/2 right-0")
-    : `${leftClass} ${rightClass}`
-  const finalRounded = isHalfDay ? "rounded-md" : roundedClass
+  const isMorning = leaveOnDay.partOfDay === "MORNING"
+  const positionClass = isHalfDay ? "inset-0" : `top-0 bottom-0 ${leftClass} ${rightClass}`
+  const textAlignClass = isHalfDay
+    ? (isMorning ? "items-start justify-start pt-0.5 pl-1" : "items-end justify-end pb-0.5 pr-1")
+    : "items-center justify-center"
+  const clipPath = isHalfDay
+    ? (isMorning ? "polygon(0 0, 100% 0, 0 100%)" : "polygon(100% 0, 100% 100%, 0 100%)")
+    : undefined
+  const title = `${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === "ALL_DAY" ? "全天" : leaveOnDay.partOfDay === "MORNING" ? "上半天" : "下半天"}) - ${leaveOnDay.status}`
+  const block = (
+    <div
+      onClick={() => { if (clickable) setIsOpen(true) }}
+      style={clipPath ? { clipPath } : undefined}
+      className={`absolute ${positionClass} ${isHalfDay ? "pointer-events-auto" : roundedClass} ${textAlignClass} ${isHalfDay ? "text-[11px] leading-none" : "text-sm"} font-semibold flex text-white select-none ${bgColorClass} ${clickable ? "cursor-pointer hover:opacity-80" : ""} ${isPendingAction ? "opacity-50 animate-pulse" : ""}`}
+      title={title}
+    >
+      {leaveOnDay.leaveType.name.substring(0, 1)}
+    </div>
+  )
 
   return (
     <>
-      <div
-        onClick={() => { if (clickable) setIsOpen(true) }}
-        className={`absolute top-0 bottom-0 ${positionClass} ${finalRounded} text-sm font-semibold flex items-center justify-center text-white select-none ${bgColorClass} ${clickable ? 'cursor-pointer hover:opacity-80' : ''} ${isPendingAction ? 'opacity-50 animate-pulse' : ''}`}
-        title={`${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'}) - ${leaveOnDay.status}`}
-      >
-        {leaveOnDay.leaveType.name.substring(0,1)}
-      </div>
+      {isHalfDay ? (
+        <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none">
+          {block}
+        </div>
+      ) : block}
 
       {isOpen && clickable && (
         <div

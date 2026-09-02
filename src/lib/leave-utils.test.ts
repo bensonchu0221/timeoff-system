@@ -17,6 +17,8 @@ import {
   addYearsUTC,
   calcCalendarYearCumulative,
   isTaipeiWorkDay,
+  partsOfDayConflict,
+  pinAnnualLeaveFirst,
 } from "./leave-utils"
 import { prisma } from "./db"
 
@@ -413,6 +415,54 @@ describe("isTaipeiWorkDay", () => {
   it("國定假日（平日但 Holiday.isWorkDay=false）= false", async () => {
     ;(prisma.holiday.findMany as any).mockResolvedValue([{ isWorkDay: false }])
     expect(await isTaipeiWorkDay(utcDate("2026-07-20"))).toBe(false)
+  })
+})
+
+describe("partsOfDayConflict（同一天時段是否衝突）", () => {
+  it("上半天 + 下半天 = 不衝突（可同一天請兩張互補半天）", () => {
+    expect(partsOfDayConflict("MORNING", "AFTERNOON")).toBe(false)
+    expect(partsOfDayConflict("AFTERNOON", "MORNING")).toBe(false)
+  })
+
+  it("同一時段重疊 = 衝突", () => {
+    expect(partsOfDayConflict("MORNING", "MORNING")).toBe(true)
+    expect(partsOfDayConflict("AFTERNOON", "AFTERNOON")).toBe(true)
+    expect(partsOfDayConflict("ALL_DAY", "ALL_DAY")).toBe(true)
+  })
+
+  it("全天佔滿上+下半天，與任一半天或全天都衝突", () => {
+    expect(partsOfDayConflict("ALL_DAY", "MORNING")).toBe(true)
+    expect(partsOfDayConflict("MORNING", "ALL_DAY")).toBe(true)
+    expect(partsOfDayConflict("ALL_DAY", "AFTERNOON")).toBe(true)
+    expect(partsOfDayConflict("AFTERNOON", "ALL_DAY")).toBe(true)
+  })
+})
+
+describe("pinAnnualLeaveFirst（申請頁假別：特休釘第一）", () => {
+  it("把特休移到第一，其餘維持原相對順序", () => {
+    const input = [
+      { name: "補假" },
+      { name: "病假" },
+      { name: "特休" },
+      { name: "事假" },
+    ]
+    expect(pinAnnualLeaveFirst(input).map((x) => x.name)).toEqual(["特休", "補假", "病假", "事假"])
+  })
+
+  it("特休已在第一則不動", () => {
+    const input = [{ name: "特休" }, { name: "事假" }]
+    expect(pinAnnualLeaveFirst(input).map((x) => x.name)).toEqual(["特休", "事假"])
+  })
+
+  it("沒有特休則順序不變", () => {
+    const input = [{ name: "補假" }, { name: "事假" }]
+    expect(pinAnnualLeaveFirst(input).map((x) => x.name)).toEqual(["補假", "事假"])
+  })
+
+  it("不改原陣列", () => {
+    const input = [{ name: "補假" }, { name: "特休" }]
+    pinAnnualLeaveFirst(input)
+    expect(input.map((x) => x.name)).toEqual(["補假", "特休"])
   })
 })
 

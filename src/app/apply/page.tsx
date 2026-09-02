@@ -1,6 +1,6 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
-import { getUserLeaveBalance } from "@/lib/leave-utils"
+import { getUserLeaveBalance, pinAnnualLeaveFirst } from "@/lib/leave-utils"
 import { startOfYearUTC, formatTaipeiDateISO } from "@/lib/date-format"
 import { redirect } from "next/navigation"
 import { LeaveForm, EditTarget } from "./LeaveForm"
@@ -49,22 +49,24 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
   
   // Fetch available balances to pass to the client form for validation
   // Filter out Menstrual Leave (生理假) if the user is MALE
-  const balances = await Promise.all(
-    leaveTypes
-      .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
-      .map(async (lt) => {
-        const bal = await getUserLeaveBalance(user.id, lt.id)
-        return {
-          id: lt.id,
-          name: lt.name,
-          type: lt.name,
-          total: bal.total,
-          used: bal.used,
-          remaining: bal.remaining,
-          // 是否需證明文件（婚假 / 喪假）；前端用來顯示提示與決定附件區行為
-          requireProof: lt.requireProof,
-        }
-      })
+  const balances = pinAnnualLeaveFirst(
+    await Promise.all(
+      leaveTypes
+        .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
+        .map(async (lt) => {
+          const bal = await getUserLeaveBalance(user.id, lt.id)
+          return {
+            id: lt.id,
+            name: lt.name,
+            type: lt.name,
+            total: bal.total,
+            used: bal.used,
+            remaining: bal.remaining,
+            // 是否需證明文件（婚假 / 喪假）；前端用來顯示提示與決定附件區行為
+            requireProof: lt.requireProof,
+          }
+        })
+    )
   )
 
   // Fetch holidays to pass to client to highlight/disable in calendar
