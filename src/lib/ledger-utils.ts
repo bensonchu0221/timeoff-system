@@ -35,6 +35,8 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
     const opening = grants.find((g) => g.kind === "OPENING")
     for (const g of grants) {
       if (g.effectiveAt > now) continue // 未生效不顯示（明年發放在餘額卡片另行提示）
+      // 與 sumGrantTotal 一致：有期初時，期初日當天或之前的其他發放已含在期初內
+      if (opening && g.kind !== "OPENING" && g.effectiveAt <= opening.effectiveAt) continue
       const text = (g.basis as { text?: string } | null)?.text ?? `${g.kind} ${g.amount} 天`
       events.push({
         id: `grant-${g.id}`,

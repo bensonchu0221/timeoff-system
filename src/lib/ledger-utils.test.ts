@@ -35,6 +35,19 @@ describe("getLeaveLedger 特休（讀 grants）", () => {
     expect(events[0].runningBalance).toBe(1.5)
   })
 
+  it("有期初：期初日當天或之前的其他發放不列出（與餘額計算一致）", async () => {
+    mockPrisma.leaveRequest.findMany.mockResolvedValue([])
+    mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
+      { id: "p", kind: "PRORATA", effectiveAt: d("2023-08-14"), amount: 4, basis: { text: "首年" } },
+      { id: "a", kind: "ANNUAL", effectiveAt: d("2026-01-01"), amount: 10, basis: { text: "2026 年度" } },
+      { id: "op", kind: "OPENING", effectiveAt: d("2026-01-01"), amount: 12, basis: { text: "期初 12" } },
+      { id: "adj", kind: "ADJUSTMENT", effectiveAt: d("2026-09-01"), amount: 4, basis: { text: "調整 +4" } },
+    ])
+    const events = await getLeaveLedger("u", "lt")
+    expect(events.map((e) => e.id)).toEqual(["grant-adj", "grant-op"])
+    expect(events[0].runningBalance).toBe(16)
+  })
+
   it("負數調整列為 USAGE", async () => {
     mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
       { id: "g3", kind: "ADJUSTMENT", effectiveAt: d("2026-09-30"), amount: -1, basis: { text: "HR 調整 -1 天（扣除）" } },
