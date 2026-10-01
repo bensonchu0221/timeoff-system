@@ -122,7 +122,7 @@ export function RecalcBox({ changes, onApply, onClose }: {
   }
   return (
     <div className="border border-amber-300 bg-amber-50 rounded p-2 space-y-1">
-      <p className="font-semibold text-amber-900">到職日變更，以下發放需重算：</p>
+      <p className="font-semibold text-amber-900">以下發放與目前到職日不一致，需重算：</p>
       <ul>
         {changes.map((c) => (
           <li key={c.periodKey}>{c.label}　{c.oldAmount ?? "（無）"} → {c.newAmount ?? "（作廢）"} 天{c.newBasis ? `　${c.newBasis.text}` : ""}</li>

@@ -18,6 +18,9 @@ export function remainingFullMonths(hireDate: Date): number {
   return hireDate.getUTCDate() === 1 ? 12 - m : 11 - m
 }
 
+// 發放當下使用的到職日（YYYY-MM-DD）。存進 basis，之後用來判斷「到職日是否變過、需不需要重算」
+export const isoDate = (d: Date) => d.toISOString().slice(0, 10)
+
 // 首年按比例（A 算法，HR 2026-10-01 確認）
 export function calcProRataGrant(hireDate: Date, defaultDays: number): GrantCalc {
   const months = remainingFullMonths(hireDate)
@@ -26,6 +29,7 @@ export function calcProRataGrant(hireDate: Date, defaultDays: number): GrantCalc
     amount,
     basis: {
       rule: "PRORATA_MONTHS_V1",
+      hireDate: isoDate(hireDate),
       months,
       defaultDays,
       text: `到職首年：剩 ${months} 個月 × ${defaultDays} ÷ 12 → ${amount} 天`,
@@ -51,7 +55,7 @@ export function calcAnnualGrant(hireDate: Date, year: number, defaultDays: numbe
     : `${year} 年度特休：滿 ${completedYears} 年，依勞基法 §38 → ${base} 天`
   if (override !== null) text += `；個人額度 ${override} 天，取較大者 → ${amount} 天`
 
-  const basis: GrantBasis = { rule: "ANNUAL_V1", completedYears, base, text }
+  const basis: GrantBasis = { rule: "ANNUAL_V1", hireDate: isoDate(hireDate), completedYears, base, text }
   if (override !== null) basis.override = override
   return { amount, basis }
 }

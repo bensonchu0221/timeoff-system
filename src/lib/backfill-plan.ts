@@ -1,4 +1,4 @@
-import { calcAnnualGrant, periodKey, type GrantBasis, type Override } from "./annual-grant-calc"
+import { calcAnnualGrant, periodKey, isoDate, type GrantBasis, type Override } from "./annual-grant-calc"
 import { legacyProRata } from "./legacy-annual-calc"
 
 // 遷移回填：把「舊公式截至 now 已發生的發放」照抄成紀錄，數字與舊公式完全一致。
@@ -38,7 +38,7 @@ export function buildBackfillRows(input: {
     rows.push({
       kind: "PRORATA", year: hireYear, effectiveAt: hireDate, amount: p.amount,
       basis: {
-        rule: "MIGRATED_PRORATA_DAYS", remainingDays: p.remainingDays, yearTotal: p.yearTotal, defaultDays,
+        rule: "MIGRATED_PRORATA_DAYS", hireDate: isoDate(hireDate), remainingDays: p.remainingDays, yearTotal: p.yearTotal, defaultDays,
         text: `到職首年：${p.remainingDays}/${p.yearTotal} × ${defaultDays} → ${p.amount} 天（遷移自即時公式）`,
       },
       reason: null, periodKey: periodKey("PRORATA", hireYear), createdById: null,

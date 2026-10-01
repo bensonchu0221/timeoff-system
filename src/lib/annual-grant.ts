@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "./db"
 import { todayStartUTCFromTaipei } from "./date-format"
 import {
-  calcAnnualGrant, calcProRataGrant, annualIneligibleReason, openYearFor, periodKey,
+  calcAnnualGrant, calcProRataGrant, annualIneligibleReason, openYearFor, periodKey, isoDate,
   type GrantBasis, type Override,
 } from "./annual-grant-calc"
 
@@ -195,7 +195,7 @@ export async function previewHireDateRecalc(userId: string, today: Date = todayS
   const opening = await getActiveOpening(userId)
   const current = await prisma.annualLeaveGrant.findMany({
     where: { userId, voidedAt: null, kind: { in: ["PRORATA", "ANNUAL"] } },
-    select: { id: true, kind: true, year: true, periodKey: true, amount: true, effectiveAt: true },
+    select: { id: true, kind: true, year: true, periodKey: true, amount: true, effectiveAt: true, basis: true },
   })
   const overrides = (await loadOverrides(lt.id, [userId])).get(userId) ?? []
 
@@ -217,12 +217,20 @@ export async function previewHireDateRecalc(userId: string, today: Date = todayS
     }
   }
 
+  // 只有「發放當下的到職日 ≠ 目前到職日」的紀錄才重算；到職日沒變的紀錄（含遷移來的舊算法數字）一律保留。
+  // basis 沒記到職日的紀錄無從判斷，視為沒變。另外補上「應有但不存在」的年度。
+  const hireIso = user.hireDate ? isoDate(user.hireDate) : null
+  const isStale = (c: (typeof current)[number]) => {
+    const used = (c.basis as { hireDate?: string } | null)?.hireDate
+    return used !== undefined && used !== hireIso
+  }
   const changes: RecalcChange[] = []
   const currentBy = new Map(current.map((c) => [c.periodKey!, c]))
   for (const key of new Set([...currentBy.keys(), ...desired.keys()])) {
     const old = currentBy.get(key)
     const want = desired.get(key)
-    if (old && want && old.amount === want.amount && old.effectiveAt.getTime() === want.effectiveAt.getTime()) continue
+    if (old && !isStale(old)) continue
+    if (!old && !want) continue
     changes.push({
       periodKey: key, label: labelOf(key),
       oldId: old?.id ?? null, oldAmount: old?.amount ?? null,

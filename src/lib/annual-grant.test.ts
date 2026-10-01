@@ -139,7 +139,7 @@ describe("previewHireDateRecalc", () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: "u", name: "U", hireDate: d("2025-11-01"), terminatedDate: null })
     mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null)
     mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
-      { id: "old", kind: "PRORATA", year: 2026, periodKey: "PRORATA:2026", amount: 2.5, effectiveAt: d("2026-10-01") },
+      { id: "old", kind: "PRORATA", year: 2026, periodKey: "PRORATA:2026", amount: 2.5, effectiveAt: d("2026-10-01"), basis: { hireDate: "2026-10-01" } },
     ])
     const changes = await previewHireDateRecalc("u", d("2026-10-01"))
     expect(changes).toEqual(expect.arrayContaining([
@@ -153,9 +153,45 @@ describe("previewHireDateRecalc", () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: "u", name: "U", hireDate: d("2026-10-01"), terminatedDate: null })
     mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null)
     mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
-      { id: "p", kind: "PRORATA", year: 2026, periodKey: "PRORATA:2026", amount: 2.5, effectiveAt: d("2026-10-01") },
+      { id: "p", kind: "PRORATA", year: 2026, periodKey: "PRORATA:2026", amount: 2.5, effectiveAt: d("2026-10-01"), basis: { hireDate: "2026-10-01" } },
     ])
     expect(await previewHireDateRecalc("u", d("2026-10-01"))).toEqual([])
+  })
+})
+
+describe("previewHireDateRecalc 不重算到職日沒變的紀錄", () => {
+  it("遷移來的首年 5.5（舊天數算法），到職日沒變 → 不列入（不改成月份制 5）", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "leo", name: "Leo", hireDate: d("2026-06-15"), terminatedDate: null })
+    mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null)
+    mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
+      { id: "m", kind: "PRORATA", year: 2026, periodKey: "PRORATA:2026", amount: 5.5, effectiveAt: d("2026-06-15"), basis: { rule: "MIGRATED_PRORATA_DAYS", hireDate: "2026-06-15" } },
+    ])
+    expect(await previewHireDateRecalc("leo", d("2026-10-01"))).toEqual([])
+  })
+
+  it("已離職者的遷移年度發放，到職日沒變 → 不列入作廢", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "x", name: "X", hireDate: d("2020-03-01"), terminatedDate: d("2025-06-30") })
+    mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null)
+    mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
+      { id: "p", kind: "PRORATA", year: 2020, periodKey: "PRORATA:2020", amount: 8, effectiveAt: d("2020-03-01"), basis: { hireDate: "2020-03-01" } },
+      { id: "a26", kind: "ANNUAL", year: 2026, periodKey: "ANNUAL:2026", amount: 15, effectiveAt: d("2026-01-01"), basis: { hireDate: "2020-03-01" } },
+    ])
+    const changes = await previewHireDateRecalc("x", d("2026-10-01"))
+    expect(changes.find((c) => c.periodKey === "ANNUAL:2026")).toBeUndefined()
+  })
+
+  it("到職日同一年內改了 → 首年與年度都依新到職日重算", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "s", name: "S", hireDate: d("2025-08-01"), terminatedDate: null })
+    mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null)
+    mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([
+      { id: "p", kind: "PRORATA", year: 2025, periodKey: "PRORATA:2025", amount: 3, effectiveAt: d("2025-08-24"), basis: { hireDate: "2025-08-24" } },
+      { id: "a", kind: "ANNUAL", year: 2026, periodKey: "ANNUAL:2026", amount: 10, effectiveAt: d("2026-01-01"), basis: { hireDate: "2025-08-24" } },
+    ])
+    const changes = await previewHireDateRecalc("s", d("2026-10-01"))
+    expect(changes).toEqual([
+      expect.objectContaining({ periodKey: "ANNUAL:2026", oldId: "a", oldAmount: 10, newAmount: 10 }),
+      expect.objectContaining({ periodKey: "PRORATA:2025", oldId: "p", oldAmount: 3, newAmount: 4 }),
+    ])
   })
 })
 
