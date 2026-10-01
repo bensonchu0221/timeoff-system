@@ -1,4 +1,5 @@
 import crypto from "crypto"
+import { prisma } from "./db"
 
 // ----------- 通知偏好類型 -----------
 export type LineNotifyKey =
@@ -487,6 +488,18 @@ export async function sendLineDailyRoster(
   const text = `📋 ${dateLabel} 今日請假\n${rosterLines.join("\n")}`
 
   await linePush(toLineUserId, [{ type: "text", text }])
+}
+
+/**
+ * 系統訊息推給所有在職、已綁定 LINE 的 ADMIN（例如 12/1 特休年度發放結果）
+ */
+export async function sendLineAdminNotice(text: string): Promise<number> {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", terminatedDate: null, lineUserId: { not: null } },
+    select: { lineUserId: true },
+  })
+  await Promise.allSettled(admins.map((a) => linePush(a.lineUserId!, [{ type: "text", text }])))
+  return admins.length
 }
 
 /**
