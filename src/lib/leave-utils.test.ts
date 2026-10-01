@@ -15,12 +15,13 @@ import {
   getStatutoryAnnualDays,
   monthsBetween,
   addYearsUTC,
-  calcCalendarYearCumulative,
+
   isTaipeiWorkDay,
   partsOfDayConflict,
   pinAnnualLeaveFirst,
 } from "./leave-utils"
 import { prisma } from "./db"
+import { legacyCalcCalendarYearCumulative as calcCalendarYearCumulative } from "./legacy-annual-calc"
 
 // 工具：建一個 UTC midnight Date
 function utcDate(iso: string): Date {
