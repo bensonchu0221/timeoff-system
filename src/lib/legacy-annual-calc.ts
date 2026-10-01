@@ -1,3 +1,4 @@
+import { prisma } from "./db"
 import { getStatutoryAnnualDays, monthsBetween } from "./leave-utils"
 
 // ⚠️ 舊版特休即時公式（2026-05-20 ~ 遷移前）。
@@ -103,4 +104,29 @@ export function legacyCalcCalendarYearCumulative(
   }
 
   return total
+}
+
+// 舊版 getUserLeaveBalance 特休分支的複製：讀舊欄位（User.annualLeaveOpening*）與舊 LeaveAdjustment 表。
+export async function legacyAnnualBalance(userId: string, leaveTypeId: string, asOf: Date) {
+  const leaveType = await prisma.leaveType.findUniqueOrThrow({ where: { id: leaveTypeId } })
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
+  if (!user.hireDate) return { total: 0, used: 0, pending: 0, remaining: 0 }
+  const overrides = await prisma.userLeaveBalance.findMany({
+    where: { userId, leaveTypeId }, orderBy: { year: "asc" }, select: { year: true, totalQuota: true },
+  })
+  const adjustments = await prisma.leaveAdjustment.findMany({
+    where: { userId, leaveTypeId }, orderBy: { effectiveAt: "asc" }, select: { effectiveAt: true, amount: true },
+  })
+  const opening = user.annualLeaveOpeningBalance !== null && user.annualLeaveOpeningAt !== null
+    ? { balance: user.annualLeaveOpeningBalance, at: user.annualLeaveOpeningAt } : undefined
+  const total = legacyCalcCalendarYearCumulative(user.hireDate, asOf, leaveType.defaultDays, overrides, adjustments, opening)
+  const endOfYear = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59, 999))
+  const startFilter = opening ? { gte: opening.at, lte: endOfYear } : { lte: endOfYear }
+  const [u, p] = await Promise.all([
+    prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter } }),
+    prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter } }),
+  ])
+  const used = u._sum.durationDays || 0
+  const pending = p._sum.durationDays || 0
+  return { total, used, pending, remaining: total - used - pending }
 }
