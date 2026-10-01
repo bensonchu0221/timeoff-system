@@ -6,7 +6,7 @@ import {
   listUserGrantsAction, previewAnnualGrantAction, grantAnnualAction, previewRecalcAction, applyRecalcAction,
 } from "@/app/admin/annual-grant-actions"
 import type { RecalcChange } from "@/lib/annual-grant"
-import { setAnnualLeaveOpening } from "./actions"
+import { setAnnualLeaveOpening, clearAnnualLeaveOpening } from "./actions"
 import { VoidGrantButton } from "@/app/admin/leave-settings/Forms"
 
 type GrantRow = Awaited<ReturnType<typeof listUserGrantsAction>>[number]
@@ -45,7 +45,24 @@ export function AnnualLeaveCell({ userId, remaining, nextYear, disabled }: {
               <li key={r.id} className={r.voidedAt ? "line-through text-gray-400" : "text-gray-700"}
                   title={r.voidedAt ? `作廢：${r.voidReason}` : (r.basis as { text?: string } | null)?.text}>
                 {iso(r.effectiveAt)}　{KIND_LABEL[r.kind]}{r.year ? ` ${r.year}` : ""}　{r.amount > 0 ? "+" : ""}{r.amount}
-                {!r.voidedAt && (r.kind === "OPENING" || r.kind === "ADJUSTMENT") && <span className="ml-1"><VoidGrantButton id={r.id} /></span>}
+                {!r.voidedAt && r.kind === "ADJUSTMENT" && <span className="ml-1"><VoidGrantButton id={r.id} /></span>}
+                {!r.voidedAt && r.kind === "OPENING" && (
+                  <button
+                    disabled={disabled || isPending}
+                    onClick={() => {
+                      if (!confirm("清除期初餘額？清除後需補回首年與各年度發放，下一步會顯示預覽。")) return
+                      startTransition(async () => {
+                        try {
+                          const res = await clearAnnualLeaveOpening(userId)
+                          toast.success(res.message)
+                          setRecalc(res.recalc)
+                          refresh()
+                        } catch (e) { toast.error((e as Error).message) }
+                      })
+                    }}
+                    className="ml-1 text-red-500 hover:text-red-700 font-medium"
+                  >清除期初</button>
+                )}
               </li>
             ))}
           </ul>

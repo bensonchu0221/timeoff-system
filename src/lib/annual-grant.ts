@@ -315,6 +315,8 @@ export async function voidGrant(id: string, reason: string, actorId: string) {
   const g = await prisma.annualLeaveGrant.findUnique({ where: { id } })
   if (!g) throw new Error("找不到此紀錄")
   if (g.voidedAt) throw new Error("此紀錄已作廢")
+  // 期初要連同 User 舊欄位一起清，並讓 HR 補回首年／年度發放 → 只能走 clearAnnualLeaveOpening
+  if (g.kind === "OPENING") throw new Error("期初餘額請用「清除期初」，系統會一併提示補回首年與年度發放")
   await prisma.annualLeaveGrant.update({
     where: { id },
     data: { voidedAt: new Date(), voidedById: actorId, voidReason: reason.trim(), periodKey: null },

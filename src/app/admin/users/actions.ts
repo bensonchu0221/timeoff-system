@@ -379,5 +379,7 @@ export async function clearAnnualLeaveOpening(userId: string) {
   })
   revalidatePath("/admin/users")
   revalidatePath("/")
-  return { success: true, message: "已清除特休 Opening" }
+  // 期初清掉後，該員工的首年與各年度發放需要補回（舊制會自動從到職日重算）→ 回傳預覽讓 HR 確認
+  const recalc = await previewHireDateRecalc(userId)
+  return { success: true, message: "已清除特休期初", recalc }
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const mockPrisma = vi.hoisted(() => ({
   user: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(async () => []) },
+  annualLeaveGrant: { updateMany: vi.fn() },
 }))
 const svc = vi.hoisted(() => ({
   grantOnHire: vi.fn(async () => ({ created: [] })),
@@ -18,7 +19,7 @@ vi.mock("@/lib/audit", () => ({ logAudit: vi.fn(async () => {}) }))
 vi.mock("@/lib/impersonation", () => ({ assertNotImpersonating: vi.fn(async () => {}) }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 
-import { updateUserRole, updateUserHireDate, updateUserTerminatedDate } from "./actions"
+import { updateUserRole, updateUserHireDate, updateUserTerminatedDate, clearAnnualLeaveOpening } from "./actions"
 
 describe("admin/users actions 權限", () => {
   beforeEach(() => {
@@ -84,5 +85,24 @@ describe("到職日 / 離職串接 grant", () => {
     const r = await updateUserTerminatedDate("u", "2026-12-20")
     expect(svc.voidGrantsAfterTermination).toHaveBeenCalledWith("u", new Date("2026-12-20"), "hr")
     expect(r.message).toBe("已標記離職；已作廢 2027 年度特休 10 天")
+  })
+})
+
+describe("清除期初", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockAuth.mockResolvedValue({ user: { id: "hr", email: "hr@example.com" } })
+  })
+
+  it("作廢 OPENING 紀錄、清舊欄位，並回傳重算預覽", async () => {
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce({ id: "hr", role: "ADMIN" })
+      .mockResolvedValueOnce({ annualLeaveOpeningBalance: 12, annualLeaveOpeningAt: new Date("2026-01-01T00:00:00Z"), annualLeaveOpeningB: null, annualLeaveOpeningR: null })
+    mockPrisma.user.update.mockResolvedValue({})
+    svc.previewHireDateRecalc.mockResolvedValueOnce([{ periodKey: "PRORATA:2023" }] as never)
+    const r = await clearAnnualLeaveOpening("u")
+    expect(mockPrisma.annualLeaveGrant.updateMany).toHaveBeenCalled()
+    expect(mockPrisma.user.update.mock.calls[0][0].data).toMatchObject({ annualLeaveOpeningBalance: null })
+    expect(r.recalc).toHaveLength(1)
   })
 })

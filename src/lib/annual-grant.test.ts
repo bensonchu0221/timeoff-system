@@ -201,6 +201,20 @@ describe("voidGrant / setOpening", () => {
     await expect(voidGrant("g", "x", "hr")).rejects.toThrow("此紀錄已作廢")
   })
 
+  it("期初餘額不能用一般作廢（要走清除期初，才會同步舊欄位並重算）", async () => {
+    mockPrisma.annualLeaveGrant.findUnique.mockResolvedValue({ id: "op", kind: "OPENING", voidedAt: null })
+    await expect(voidGrant("op", "x", "hr")).rejects.toThrow("期初餘額請用「清除期初」")
+    expect(mockPrisma.annualLeaveGrant.update).not.toHaveBeenCalled()
+  })
+
+  it("清除期初後：沒有任何系統發放 → 預覽補回首年與各年度", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "j", name: "J", hireDate: d("2023-08-14"), terminatedDate: null })
+    mockPrisma.annualLeaveGrant.findFirst.mockResolvedValue(null) // 期初已作廢
+    mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([])
+    const changes = await previewHireDateRecalc("j", d("2026-10-01"))
+    expect(changes.map((c) => c.periodKey)).toEqual(["ANNUAL:2024", "ANNUAL:2025", "ANNUAL:2026", "PRORATA:2023"])
+  })
+
   it("作廢原因必填", async () => {
     await expect(voidGrant("g", "  ", "hr")).rejects.toThrow("作廢原因必填")
   })
