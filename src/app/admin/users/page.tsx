@@ -3,6 +3,8 @@ import { UserTable } from "./UserTable"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { CreateUserForm } from "./CreateUserForm"
+import { getUserLeaveBalance } from "@/lib/leave-utils"
+import { todayStartUTCFromTaipei } from "@/lib/date-format"
 
 export const metadata = {
   title: "層級與角色設定 | Timeoff",
@@ -41,6 +43,17 @@ export default async function AdminUsersPage() {
     ]
   })
 
+  // 每位在職員工目前的特休剩餘（讀發放紀錄）
+  const annualType = await prisma.leaveType.findFirst({ where: { isActive: true, name: { contains: "特休" } }, select: { id: true } })
+  const remainingByUser: Record<string, number> = {}
+  if (annualType) {
+    for (const u of users) {
+      if (u.terminatedDate) continue
+      remainingByUser[u.id] = (await getUserLeaveBalance(u.id, annualType.id)).remaining
+    }
+  }
+  const nextYear = todayStartUTCFromTaipei().getUTCFullYear() + 1
+
   // 下拉選項只取啟用中的部門；新增 user 與 inline 改部門共用
   const departments = await prisma.department.findMany({
     where: { isActive: true },
@@ -63,7 +76,7 @@ export default async function AdminUsersPage() {
         <CreateUserForm departments={departments} />
       </div>
 
-      <UserTable users={users} departments={departments} />
+      <UserTable users={users} departments={departments} remainingByUser={remainingByUser} nextYear={nextYear} />
     </div>
   )
 }

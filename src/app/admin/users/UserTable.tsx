@@ -12,10 +12,11 @@ import {
   updateUserChineseName,
   updateUserDepartment,
   updateUserCompany,
-  setAnnualLeaveOpening,
-  clearAnnualLeaveOpening,
   setFinalApprover,
 } from "./actions"
+import { AnnualLeaveCell, RecalcBox } from "./AnnualLeaveCell"
+import { applyRecalcAction } from "@/app/admin/annual-grant-actions"
+import type { RecalcChange } from "@/lib/annual-grant"
 import toast from "react-hot-toast"
 
 type UserNode = {
@@ -40,8 +41,12 @@ type UserNode = {
 
 type DepartmentOption = { id: string; name: string }
 
-export function UserTable({ users, departments }: { users: UserNode[]; departments: DepartmentOption[] }) {
+export function UserTable({ users, departments, remainingByUser, nextYear }: {
+  users: UserNode[]; departments: DepartmentOption[]; remainingByUser: Record<string, number>; nextYear: number
+}) {
   const [isPending, startTransition] = useTransition()
+  // 改到職日後若已有系統發放紀錄，顯示重算預覽（HR 決定要不要重算）
+  const [recalcFor, setRecalcFor] = useState<{ userId: string; changes: RecalcChange[] } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isScrolled, setIsScrolled] = useState(false)
   const scrollIntervalRef = useRef<number | null>(null)
@@ -98,7 +103,7 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">直屬主管</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">終審者(Boss)</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
-            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">特休 Opening</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">特休</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">離職日</th>
           </tr>
         </thead>
@@ -243,19 +248,21 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
                     type="date"
                     disabled={isPending}
                     value={user.hireDate ? user.hireDate.toISOString().split("T")[0] : ""}
-                    onChange={(e) => wrap(() => updateUserHireDate(user.id, e.target.value))}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      startTransition(async () => {
+                        try {
+                          const r = await updateUserHireDate(user.id, v)
+                          toast.success(r.message)
+                          if (r.recalc.length > 0) setRecalcFor({ userId: user.id, changes: r.recalc })
+                        } catch (err) { toast.error((err as Error).message || "更新失敗") }
+                      })
+                    }}
                     className="input input-bordered input-sm w-full bg-gray-50"
                   />
                 </td>
                 <td className="px-6 py-4 align-top">
-                  <OpeningCell
-                    userId={user.id}
-                    initialBalance={user.annualLeaveOpeningBalance}
-                    initialAt={user.annualLeaveOpeningAt}
-                    disabled={isPending}
-                    onSave={(balance, at) => wrap(() => setAnnualLeaveOpening(user.id, balance, at, null, null))}
-                    onClear={() => wrap(() => clearAnnualLeaveOpening(user.id))}
-                  />
+                  <AnnualLeaveCell userId={user.id} remaining={remainingByUser[user.id]} nextYear={nextYear} disabled={isPending} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap align-top">
                   <input
@@ -273,6 +280,18 @@ export function UserTable({ users, departments }: { users: UserNode[]; departmen
         </tbody>
       </table>
     </div>
+      {recalcFor && (
+        <div className="fixed bottom-4 right-4 z-40 w-96 bg-white shadow-xl rounded-lg p-4 text-xs">
+          <RecalcBox
+            changes={recalcFor.changes}
+            onClose={() => { setRecalcFor(null); toast("到職日已儲存；發放紀錄未變更，可之後在特休欄重算") }}
+            onApply={(reason) => startTransition(async () => {
+              try { toast.success((await applyRecalcAction(recalcFor.userId, reason)).message); setRecalcFor(null) }
+              catch (err) { toast.error((err as Error).message) }
+            })}
+          />
+        </div>
+      )}
       {/* 浮動左右捲動按鈕（PC 限定，hover 持續捲動） */}
       <button
         type="button"
@@ -324,89 +343,3 @@ function InlineTextCell({
   )
 }
 
-// Opening Balance 設定控件：balance + at 兩個 input + 儲存 / 清除
-function OpeningCell({
-  initialBalance,
-  initialAt,
-  disabled,
-  onSave,
-  onClear,
-}: {
-  userId: string
-  initialBalance: number | null
-  initialAt: Date | null
-  disabled?: boolean
-  onSave: (balance: number, atISO: string) => void
-  onClear: () => void
-}) {
-  const initialBalanceStr = initialBalance !== null ? String(initialBalance) : ""
-  const initialAtStr = initialAt ? initialAt.toISOString().split("T")[0] : "2026-01-01"
-  const [balance, setBalance] = useState(initialBalanceStr)
-  const [at, setAt] = useState(initialAtStr)
-  const hasOpening = initialBalance !== null
-
-  const handleSave = () => {
-    const balanceNum = Number(balance)
-    if (balance.trim() === "" || isNaN(balanceNum)) {
-      toast.error("請填 opening 天數")
-      return
-    }
-    if (!at) {
-      toast.error("請填日期")
-      return
-    }
-    onSave(balanceNum, at)
-  }
-
-  const handleClear = () => {
-    if (!confirm("清除特休 Opening 後，該員工特休改從入職日累計（會大量增加可請天數）。確定？")) return
-    setBalance("")
-    onClear()
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          step="0.5"
-          disabled={disabled}
-          value={balance}
-          placeholder="opening"
-          onChange={(e) => setBalance(e.target.value)}
-          className="input input-bordered input-sm w-20 bg-gray-50"
-          title="opening 天數"
-        />
-        <span className="text-xs text-gray-400">@</span>
-        <input
-          type="date"
-          disabled={disabled}
-          value={at}
-          onChange={(e) => setAt(e.target.value)}
-          className="input input-bordered input-sm w-36 bg-gray-50"
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={disabled}
-          className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded hover:bg-blue-200 disabled:opacity-50"
-        >
-          儲存
-        </button>
-        {hasOpening && (
-          <button
-            type="button"
-            onClick={handleClear}
-            disabled={disabled}
-            className="text-[10px] text-red-500 hover:text-red-700 disabled:opacity-50"
-          >
-            清除
-          </button>
-        )}
-        {!hasOpening && <span className="text-[10px] text-gray-400">未設定（走入職日累計）</span>}
-      </div>
-    </div>
-  )
-}
