@@ -130,3 +130,42 @@ export async function legacyAnnualBalance(userId: string, leaveTypeId: string, a
   const pending = p._sum.durationDays || 0
   return { total, used, pending, remaining: total - used - pending }
 }
+
+// 舊版 getLeaveLedger 特休分支的「發放類事件」（遷移前 ledger-utils.ts 的邏輯，純函式版）。
+// 不含「滿 3 個月」0 天提示與請假事件。只給零差異審核比對歷史假單用。
+export function legacyLedgerGrantEvents(input: {
+  hireDate: Date | null
+  opening: { balance: number; at: Date } | null
+  overrides: { year: number; totalQuota: number }[]
+  adjustments: { effectiveAt: Date; amount: number }[]
+  defaultDays: number
+  now: Date
+}): { date: Date; amount: number }[] {
+  const { hireDate, opening, overrides, adjustments, defaultDays, now } = input
+  if (!hireDate) return []
+  const events: { date: Date; amount: number }[] = []
+  if (opening) {
+    events.push({ date: opening.at, amount: opening.balance })
+  } else {
+    events.push({ date: hireDate, amount: legacyProRata(hireDate, defaultDays).amount })
+  }
+  for (let year = hireDate.getUTCFullYear() + 1; year < now.getUTCFullYear() + 1; year++) {
+    const jan1 = new Date(Date.UTC(year, 0, 1))
+    if (jan1 > now) break
+    if (opening && jan1 <= opening.at) continue
+    const completedYears = Math.floor(monthsBetween(hireDate, jan1) / 12)
+    const base = completedYears < 2 ? defaultDays : getStatutoryAnnualDays(completedYears)
+    let applicable: number | null = null
+    for (const o of overrides) {
+      if (o.year <= year) applicable = o.totalQuota
+      else break
+    }
+    events.push({ date: jan1, amount: applicable !== null ? Math.max(base, applicable) : base })
+  }
+  for (const adj of adjustments) {
+    if (opening && adj.effectiveAt <= opening.at) continue
+    if (adj.effectiveAt > now) continue
+    events.push({ date: adj.effectiveAt, amount: adj.amount })
+  }
+  return events
+}

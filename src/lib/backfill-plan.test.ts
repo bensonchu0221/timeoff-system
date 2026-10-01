@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest"
 vi.mock("./db", () => ({ prisma: {} }))
 
 import { buildBackfillRows } from "./backfill-plan"
-import { legacyCalcCalendarYearCumulative } from "./legacy-annual-calc"
+import { legacyCalcCalendarYearCumulative, legacyLedgerGrantEvents } from "./legacy-annual-calc"
 import { sumGrantTotal } from "./annual-grant-calc"
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -73,4 +73,21 @@ describe("buildBackfillRows 與舊公式等價（asOf <= 遷移日）", () => {
   it("沒有到職日 → 空陣列", () => {
     expect(buildBackfillRows({ hireDate: null, opening: null, overrides: [], adjustments: [], defaultDays: 10, now: NOW })).toEqual([])
   })
+})
+
+describe("舊版歷史假單的發放事件 與 新版（回填列 + 新 ledger 過濾）逐筆一致", () => {
+  const key = (e: { date: Date; amount: number }) => `${e.date.toISOString().slice(0, 10)}:${e.amount}`
+  for (const c of cases) {
+    it(c.name, () => {
+      const legacy = legacyLedgerGrantEvents({ ...c, defaultDays: 10, now: NOW }).map(key).sort()
+      const rows = buildBackfillRows({ ...c, defaultDays: 10, now: NOW })
+      const opening = rows.find((r) => r.kind === "OPENING")
+      const shown = rows
+        .filter((r) => r.effectiveAt <= NOW)
+        .filter((r) => !opening || r.kind === "OPENING" || r.effectiveAt > opening.effectiveAt)
+        .map((r) => key({ date: r.effectiveAt, amount: r.amount }))
+        .sort()
+      expect(shown).toEqual(legacy)
+    })
+  }
 })
