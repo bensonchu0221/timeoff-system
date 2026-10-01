@@ -185,8 +185,11 @@ npx prisma db execute --file /tmp/apply.sql --schema prisma/schema.prisma
 | `timeoff-daily-pending-reminder` | `0 11 * * *` Asia/Taipei | `/api/cron/daily-pending-reminder` |
 | `timeoff-escalate-pending` | `0 9-18 * * 1-5` Asia/Taipei（平日 09–18 每小時） | `/api/cron/escalate-pending` |
 | `timeoff-annual-leave-grant` | `0 6 1 12 *` Asia/Taipei（每年 12/1 06:00） | `/api/cron/annual-leave-grant` |
+| `timeoff-sync-holidays` | `0 6 1 9 *` Asia/Taipei（每年 9/1 06:00） | `/api/cron/sync-holidays` |
 
-四個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+五個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+
+國定假日同步（`timeoff-sync-holidays`，2026-10-01 建立）：同步「明年＋今年」；明年未公布（來源 404）不算失敗；結果 LINE 通知 ADMIN。失敗時到「假別與額度設定 → 國定假日同步」手動同步。
 
 ### 特休年度發放（`timeoff-annual-leave-grant`，2026-10-01 建立）
 
