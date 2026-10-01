@@ -35,16 +35,20 @@ export async function createLeaveType(data: FormData) {
     return { success: false, message: `假別「${name}」已存在，請直接修改或改用其他名稱` }
   }
 
+  // 新增（或復活）的假別排在最後
+  const maxOrder = await prisma.leaveType.aggregate({ _max: { sortOrder: true } })
+  const sortOrder = (maxOrder._max.sortOrder ?? -1) + 1
+
   let created
   try {
     created = existing
       // 同名但已被軟刪除 → 復活並套用這次填的設定（等同「刪掉重建」的預期行為）
       ? await prisma.leaveType.update({
           where: { id: existing.id },
-          data: { defaultDays, isPaid, requireProof, isActive: true },
+          data: { defaultDays, isPaid, requireProof, isActive: true, sortOrder },
         })
       : await prisma.leaveType.create({
-          data: { name, defaultDays, isPaid, requireProof, isActive: true },
+          data: { name, defaultDays, isPaid, requireProof, isActive: true, sortOrder },
         })
   } catch (error: any) {
     // 併發下仍可能撞 unique（兩人同時新增同名）
@@ -66,6 +70,28 @@ export async function createLeaveType(data: FormData) {
 }
 
 // 切換某假別的「需要證明文件」開關；前端使用 optimistic toggle 即時反應
+// 假別拖拉排序：orderedIds = 啟用中假別的新順序（首頁額度、請假表單下拉、LINE 查詢、報表都依此）
+export async function reorderLeaveTypes(orderedIds: string[]) {
+  const actorId = await verifyAdmin()
+  const active = await prisma.leaveType.findMany({ where: { isActive: true }, select: { id: true } })
+  const activeIds = new Set(active.map((a) => a.id))
+  if (orderedIds.length !== activeIds.size || new Set(orderedIds).size !== orderedIds.length || !orderedIds.every((id) => activeIds.has(id))) {
+    throw new Error("假別清單已變動，請重新整理頁面後再排序")
+  }
+  await prisma.$transaction(orderedIds.map((id, i) => prisma.leaveType.update({ where: { id }, data: { sortOrder: i } })))
+  await logAudit({
+    actorId,
+    action: "LEAVE_TYPE_UPDATE",
+    targetType: "LeaveType",
+    targetId: "ORDER",
+    payload: { orderedIds },
+  })
+  revalidatePath("/admin/leave-settings")
+  revalidatePath("/apply")
+  revalidatePath("/")
+  return { success: true, message: "已更新假別順序" }
+}
+
 export async function toggleLeaveTypeRequireProof(data: FormData) {
   const actorId = await verifyAdmin()
   const id = data.get("id") as string

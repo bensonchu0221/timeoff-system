@@ -37,7 +37,7 @@ export async function GET(
     startDate: l.startDate,
     endDate: l.endDate,
     summary: `${memberMap.get(l.userId) || "員工"} - ${l.leaveType.name}${l.partOfDay !== "ALL_DAY" ? ` (${l.partOfDay === "MORNING" ? "上半天" : "下半天"})` : ""}`,
-    description: l.reason || undefined,
+    // 共享行事曆不放請假原因（可能含病況等隱私）；原因只出現在本人的個人行事曆
   }))
 
   const ics = buildICS(`全公司請假行事曆`, events)

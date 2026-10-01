@@ -5,16 +5,15 @@ import { getUserLeaveBalance, getStatutoryAnnualDays, monthsBetween } from "@/li
 
 import {
   CreateLeaveTypeForm,
-  DeleteLeaveTypeButton,
   SyncHolidaysForm,
   CreateOverrideForm,
   CreateAdjustmentForm,
   VoidGrantButton,
-  ToggleRequireProofSwitch,
 } from "./Forms"
 import { formatTaipeiDateISO, todayStartUTCFromTaipei } from "@/lib/date-format"
 import { allowedGrantYears } from "@/lib/annual-grant-calc"
 import { AnnualGrantPanel } from "./AnnualGrantPanel"
+import { LeaveTypeTable } from "./LeaveTypeTable"
 import { BalancesTable, OverrideTableRow } from "./BalancesTable"
 
 export const metadata = {
@@ -39,7 +38,7 @@ export default async function LeaveSettingsPage() {
 
   const leaveTypes = await prisma.leaveType.findMany({
     where: { isActive: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   })
 
   // 在職員工清單：給「新增 override」下拉用
@@ -143,33 +142,14 @@ export default async function LeaveSettingsPage() {
 
         <CreateLeaveTypeForm />
 
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">假別名稱</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">預設天數</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">支薪</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">證明文件</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {leaveTypes.map((lt) => (
-              <tr key={lt.id}>
-                <td className="px-4 py-3 font-medium">{lt.name}</td>
-                <td className="px-4 py-3">{lt.defaultDays} 天</td>
-                <td className="px-4 py-3">{lt.isPaid ? "有" : "無"}</td>
-                <td className="px-4 py-3">
-                  <ToggleRequireProofSwitch id={lt.id} initial={lt.requireProof} />
-                </td>
-                <td className="px-4 py-3">
-                  <DeleteLeaveTypeButton id={lt.id} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* 拖拉左側把手調整順序；key 讓新增 / 刪除假別後重新載入列表 */}
+        <LeaveTypeTable
+          key={leaveTypes.map((lt) => lt.id).join(",")}
+          leaveTypes={leaveTypes.map((lt) => ({ id: lt.id, name: lt.name, defaultDays: lt.defaultDays, isPaid: lt.isPaid, requireProof: lt.requireProof }))}
+        />
         <p className="mt-3 text-xs text-gray-500">
+          拖拉左側把手可調整假別順序，會套用到首頁額度、請假表單下拉選單（預設選第一個）、LINE 查詢與報表。
+          <br />
           備註：「特休」假別的計算不直接使用「預設天數」，而是依「公司前 2 年 = 預設天數 / 滿 2 年後依勞基法 §38 對照表」+ override 的較大者。其他假別則直接使用預設天數。
         </p>
       </div>

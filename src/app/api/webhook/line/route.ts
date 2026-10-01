@@ -241,7 +241,7 @@ async function handleBalanceQuery(replyToken: string, userId: string): Promise<v
   const year = new Date().getFullYear()
   const leaveTypes = await prisma.leaveType.findMany({
     where: { isActive: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   })
 
   const lines: string[] = []
