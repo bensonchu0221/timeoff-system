@@ -39,9 +39,20 @@ export function GanttChart({
   const toggleType = (name: string) =>
     setSelectedTypes(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name])
   const hasActiveFilter = selectedCompany !== "" || selectedDept !== "" || selectedTypes.length > 0
+  // 點人名標色（可多選）：只存在這次瀏覽，重新整理即清除
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set())
+  const toggleHighlight = (id: string) =>
+    setHighlighted(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const clearFilters = () => { setSelectedCompany(""); setSelectedDept(""); setSelectedTypes([]) }
   // 公司代號 → 顯示名稱
   const COMPANY_LABELS: Record<string, string> = { POPIN: "博英", BROADCIEL: "鉑芯" }
+  // 左側人名欄寬（px）。捲動置中計算與月份標籤的 sticky 位移都依此
+  const NAME_COL = 88
 
   // 依年-月分組 days，計算每個月份佔用的天數 (colSpan)
   const monthGroups: { year: number; month: number; count: number }[] = []
@@ -66,14 +77,13 @@ export function GanttChart({
       // 如果沒有指定月份（看當月），優先將「今天」對齊在可視區域的正中央
       const todayPos = todayRef.current.offsetLeft
       const containerWidth = container.offsetWidth
-      // 左側固定欄寬度為 192px，故可視區域為 containerWidth - 192
-      // 欲將今天置中於此可視區域，scrollLeft 偏移量應為今天的位置減去固定欄寬度與一半的可視區域寬度
-      const visibleWidth = containerWidth - 192
-      container.scrollLeft = todayPos - 192 - visibleWidth / 2
+      // 扣掉左側固定人名欄，把「今天」置中於可視區域
+      const visibleWidth = containerWidth - NAME_COL
+      container.scrollLeft = todayPos - NAME_COL - visibleWidth / 2
     } else if (firstOfMonthRef.current) {
       // 如果有指定月份（或今天不存在），滾動到該月 1 號
       const firstDayPos = firstOfMonthRef.current.offsetLeft
-      container.scrollLeft = firstDayPos - 212 // 扣除 192px 固定欄 + 20px padding
+      container.scrollLeft = firstDayPos - NAME_COL - 20 // 扣除人名欄 + 20px 留白
     }
   }, [days, searchParams])
 
@@ -113,7 +123,8 @@ export function GanttChart({
   }
 
   const currentMonthStr = searchParams.get("month") || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  const currentMonthLabel = currentMonthStr
+  const [labelYear, labelMonth] = currentMonthStr.split("-").map(Number)
+  const currentMonthLabel = `${labelYear} 年 ${labelMonth} 月`
 
   // 從已載入資料動態產生篩選選項（去重）
   const companyOptions = Array.from(new Set(targetUsers.map(u => u.company).filter(Boolean)))
@@ -133,127 +144,152 @@ export function GanttChart({
     return true
   })
 
+  // 標色列：在格子原本底色上疊一層品牌藍，週末 / 假日的底色仍看得出來
+  const HIGHLIGHT_OVERLAY = "inset 0 0 0 999px color-mix(in srgb, var(--brand-primary) 9%, transparent)"
+
   return (
     <div className="space-y-4">
-      {/* Navigation Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => navigateMonth(-1)}
-            className="p-2 hover:bg-gray-100 rounded-md transition border border-gray-200 text-gray-600"
-            title="上個月"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="px-4 py-2 font-bold text-gray-700 bg-gray-50 rounded-md border border-gray-200">
-            {currentMonthLabel}
+      {/* 控制卡片：上＝月份切換，下＝篩選，中間一條分隔線 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigateMonth(-1)}
+              className="p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--brand-primary)]"
+              title="上個月"
+              aria-label="上個月"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-[8.5rem] text-center text-lg font-semibold text-gray-900 tabular-nums">
+              {currentMonthLabel}
+            </div>
+            <button
+              onClick={() => navigateMonth(1)}
+              className="p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--brand-primary)]"
+              title="下個月"
+              aria-label="下個月"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
           </div>
-          <button 
-            onClick={() => navigateMonth(1)}
-            className="p-2 hover:bg-gray-100 rounded-md transition border border-gray-200 text-gray-600"
-            title="下個月"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
           <button
             onClick={goToToday}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 font-medium rounded-md hover:bg-gray-50 border border-gray-200 transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[var(--brand-primary)] rounded-md border border-[var(--brand-primary)]/30 hover:bg-[var(--brand-primary)]/5 transition"
           >
             <Calendar className="w-4 h-4" />
             回今天
           </button>
         </div>
-      </div>
 
-      {/* 篩選器：公司、部門（單選下拉）＋ 假別（多選膠囊），三者條件疊加 */}
-      <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-        <select
-          value={selectedCompany}
-          onChange={e => setSelectedCompany(e.target.value)}
-          className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
-        >
-          <option value="">所有公司</option>
-          {companyOptions.map(c => (
-            <option key={c} value={c!}>{COMPANY_LABELS[c!] ?? c}</option>
-          ))}
-        </select>
-
-        <select
-          value={selectedDept}
-          onChange={e => setSelectedDept(e.target.value)}
-          className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
-        >
-          <option value="">所有部門</option>
-          {deptOptions.map(d => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
-
-        {leaveTypeOptions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-gray-500">假別：</span>
-            {leaveTypeOptions.map(name => {
-              const active = selectedTypes.includes(name)
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => toggleType(name)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition ${
-                    active
-                      ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {name}
-                </button>
-              )
-            })}
+        <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedCompany}
+              onChange={e => setSelectedCompany(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
+              aria-label="公司"
+            >
+              <option value="">所有公司</option>
+              {companyOptions.map(c => (
+                <option key={c} value={c!}>{COMPANY_LABELS[c!] ?? c}</option>
+              ))}
+            </select>
+            <select
+              value={selectedDept}
+              onChange={e => setSelectedDept(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-md text-sm bg-white hover:bg-gray-50"
+              aria-label="部門"
+            >
+              <option value="">所有部門</option>
+              {deptOptions.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
           </div>
-        )}
 
-        {/* 一鍵清除：有任一篩選條件時才顯示，靠右對齊 */}
-        {hasActiveFilter && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="ml-auto flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 rounded-md transition"
-          >
-            <X className="w-4 h-4" />
-            清除篩選
-          </button>
-        )}
+          {leaveTypeOptions.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto md:flex-wrap md:overflow-visible md:border-l md:border-gray-100 md:pl-3 -mx-1 px-1 pb-0.5 md:pb-0">
+              {leaveTypeOptions.map(name => {
+                const active = selectedTypes.includes(name)
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => toggleType(name)}
+                    aria-pressed={active}
+                    className={`shrink-0 px-2.5 py-1 rounded-full text-xs border transition ${
+                      active
+                        ? 'bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {(hasActiveFilter || highlighted.size > 0) && (
+            <div className="flex items-center gap-2 md:ml-auto">
+              {highlighted.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setHighlighted(new Set())}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-sm text-[var(--brand-primary)] hover:bg-[var(--brand-primary)]/5 rounded-md transition"
+                >
+                  <X className="w-4 h-4" />
+                  清除標色（{highlighted.size}）
+                </button>
+              )}
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition"
+                >
+                  <X className="w-4 h-4" />
+                  清除篩選
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200 relative">
-        <DragScrollContainer className="w-full" ref={scrollRef}>
-          <table className="min-w-max w-full border-collapse">
+      {/* 甘特圖：固定高度、框內捲動；月份與日期兩列凍結在框頂，人名欄凍結在左側。
+          isolate 讓內部 sticky 的 z-index 不會蓋過網站頂部導覽列 */}
+      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200 relative isolate">
+        <DragScrollContainer className="w-full overflow-auto max-h-[calc(100dvh-5.5rem)]" ref={scrollRef}>
+          <table className="min-w-max w-full border-separate border-spacing-0">
             <thead>
               {/* 第一層：月份 */}
-              <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-20 bg-gray-100 px-3 py-2 border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
-                  月份
+              <tr>
+                <th
+                  className="sticky left-0 top-0 z-30 bg-gray-100 h-7 px-2 border-b border-r border-gray-200 text-left text-[11px] font-medium text-gray-500"
+                  style={{ width: NAME_COL, minWidth: NAME_COL, maxWidth: NAME_COL }}
+                >
+                  成員
                 </th>
                 {monthGroups.map((group, idx) => (
                   <th
                     key={idx}
                     colSpan={group.count}
-                    className="sticky left-48 z-10 bg-gray-50 border-r border-gray-200 px-3 py-1 text-left text-xs font-bold text-gray-700 shadow-[1px_0_0_0_#e5e7eb]"
+                    className="sticky top-0 z-10 bg-gray-50 h-7 border-b border-r border-gray-200 px-2 text-left text-xs font-bold text-gray-700"
                   >
-                    <span className="sticky left-[208px] inline-block whitespace-nowrap">
-                      {group.year}年 {group.month}月
+                    <span className="sticky inline-block whitespace-nowrap" style={{ left: NAME_COL + 8 }}>
+                      {group.year} 年 {group.month} 月
                     </span>
                   </th>
                 ))}
               </tr>
               {/* 第二層：日期與星期 */}
               <tr>
-                <th className="sticky left-0 z-20 bg-gray-100 px-3 py-2 border-b border-r border-gray-200 text-left text-xs font-medium text-gray-600 shadow-[1px_0_0_0_#e5e7eb] w-48">
-                  成員 (部門)
-                </th>
+                <th
+                  className="sticky left-0 top-7 z-30 bg-gray-100 border-b border-r border-gray-200"
+                  style={{ width: NAME_COL, minWidth: NAME_COL, maxWidth: NAME_COL }}
+                />
                 {days.map((day, idx) => {
                   const { isNonWorkDay, isPublicHoliday, isMakeupWorkday, holidayName } = getDayInfo(day)
                   const isToday = day.toDateString() === today.toDateString()
@@ -263,9 +299,11 @@ export function GanttChart({
                   const isTargetFirstOfMonth = day.getDate() === 1 && (day.getMonth() + 1) === selectedMonth
 
                   // 國定假日用淡紅（與週末灰區隔，平日假日也能一眼看出）；補班日呈白底工作日
-                  const headerTone = isPublicHoliday
-                    ? 'bg-rose-50 text-rose-600'
-                    : isNonWorkDay ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-600'
+                  const headerTone = isToday
+                    ? 'bg-yellow-50 text-yellow-700'
+                    : isPublicHoliday
+                      ? 'bg-rose-50 text-rose-600'
+                      : isNonWorkDay ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-600'
 
                   return (
                     <th
@@ -275,13 +313,13 @@ export function GanttChart({
                         if (isTargetFirstOfMonth) firstOfMonthRef.current = el
                       }}
                       title={isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined}
-                      className={`px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px]
+                      className={`sticky top-7 z-10 px-1 py-1 border-b border-gray-200 text-center text-xs min-w-[40px]
                         ${headerTone}
-                        ${isToday ? 'bg-yellow-50 ring-2 ring-yellow-400 ring-inset z-10' : ''}
+                        ${isToday ? 'shadow-[inset_0_0_0_2px_#facc15]' : ''}
                         ${isFirstOfMonth ? 'border-l-2 border-l-gray-300' : ''}`}
                     >
                       <div className="flex flex-col items-center leading-none py-1">
-                        <span className={`font-semibold text-xs ${isToday ? 'text-yellow-700' : ''}`}>{day.getDate()}</span>
+                        <span className="font-semibold text-xs tabular-nums">{day.getDate()}</span>
                         <span className="text-[9px] mt-0.5 opacity-60">{['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</span>
                       </div>
                     </th>
@@ -289,7 +327,7 @@ export function GanttChart({
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan={days.length + 1} className="px-6 py-10 text-center text-sm text-gray-500">
@@ -299,16 +337,30 @@ export function GanttChart({
               )}
               {filteredUsers.map(u => {
                 const userLeaves = visibleLeaves.filter(l => l.userId === u.id)
+                const isHighlighted = highlighted.has(u.id)
 
                 return (
-                  <tr key={u.id} className="hover:bg-gray-50 group">
-                    <td className="sticky left-0 z-20 bg-white px-3 py-2 border-r border-gray-200 text-xs text-gray-900 shadow-[1px_0_0_0_#e5e7eb] group-hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        <span className="font-medium">{u.name}</span>
-                        <span className="text-gray-400 text-[10px]">({u.department?.name || '未設定'})</span>
-                      </div>
+                  <tr key={u.id} className="group">
+                    <td
+                      className={`sticky left-0 z-20 border-b border-r border-gray-200 p-0 transition-colors ${
+                        isHighlighted ? 'bg-[color-mix(in_srgb,var(--brand-primary)_12%,white)]' : 'bg-white group-hover:bg-gray-50'
+                      }`}
+                      style={{ width: NAME_COL, minWidth: NAME_COL, maxWidth: NAME_COL }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleHighlight(u.id)}
+                        aria-pressed={isHighlighted}
+                        title={isHighlighted ? "取消標色" : "標色這一列"}
+                        className={`w-full h-9 pl-2 pr-1 text-left flex flex-col justify-center border-l-[3px] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--brand-primary)] ${
+                          isHighlighted ? 'border-l-[var(--brand-primary)]' : 'border-l-transparent'
+                        }`}
+                      >
+                        <span className="block truncate text-xs font-medium text-gray-900 leading-tight">{u.name}</span>
+                        <span className="block truncate text-[9px] text-gray-400 leading-tight">{u.department?.name || '未設定'}</span>
+                      </button>
                     </td>
-                    
+
                     {days.map((day, idx) => {
                       const { isNonWorkDay, isPublicHoliday, isMakeupWorkday, holidayName } = getDayInfo(day)
                       const isToday = day.toDateString() === today.toDateString()
@@ -376,7 +428,12 @@ export function GanttChart({
                       }
 
                       return (
-                        <td key={idx} title={!hasLeaveOnDay ? (isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined) : undefined} className={`border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}>
+                        <td
+                          key={idx}
+                          title={!hasLeaveOnDay ? (isPublicHoliday ? holidayName : isMakeupWorkday ? '補班' : undefined) : undefined}
+                          style={isHighlighted ? { boxShadow: HIGHLIGHT_OVERLAY } : undefined}
+                          className={`border-b border-r border-gray-100 p-0 min-w-[40px] h-9 relative ${bgColorClass} ${isToday ? 'after:content-[""] after:absolute after:inset-0 after:border-x after:border-yellow-200/50 after:pointer-events-none' : ''}`}
+                        >
                           {cellContent}
                         </td>
                       )
