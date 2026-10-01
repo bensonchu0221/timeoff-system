@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/audit"
 import { requireAdmin } from "@/lib/admin-guard"
+import { grantOnHire, previewHireDateRecalc, voidGrantsAfterTermination, setOpening } from "@/lib/annual-grant"
 import { revalidatePath } from "next/cache"
 import { Role, Company } from "@prisma/client"
 
@@ -102,8 +103,15 @@ export async function updateUserHireDate(userId: string, hireDate: string) {
     targetId: userId,
     payload: { from: before?.hireDate?.toISOString() || null, to: hireDate || null },
   })
+  // 原本沒有到職日 → 視為新人建檔，直接發放；原本有 → 回傳重算預覽讓 HR 決定
+  let recalc: Awaited<ReturnType<typeof previewHireDateRecalc>> = []
+  if (hireDate && !before?.hireDate) {
+    await grantOnHire(userId, { actorId })
+  } else if (hireDate) {
+    recalc = await previewHireDateRecalc(userId)
+  }
   revalidatePath("/admin/users")
-  return { success: true, message: "已更新到職日" }
+  return { success: true, message: "已更新到職日", recalc }
 }
 
 export async function updateUserGender(userId: string, gender: string) {
@@ -158,6 +166,7 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
     where: { id: userId },
     data: { terminatedDate: new Date(terminatedDate) },
   })
+  const voided = await voidGrantsAfterTermination(userId, new Date(terminatedDate), actorId)
   await logAudit({
     actorId,
     action: "USER_TERMINATE",
@@ -166,7 +175,8 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
     payload: { terminatedDate },
   })
   revalidatePath("/admin/users")
-  return { success: true, message: "已標記離職" }
+  const voidedMsg = voided.length ? `；已作廢 ${voided.map((v) => `${v.year ?? ""} ${v.kind === "ANNUAL" ? "年度" : "首年"}特休 ${v.amount} 天`).join("、")}` : ""
+  return { success: true, message: `已標記離職${voidedMsg}`, voided }
 }
 
 export async function createUser(data: FormData) {
@@ -223,6 +233,8 @@ export async function createUser(data: FormData) {
     targetId: created.id,
     payload: { name, chineseName: chineseName || null, email, departmentId, role: role || "EMPLOYEE", hireDate: hireDateStr || null, company },
   })
+
+  if (hireDateStr) await grantOnHire(created.id, { actorId })
 
   revalidatePath("/admin/users")
 }
@@ -304,6 +316,8 @@ export async function setAnnualLeaveOpening(
       annualLeaveOpeningR: r,
     },
   })
+  // 新制：寫入 OPENING 發放紀錄（舊欄位照寫，保留到遷移穩定後移除，方便退回舊版）
+  await setOpening({ userId, balance, at: new Date(`${atISO}T00:00:00.000Z`), actorId })
   await logAudit({
     actorId,
     action: "USER_SET_ANNUAL_OPENING",
@@ -344,6 +358,10 @@ export async function clearAnnualLeaveOpening(userId: string) {
       annualLeaveOpeningB: null,
       annualLeaveOpeningR: null,
     },
+  })
+  await prisma.annualLeaveGrant.updateMany({
+    where: { userId, kind: "OPENING", voidedAt: null },
+    data: { voidedAt: new Date(), voidedById: actorId, voidReason: "HR 清除期初餘額" },
   })
   await logAudit({
     actorId,

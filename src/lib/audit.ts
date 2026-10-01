@@ -37,8 +37,13 @@ export type AuditAction =
   | "DEPARTMENT_UPDATE_CODE"
   | "DEPARTMENT_UPDATE_SORT"
   | "DEPARTMENT_TOGGLE_ACTIVE"
+  | "ANNUAL_GRANT_ISSUE"
+  | "ANNUAL_GRANT_VOID"
+  | "ANNUAL_GRANT_ADJUST"
+  | "ANNUAL_GRANT_OPENING"
+  | "ANNUAL_GRANT_RECALC"
 
-export type AuditTargetType = "LeaveRequest" | "User" | "LeaveType" | "UserLeaveBalance" | "Holiday" | "LeaveAdjustment" | "Department"
+export type AuditTargetType = "LeaveRequest" | "User" | "LeaveType" | "UserLeaveBalance" | "Holiday" | "LeaveAdjustment" | "Department" | "AnnualLeaveGrant"
 
 // 寫一筆稽核紀錄；audit 失敗不應該擋住主流程，因此 try/catch 後僅 console.error
 export async function logAudit(params: {

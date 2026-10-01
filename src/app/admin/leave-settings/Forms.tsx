@@ -8,10 +8,9 @@ import {
   updateUserTotalBalance,
   deleteUserLeaveBalance,
   syncHolidays,
-  addLeaveAdjustment,
-  deleteLeaveAdjustment,
   toggleLeaveTypeRequireProof,
 } from "./actions"
+import { addAnnualAdjustmentAction, voidAnnualGrantAction } from "@/app/admin/annual-grant-actions"
 
 export function CreateLeaveTypeForm() {
   const [isPending, startTransition] = useTransition()
@@ -368,13 +367,7 @@ export function CreateAdjustmentForm({
     }
     startTransition(async () => {
       try {
-        const fd = new FormData()
-        fd.append("userId", userId)
-        fd.append("leaveTypeId", leaveTypeId)
-        fd.append("effectiveAt", effectiveAt)
-        fd.append("amount", String(num))
-        fd.append("reason", reason.trim())
-        const result = await addLeaveAdjustment(fd)
+        const result = await addAnnualAdjustmentAction({ userId, effectiveAt, amount: num, reason: reason.trim() })
         if (result?.success) {
           toast.success(result.message)
           setUserId("")
@@ -484,9 +477,7 @@ export function DeleteAdjustmentButton({ id }: { id: string }) {
 
     startTransition(async () => {
       try {
-        const fd = new FormData()
-        fd.append("id", id)
-        const result = await deleteLeaveAdjustment(fd)
+        const result = await voidAnnualGrantAction(id, "HR 刪除")
         if (result?.success) toast.success(result.message)
       } catch (err: any) {
         toast.error(err.message || "刪除失敗")
