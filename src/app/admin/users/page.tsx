@@ -10,16 +10,9 @@ export const metadata = {
 
 export default async function AdminUsersPage() {
   const session = await auth()
-  
-  // RBAC: Only Admin can access this page
-  if (!session || (session.user as any)?.role !== "ADMIN") {
-    // In MVP, we might allow any logged in user if there are no users yet (for bootstrapping),
-    // but typically we redirect non-admins.
-    // For now, if no session, redirect to home.
-    if (!session) redirect("/")
-    // If not admin, you could show a 403 or redirect
-    // redirect("/")
-  }
+  if (!session?.user?.id) redirect("/")
+  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } })
+  if (me?.role !== "ADMIN") redirect("/")
 
   // admin 頁面同時顯示在職與離職者（離職者會被前端打灰並標籤），方便 HR 還能進行設定/復職
   const users = await prisma.user.findMany({

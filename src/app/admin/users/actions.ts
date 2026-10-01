@@ -1,22 +1,13 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/admin-guard"
 import { revalidatePath } from "next/cache"
 import { Role, Company } from "@prisma/client"
-import { assertNotImpersonating } from "@/lib/impersonation"
-
-async function requireActorId(): Promise<string> {
-  // impersonate 模式下 session.user.id 會被替換成 target，這裡直接擋以避免任何 admin 寫入流到目標員工身上
-  await assertNotImpersonating()
-  const session = await auth()
-  if (!session?.user?.id) throw new Error("Unauthorized")
-  return session.user.id
-}
 
 export async function updateUserRole(userId: string, role: Role) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
   await prisma.user.update({
     where: { id: userId },
@@ -34,7 +25,7 @@ export async function updateUserRole(userId: string, role: Role) {
 }
 
 export async function updateUserCompany(userId: string, company: Company) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (!["POPIN", "BROADCIEL"].includes(company)) throw new Error("無效的公司代號")
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { company: true } })
   await prisma.user.update({
@@ -53,7 +44,7 @@ export async function updateUserCompany(userId: string, company: Company) {
 }
 
 export async function updateUserManager(userId: string, managerId: string | null) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (userId === managerId) throw new Error("不能設定自己為主管");
 
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { managerId: true } })
@@ -74,7 +65,7 @@ export async function updateUserManager(userId: string, managerId: string | null
 
 // 兩階段審核：設定 / 取消「終審者」（Boss）。全公司唯一一人，設定時會清掉其他人的旗標。
 export async function setFinalApprover(userId: string, isFinalApprover: boolean) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
 
   if (isFinalApprover) {
     // 保證唯一：先把其他人的旗標清掉，再設這位
@@ -98,7 +89,7 @@ export async function setFinalApprover(userId: string, isFinalApprover: boolean)
 }
 
 export async function updateUserHireDate(userId: string, hireDate: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { hireDate: true } })
   await prisma.user.update({
     where: { id: userId },
@@ -116,7 +107,7 @@ export async function updateUserHireDate(userId: string, hireDate: string) {
 }
 
 export async function updateUserGender(userId: string, gender: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { gender: true } })
   await prisma.user.update({
     where: { id: userId },
@@ -134,7 +125,7 @@ export async function updateUserGender(userId: string, gender: string) {
 }
 
 export async function updateUserTerminatedDate(userId: string, terminatedDate: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   // 清空 = 復職
   if (!terminatedDate) {
     await prisma.user.update({
@@ -179,7 +170,7 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
 }
 
 export async function createUser(data: FormData) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const name = data.get("name") as string
   const chineseName = data.get("chineseName") as string
   const email = data.get("email") as string
@@ -238,7 +229,7 @@ export async function createUser(data: FormData) {
 
 // 更新中文姓名
 export async function updateUserChineseName(userId: string, chineseName: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { chineseName: true } })
   const value = chineseName.trim() || null
   await prisma.user.update({ where: { id: userId }, data: { chineseName: value } })
@@ -255,7 +246,7 @@ export async function updateUserChineseName(userId: string, chineseName: string)
 
 // 更新部門：傳入 Department.id；驗證存在且啟用後更新
 export async function updateUserDepartment(userId: string, departmentId: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (!departmentId) throw new Error("請選擇部門")
 
   const dept = await prisma.department.findUnique({
@@ -291,7 +282,7 @@ export async function setAnnualLeaveOpening(
   b: number | null,
   r: number | null,
 ) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (isNaN(balance) || balance < 0) throw new Error("Opening 天數需為非負數")
   if (!atISO) throw new Error("Opening 日期必填")
 
@@ -335,7 +326,7 @@ export async function setAnnualLeaveOpening(
 
 // 清除特休 Opening（四欄一起 null）
 export async function clearAnnualLeaveOpening(userId: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({
     where: { id: userId },
     select: {
