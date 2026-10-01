@@ -247,9 +247,12 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
                   <input
                     type="date"
                     disabled={isPending}
-                    value={user.hireDate ? user.hireDate.toISOString().split("T")[0] : ""}
-                    onChange={(e) => {
+                    // 離開欄位才存：打字中途（例 0002-01-15）就存會誤觸新人發放
+                    key={`hire-${user.id}-${user.hireDate?.toISOString() ?? ""}`}
+                    defaultValue={user.hireDate ? user.hireDate.toISOString().split("T")[0] : ""}
+                    onBlur={(e) => {
                       const v = e.target.value
+                      if (v === (user.hireDate ? user.hireDate.toISOString().split("T")[0] : "")) return
                       startTransition(async () => {
                         try {
                           const r = await updateUserHireDate(user.id, v)
@@ -268,8 +271,13 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
                   <input
                     type="date"
                     disabled={isPending}
-                    value={user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : ""}
-                    onChange={(e) => wrap(() => updateUserTerminatedDate(user.id, e.target.value))}
+                    key={`term-${user.id}-${user.terminatedDate?.toISOString() ?? ""}`}
+                    defaultValue={user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : ""}
+                    onBlur={(e) => {
+                      const v = e.target.value
+                      if (v === (user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : "")) return
+                      wrap(() => updateUserTerminatedDate(user.id, v))
+                    }}
                     className="input input-bordered input-sm w-full bg-gray-50"
                     title="標記離職日；清空可恢復為在職"
                   />

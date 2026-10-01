@@ -7,6 +7,18 @@ import { grantOnHire, previewHireDateRecalc, voidGrantsAfterTermination, setOpen
 import { revalidatePath } from "next/cache"
 import { Role, Company } from "@prisma/client"
 
+// 到職日防呆：必須是 YYYY-MM-DD 的真實日期，年份 1980 ~ 明年。
+// （輸入框打到一半的日期如 0002-01-15 會觸發新人發放，必須擋下）
+function parseHireDate(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const date = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null
+  const maxYear = new Date().getUTCFullYear() + 1
+  if (!m || !date || date.toISOString().slice(0, 10) !== value || Number(m[1]) < 1980 || Number(m[1]) > maxYear) {
+    throw new Error(`到職日不合理：${value}`)
+  }
+  return date
+}
+
 export async function updateUserRole(userId: string, role: Role) {
   const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
@@ -91,10 +103,11 @@ export async function setFinalApprover(userId: string, isFinalApprover: boolean)
 
 export async function updateUserHireDate(userId: string, hireDate: string) {
   const actorId = await requireAdmin()
+  const parsedHireDate = hireDate ? parseHireDate(hireDate) : null
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { hireDate: true } })
   await prisma.user.update({
     where: { id: userId },
-    data: { hireDate: hireDate ? new Date(hireDate) : null },
+    data: { hireDate: parsedHireDate },
   })
   await logAudit({
     actorId,
@@ -220,7 +233,7 @@ export async function createUser(data: FormData) {
       email,
       departmentId,
       role: role || "EMPLOYEE",
-      hireDate: hireDateStr ? new Date(hireDateStr) : null,
+      hireDate: hireDateStr ? parseHireDate(hireDateStr) : null,
       gender: gender || "FEMALE",
       company,
     }

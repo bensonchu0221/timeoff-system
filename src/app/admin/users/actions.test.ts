@@ -88,6 +88,20 @@ describe("到職日 / 離職串接 grant", () => {
   })
 })
 
+describe("到職日格式防呆", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockAuth.mockResolvedValue({ user: { id: "hr", email: "hr@example.com" } })
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "hr", role: "ADMIN" })
+  })
+
+  it.each(["0002-01-15", "1979-12-31", "2099-01-01", "2026-13-01", "abc"])("不合理的到職日 %s → 拒絕，不寫 DB、不發放", async (bad) => {
+    await expect(updateUserHireDate("u", bad)).rejects.toThrow("到職日不合理")
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+    expect(svc.grantOnHire).not.toHaveBeenCalled()
+  })
+})
+
 describe("清除期初", () => {
   beforeEach(() => {
     vi.clearAllMocks()
