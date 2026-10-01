@@ -151,12 +151,23 @@ npm run test:coverage # 跑完顯示 coverage 報表
 
 測試檔放在 `src/**/*.test.ts`，跟原始碼同層。目前範圍：純邏輯函式（`date-format.ts` / `line.ts` / `leave-utils.calculateDurationDays`）。整合測試（DB / 外部 API）尚未涵蓋。
 
-### 跑 Prisma migration（這個系統用 db push，沒有 migrations 目錄）
+### 改資料庫結構（⚠️ 禁止用 `prisma db push`）
+
+`timeoff` 資料庫**不只有本專案的表**：另一個內部 SOP 系統也在這個 DB 裡建了 14 張 `sop_*` 表，並在 `User` 表加了 `sopRole` 欄位（2026-10-01 實測）。這些都不在 `prisma/schema.prisma` 裡。
+
+`npx prisma db push`（含 `--accept-data-loss`）會把 schema 以外的東西當成要移除 → **DROP 全部 `sop_*` 表與 `User.sopRole`**，等於刪掉別的系統的資料。**不要用。**
+
+安全做法（只執行本次需要的語句）：
 ```bash
-# 改完 prisma/schema.prisma 後：
-npx prisma db push
-# 如果有 unique constraint / 縮欄位的警告且確認沒問題：
-npx prisma db push --accept-data-loss
+# 1. 產生「資料庫現況 → schema 檔」的完整差異 SQL（唯讀，不會改 DB）
+npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script > /tmp/full-diff.sql
+
+# 2. 只挑出本次要的 CREATE / ALTER 語句另存（不可包含任何 sop_* 或 sopRole 相關、不可有 DROP）
+#    人工檢查後存成 /tmp/apply.sql
+
+# 3. 給使用者看過、同意後才執行（本地與線上共用同一個 DB，這一步就是改正式 DB）
+npx prisma db execute --file /tmp/apply.sql --schema prisma/schema.prisma
 ```
 
 ⚠️ **本機 .env 的 `DATABASE_URL` 指向 Cloud SQL 的 public IP（不是 unix socket）**，需要：
@@ -216,7 +227,7 @@ npx prisma db push --accept-data-loss
 3. **不要假設環境變數需要重新設定** — 它們在 Cloud Run 上是持久的
 4. 改 `DATABASE_URL` 前，先確認本機 vs Cloud Run 的結構差異
 5. 變動白名單（Cloud SQL Authorized Networks）前，**先讀現有清單**再追加；`gcloud sql instances patch --authorized-networks` 是「全部取代」
-6. 本專案 Prisma 用 `db push`，沒有 migrations 目錄；schema 改動後跑 `npx prisma db push`
+6. 本專案沒有 migrations 目錄，且**禁止 `prisma db push`**（會刪掉同 DB 內 SOP 系統的 `sop_*` 表與 `User.sopRole`）；schema 改動依「改資料庫結構」小節，用 `migrate diff` 挑出語句再 `db execute`
 7. `git push origin main` 會自動觸發 Cloud Build 部署 — push 前先 build / type check
 
 ---

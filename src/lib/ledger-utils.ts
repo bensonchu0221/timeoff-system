@@ -1,6 +1,6 @@
 import { prisma } from "./db"
 import { formatTaipeiDate, formatTaipeiDateISO, startOfYearUTC } from "./date-format"
-import { getStatutoryAnnualDays, monthsBetween, addYearsUTC } from "./leave-utils"
+import { isAnnualLeaveTypeName } from "./annual-grant-calc"
 
 export type LedgerEvent = {
   id: string
@@ -12,58 +12,6 @@ export type LedgerEvent = {
   runningBalance: number
 }
 
-// 工具：hireDate + N 個月，同日 UTC
-function addMonthsUTC(d: Date, months: number): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()))
-}
-
-function ceilToHalfLocal(n: number): number {
-  return Math.ceil(n * 2) / 2
-}
-
-function isLeapYearLocal(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
-}
-
-function daysInYearLocal(year: number): number {
-  return isLeapYearLocal(year) ? 366 : 365
-}
-
-function daysFromHireToYearEndLocal(hireDate: Date): number {
-  const nextYearStart = Date.UTC(hireDate.getUTCFullYear() + 1, 0, 1)
-  return Math.round((nextYearStart - hireDate.getTime()) / 86_400_000)
-}
-
-// 分水嶺式 override（year = 曆年）
-function resolveCalendarOverride(
-  calendarYear: number,
-  overrides: { year: number; totalQuota: number }[]
-): number | null {
-  let applicable: number | null = null
-  for (const o of overrides) {
-    if (o.year <= calendarYear) applicable = o.totalQuota
-    else break
-  }
-  return applicable
-}
-
-// 某 1/1 當天的發放額度（依年資 + override 取大）
-function grantForJan1(
-  year: number,
-  hireDate: Date,
-  leaveTypeDefaultDays: number,
-  overrides: { year: number; totalQuota: number }[]
-): { days: number; completedYears: number } {
-  const jan1 = new Date(Date.UTC(year, 0, 1))
-  const completedYears = Math.floor(monthsBetween(hireDate, jan1) / 12)
-  const base = completedYears < 2
-    ? leaveTypeDefaultDays
-    : getStatutoryAnnualDays(completedYears)
-  const applicable = resolveCalendarOverride(year, overrides)
-  const days = applicable !== null ? Math.max(base, applicable) : base
-  return { days, completedYears }
-}
-
 export async function getLeaveLedger(userId: string, leaveTypeId: string): Promise<LedgerEvent[]> {
   const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId } })
   if (!leaveType) throw new Error("Leave type not found")
@@ -71,126 +19,49 @@ export async function getLeaveLedger(userId: string, leaveTypeId: string): Promi
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) throw new Error("User not found")
 
-  const isAnnualLeave = leaveType.name.includes("特休") || leaveType.name.toLowerCase().includes("annual")
+  const isAnnualLeave = isAnnualLeaveTypeName(leaveType.name)
   const now = new Date()
 
   const events: Omit<LedgerEvent, "runningBalance">[] = []
 
   if (isAnnualLeave) {
-    // 特休必須有到職日才能畫 ledger
     if (!user.hireDate) return []
 
-    const hireDate = user.hireDate
-    const hireYear = hireDate.getUTCFullYear()
-    const M = monthsBetween(hireDate, now)
-
-    // 取所有 override（asc by year，畫每期時做分水嶺挑選）
-    const overrides = await prisma.userLeaveBalance.findMany({
-      where: { userId, leaveTypeId },
-      orderBy: { year: "asc" },
-      select: { year: true, totalQuota: true },
-    })
-
-    // Opening：兩欄同存才視為有效
-    const hasOpening = user.annualLeaveOpeningBalance !== null && user.annualLeaveOpeningAt !== null
-    const openingAt = hasOpening ? user.annualLeaveOpeningAt! : null
-    const openingBalance = hasOpening ? user.annualLeaveOpeningBalance! : 0
-
-    if (hasOpening && openingAt) {
-      // OPENING 事件：替代入職發放事件
-      const description = `${formatTaipeiDateISO(openingAt)} 系統匯入起始額度 ${openingBalance} 天`
-      events.push({
-        id: `opening`,
-        date: openingAt,
-        type: "GRANT",
-        leaveTypeName: leaveType.name,
-        description,
-        amount: openingBalance,
-      })
-    } else {
-      // 無 opening：入職日 pro-rata 發放
-      if (M >= 0) {
-        const remainingDays = daysFromHireToYearEndLocal(hireDate)
-        const yearTotal = daysInYearLocal(hireYear)
-        const proRata = ceilToHalfLocal(remainingDays / yearTotal * leaveType.defaultDays)
-        events.push({
-          id: `grant-hire`,
-          date: hireDate,
-          type: "GRANT",
-          leaveTypeName: leaveType.name,
-          description: `入職，特休 pro-rata 發放 ${proRata} 天（${remainingDays}/${yearTotal} × ${leaveType.defaultDays}，自滿 3 個月起可申請）`,
-          amount: proRata,
-        })
-      }
-
-      // 滿 3 個月 marker（無金額；只在無 opening 時顯示）
-      if (M >= 3) {
-        events.push({
-          id: `marker-3m`,
-          date: addMonthsUTC(hireDate, 3),
-          type: "GRANT",
-          leaveTypeName: leaveType.name,
-          description: `滿 3 個月，特休開放申請`,
-          amount: 0,
-        })
-      }
-    }
-
-    // 每年 1/1 grant 事件：jan1 > openingAt && jan1 <= now
-    {
-      const startYear = hireYear + 1
-      const stopYear = now.getUTCFullYear() + 1
-      for (let year = startYear; year < stopYear; year++) {
-        const jan1 = new Date(Date.UTC(year, 0, 1))
-        if (jan1 > now) break
-        if (openingAt && jan1 <= openingAt) continue   // 已含在 OPENING 內
-        const { days, completedYears } = grantForJan1(year, hireDate, leaveType.defaultDays, overrides)
-        events.push({
-          id: `grant-jan1-${year}`,
-          date: jan1,
-          type: "GRANT",
-          leaveTypeName: leaveType.name,
-          description: `${year}/01/01 特休額度發放 ${days} 天（年資 ${completedYears} 年）`,
-          amount: days,
-        })
-      }
-    }
-
-    // HR 手動調整事件（與 grants 平行，effectiveAt 即事件日期）
-    const adjustments = await prisma.leaveAdjustment.findMany({
-      where: { userId, leaveTypeId },
+    const grants = await prisma.annualLeaveGrant.findMany({
+      where: { userId, voidedAt: null },
       orderBy: { effectiveAt: "asc" },
+      select: { id: true, kind: true, effectiveAt: true, amount: true, basis: true },
     })
-    for (const adj of adjustments) {
-      if (openingAt && adj.effectiveAt <= openingAt) continue   // 已含在 opening 中
-      if (adj.effectiveAt > now) continue                       // 未生效不顯示
-      const isPositive = adj.amount >= 0
+    const opening = grants.find((g) => g.kind === "OPENING")
+    for (const g of grants) {
+      if (g.effectiveAt > now) continue // 未生效不顯示（明年發放在餘額卡片另行提示）
+      // 與 sumGrantTotal 一致：有期初時，期初日當天或之前的其他發放已含在期初內
+      if (opening && g.kind !== "OPENING" && g.effectiveAt <= opening.effectiveAt) continue
+      const text = (g.basis as { text?: string } | null)?.text ?? `${g.kind} ${g.amount} 天`
       events.push({
-        id: `adjustment-${adj.id}`,
-        date: adj.effectiveAt,
-        type: isPositive ? "GRANT" : "USAGE",
+        id: `grant-${g.id}`,
+        date: g.effectiveAt,
+        type: g.amount >= 0 ? "GRANT" : "USAGE",
         leaveTypeName: leaveType.name,
-        description: `手動${isPositive ? "補發" : "扣除"} ${Math.abs(adj.amount)} 天（${formatTaipeiDateISO(adj.effectiveAt)} 起生效；原因：${adj.reason}）`,
-        amount: adj.amount,
+        description: text,
+        amount: g.amount,
       })
     }
 
-    // 已請假紀錄：opening 之前的不顯示（已抵銷在 OPENING 內）
-    const usageWhere: { userId: string; leaveTypeId: string; status: { in: ("APPROVED" | "PENDING")[] }; startDate?: { gte: Date } } = {
-      userId,
-      leaveTypeId,
-      status: { in: ["APPROVED", "PENDING"] },
-    }
-    if (openingAt) usageWhere.startDate = { gte: openingAt }
-
-    const usages = await prisma.leaveRequest.findMany({ where: usageWhere })
+    // 已請假紀錄：期初之前的不顯示（已抵銷在期初內）
+    const usages = await prisma.leaveRequest.findMany({
+      where: {
+        userId, leaveTypeId, status: { in: ["APPROVED", "PENDING"] },
+        ...(opening ? { startDate: { gte: opening.effectiveAt } } : {}),
+      },
+    })
     for (const req of usages) {
       events.push({
         id: `usage-${req.id}`,
         date: req.startDate,
         type: "USAGE",
         leaveTypeName: leaveType.name,
-        description: `請假 (${formatTaipeiDateISO(req.startDate)}~${formatTaipeiDateISO(req.endDate)}) ${req.status === "PENDING" ? "[待審核]" : ""}`,
+        description: `請假 (${formatTaipeiDateISO(req.startDate)}~${formatTaipeiDateISO(req.endDate)}) ${req.status === "PENDING" ? "[待審核]" : ""}`.trim(),
         amount: -req.durationDays,
       })
     }

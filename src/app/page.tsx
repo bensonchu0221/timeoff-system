@@ -57,6 +57,15 @@ export default async function DashboardPage() {
       })
   )
 
+  // 已寫入、尚未生效的明年特休（顯示「將於 1/1 生效」）
+  const upcoming = await prisma.annualLeaveGrant.findFirst({
+    where: { userId: user.id, kind: "ANNUAL", voidedAt: null, effectiveAt: { gt: new Date() } },
+    orderBy: { effectiveAt: "asc" },
+    select: { year: true, amount: true },
+  })
+  const balancesWithUpcoming = balances.map((b) =>
+    b.type.includes("特休") && upcoming ? { ...b, upcoming: { year: upcoming.year!, amount: upcoming.amount } } : b)
+
   const history = await prisma.leaveRequest.findMany({
     where: {
       userId: user.id,
@@ -136,7 +145,7 @@ export default async function DashboardPage() {
 
         {/* 左側：剩餘天數列表 */}
         <div className="lg:col-span-1">
-          <BalanceSummary balances={balances} />
+          <BalanceSummary balances={balancesWithUpcoming} />
         </div>
 
         {/* 右側：請假紀錄 */}

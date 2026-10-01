@@ -1,6 +1,7 @@
 import { prisma } from "./db"
 import { PartOfDay } from "@prisma/client"
 import { startOfYearUTC } from "./date-format"
+import { sumGrantTotal, isAnnualLeaveTypeName } from "./annual-grant-calc"
 
 // 一律以 UTC 解讀日期，避免伺服器時區（UTC vs UTC+8）造成國定假日比對位移
 function formatUTCDate(d: Date): string {
@@ -121,102 +122,6 @@ export function addYearsUTC(d: Date, years: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth(), d.getUTCDate()))
 }
 
-// 無條件進位至最小 0.5 單位
-function ceilToHalf(n: number): number {
-  return Math.ceil(n * 2) / 2
-}
-
-function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
-}
-
-function daysInYear(year: number): number {
-  return isLeapYear(year) ? 366 : 365
-}
-
-// hireDate（含當天）到隔年 1/1 的天數差（整數天）
-// 例：2025-08-05 → 149 天；2025-12-31 → 1 天；2025-01-01 → 365 天
-function daysFromHireToYearEnd(hireDate: Date): number {
-  const nextYearStart = Date.UTC(hireDate.getUTCFullYear() + 1, 0, 1)
-  return Math.round((nextYearStart - hireDate.getTime()) / 86_400_000)
-}
-
-// 計算「截至 asOf」的累計特休總額（曆年制：入職 pro-rata + 每年 1/1 grant + 手動調整）
-// overrides 必須已 ORDER BY year ASC（year = 曆年，分水嶺式取 year <= calendarYear 的最大 totalQuota）
-// adjustments = HR 手動調整（effectiveAt + amount，amount 可正可負）
-// opening 存在時：從 opening.balance 起算、只加 opening.at 之後的 1/1 grant 與 adjustments
-export function calcCalendarYearCumulative(
-  hireDate: Date,
-  asOf: Date,
-  leaveTypeDefaultDays: number,
-  overrides: { year: number; totalQuota: number }[],
-  adjustments: { effectiveAt: Date; amount: number }[],
-  opening?: { balance: number; at: Date }
-): number {
-  // 分水嶺式 override（year = 曆年）
-  function resolveOverride(calendarYear: number): number | null {
-    let applicable: number | null = null
-    for (const o of overrides) {
-      if (o.year <= calendarYear) applicable = o.totalQuota
-      else break
-    }
-    return applicable
-  }
-
-  // 某 1/1 當天的發放額度（依年資 + override）
-  function grantForJan1(year: number): number {
-    const jan1 = new Date(Date.UTC(year, 0, 1))
-    const completedYears = Math.floor(monthsBetween(hireDate, jan1) / 12)
-    const base = completedYears < 2
-      ? leaveTypeDefaultDays
-      : getStatutoryAnnualDays(completedYears)
-    const applicable = resolveOverride(year)
-    return applicable !== null ? Math.max(base, applicable) : base
-  }
-
-  // ── 主邏輯：grants ──
-  let total: number
-  if (opening) {
-    total = opening.balance
-    let year = hireDate.getUTCFullYear() + 1
-    // 上限：asOf 那年（不會無限跑）
-    const stopYear = asOf.getUTCFullYear() + 1
-    while (year < stopYear) {
-      const jan1 = new Date(Date.UTC(year, 0, 1))
-      if (jan1 > asOf) break
-      if (jan1 > opening.at) {       // strictly greater → opening.at 當天的 grant 已含在 opening
-        total += grantForJan1(year)
-      }
-      year++
-    }
-  } else {
-    if (asOf < hireDate) return 0
-    // 入職 pro-rata = (本年剩餘天數，含 hireDate 當天) / 該年總天數 × defaultDays
-    const remainingDays = daysFromHireToYearEnd(hireDate)
-    const yearTotal = daysInYear(hireDate.getUTCFullYear())
-    total = ceilToHalf(remainingDays / yearTotal * leaveTypeDefaultDays)
-
-    // 每年 1/1 grants
-    let year = hireDate.getUTCFullYear() + 1
-    const stopYear = asOf.getUTCFullYear() + 1
-    while (year < stopYear) {
-      const jan1 = new Date(Date.UTC(year, 0, 1))
-      if (jan1 > asOf) break
-      total += grantForJan1(year)
-      year++
-    }
-  }
-
-  // ── 手動調整（獨立於主邏輯，effectiveAt <= asOf 才計入）──
-  for (const adj of adjustments) {
-    if (adj.effectiveAt > asOf) continue
-    if (opening && adj.effectiveAt <= opening.at) continue   // 已含在 opening 內
-    total += adj.amount
-  }
-
-  return total
-}
-
 export async function getUserLeaveBalance(
   userId: string,
   leaveTypeId: string,
@@ -225,66 +130,34 @@ export async function getUserLeaveBalance(
   const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId }});
   if (!leaveType) throw new Error("Leave type not found");
 
-  const isAnnualLeave = leaveType.name.includes("特休") || leaveType.name.toLowerCase().includes("annual");
+  const isAnnualLeave = isAnnualLeaveTypeName(leaveType.name);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("User not found");
 
   if (isAnnualLeave) {
-    // 特休一定要有到職日才能算
     if (!user.hireDate) {
       return { total: 0, used: 0, pending: 0, pendingFirst: 0, pendingSecond: 0, remaining: 0 };
     }
-
-    // 取所有 override（asc by year，calc 函數做分水嶺挑選）
-    const overrides = await prisma.userLeaveBalance.findMany({
-      where: { userId, leaveTypeId },
-      orderBy: { year: 'asc' },
-      select: { year: true, totalQuota: true }
+    const grants = await prisma.annualLeaveGrant.findMany({
+      where: { userId, voidedAt: null },
+      select: { kind: true, effectiveAt: true, amount: true, year: true },
     })
+    const total = sumGrantTotal(grants, asOf)
+    const opening = grants.find((g) => g.kind === "OPENING")
 
-    // 取所有手動調整（HR 補發 / 扣除，獨立於主邏輯）
-    const adjustments = await prisma.leaveAdjustment.findMany({
-      where: { userId, leaveTypeId },
-      orderBy: { effectiveAt: 'asc' },
-      select: { effectiveAt: true, amount: true }
-    })
-
-    // 組裝 opening（兩個欄位同存才有效）
-    const opening = (user.annualLeaveOpeningBalance !== null && user.annualLeaveOpeningAt !== null)
-      ? { balance: user.annualLeaveOpeningBalance, at: user.annualLeaveOpeningAt }
-      : undefined
-
-    const total = calcCalendarYearCumulative(
-      user.hireDate, asOf, leaveType.defaultDays, overrides, adjustments, opening
-    )
-
-    // 已用 / 待審：將截止日設為 asOf 所屬年度的 12/31 23:59:59.999
-    // 確保同一年度內未來的請假（例如 6/17）也會正確在今天被扣除，且不影響跨年度預請的額度扣除。
+    // 已用 / 待審：截止日 = asOf 所屬年度 12/31；有期初時只算期初日之後（與遷移前相同）
     const endOfYear = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59, 999))
-    const startFilter = opening ? { gte: opening.at, lte: endOfYear } : { lte: endOfYear }
+    const startFilter = opening ? { gte: opening.effectiveAt, lte: endOfYear } : { lte: endOfYear }
     const [usedAgg, pendingAgg, pendingSecondAgg] = await Promise.all([
-      prisma.leaveRequest.aggregate({
-        _sum: { durationDays: true },
-        where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter }
-      }),
-      prisma.leaveRequest.aggregate({
-        _sum: { durationDays: true },
-        where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter }
-      }),
-      // 兩階段審核：已過一審、等二審的待審天數（firstApprovedAt 非 null）
-      prisma.leaveRequest.aggregate({
-        _sum: { durationDays: true },
-        where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: startFilter }
-      })
+      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter } }),
+      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter } }),
+      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: startFilter } }),
     ])
-
     const used = usedAgg._sum.durationDays || 0
     const pending = pendingAgg._sum.durationDays || 0
     const pendingSecond = pendingSecondAgg._sum.durationDays || 0
-    const pendingFirst = pending - pendingSecond
-
-    return { total, used, pending, pendingFirst, pendingSecond, remaining: total - used - pending }
+    return { total, used, pending, pendingFirst: pending - pendingSecond, pendingSecond, remaining: total - used - pending }
   }
 
   // 非特休：曆年制（每年 1/1 reset，不分有無 hireDate）
@@ -324,4 +197,37 @@ export async function getUserLeaveBalance(
   const pendingDays = pending._sum.durationDays || 0
   const pendingSecondDays = pendingSecondAgg._sum.durationDays || 0
   return { total: totalQuota, used: usedDays, pending: pendingDays, pendingFirst: pendingDays - pendingSecondDays, pendingSecond: pendingSecondDays, remaining: totalQuota - usedDays - pendingDays }
+}
+
+// 跨年重複花額度檢查：把「這張新單」加進去後，從請假年度到最遠一張已預約假單的年度，
+// 每年 12/31 的累計剩餘都不可為負。回傳第一個不足的年度，足夠則 null。
+export async function findAnnualShortfall(
+  userId: string,
+  leaveTypeId: string,
+  extra: { startDate: Date; days: number },
+  excludeRequestId?: string,
+): Promise<{ year: number; remaining: number } | null> {
+  const grants = await prisma.annualLeaveGrant.findMany({
+    where: { userId, voidedAt: null },
+    select: { kind: true, effectiveAt: true, amount: true, year: true },
+  })
+  const opening = grants.find((g) => g.kind === "OPENING")
+  const requests = await prisma.leaveRequest.findMany({
+    where: {
+      userId, leaveTypeId, status: { in: ["APPROVED", "PENDING"] },
+      ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+      ...(opening ? { startDate: { gte: opening.effectiveAt } } : {}),
+    },
+    select: { id: true, startDate: true, durationDays: true },
+  })
+  const all = [...requests.map((r) => ({ startDate: r.startDate, days: r.durationDays })), extra]
+  const fromYear = extra.startDate.getUTCFullYear()
+  const toYear = Math.max(fromYear, ...all.map((r) => r.startDate.getUTCFullYear()))
+  for (let year = fromYear; year <= toYear; year++) {
+    const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+    const total = sumGrantTotal(grants, yearEnd)
+    const spent = all.filter((r) => r.startDate <= yearEnd).reduce((n, r) => n + r.days, 0)
+    if (total - spent < 0) return { year, remaining: total - spent }
+  }
+  return null
 }

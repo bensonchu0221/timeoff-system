@@ -1,22 +1,26 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { auth } from "@/auth"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/admin-guard"
+import { grantOnHire, previewHireDateRecalc, voidGrantsAfterTermination, setOpening } from "@/lib/annual-grant"
 import { revalidatePath } from "next/cache"
 import { Role, Company } from "@prisma/client"
-import { assertNotImpersonating } from "@/lib/impersonation"
 
-async function requireActorId(): Promise<string> {
-  // impersonate 模式下 session.user.id 會被替換成 target，這裡直接擋以避免任何 admin 寫入流到目標員工身上
-  await assertNotImpersonating()
-  const session = await auth()
-  if (!session?.user?.id) throw new Error("Unauthorized")
-  return session.user.id
+// 到職日防呆：必須是 YYYY-MM-DD 的真實日期，年份 1980 ~ 明年。
+// （輸入框打到一半的日期如 0002-01-15 會觸發新人發放，必須擋下）
+function parseHireDate(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const date = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null
+  const maxYear = new Date().getUTCFullYear() + 1
+  if (!m || !date || date.toISOString().slice(0, 10) !== value || Number(m[1]) < 1980 || Number(m[1]) > maxYear) {
+    throw new Error(`到職日不合理：${value}`)
+  }
+  return date
 }
 
 export async function updateUserRole(userId: string, role: Role) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
   await prisma.user.update({
     where: { id: userId },
@@ -34,7 +38,7 @@ export async function updateUserRole(userId: string, role: Role) {
 }
 
 export async function updateUserCompany(userId: string, company: Company) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (!["POPIN", "BROADCIEL"].includes(company)) throw new Error("無效的公司代號")
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { company: true } })
   await prisma.user.update({
@@ -53,7 +57,7 @@ export async function updateUserCompany(userId: string, company: Company) {
 }
 
 export async function updateUserManager(userId: string, managerId: string | null) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (userId === managerId) throw new Error("不能設定自己為主管");
 
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { managerId: true } })
@@ -74,7 +78,7 @@ export async function updateUserManager(userId: string, managerId: string | null
 
 // 兩階段審核：設定 / 取消「終審者」（Boss）。全公司唯一一人，設定時會清掉其他人的旗標。
 export async function setFinalApprover(userId: string, isFinalApprover: boolean) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
 
   if (isFinalApprover) {
     // 保證唯一：先把其他人的旗標清掉，再設這位
@@ -98,11 +102,12 @@ export async function setFinalApprover(userId: string, isFinalApprover: boolean)
 }
 
 export async function updateUserHireDate(userId: string, hireDate: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
+  const parsedHireDate = hireDate ? parseHireDate(hireDate) : null
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { hireDate: true } })
   await prisma.user.update({
     where: { id: userId },
-    data: { hireDate: hireDate ? new Date(hireDate) : null },
+    data: { hireDate: parsedHireDate },
   })
   await logAudit({
     actorId,
@@ -111,12 +116,19 @@ export async function updateUserHireDate(userId: string, hireDate: string) {
     targetId: userId,
     payload: { from: before?.hireDate?.toISOString() || null, to: hireDate || null },
   })
+  // 原本沒有到職日 → 視為新人建檔，直接發放；原本有 → 回傳重算預覽讓 HR 決定
+  let recalc: Awaited<ReturnType<typeof previewHireDateRecalc>> = []
+  if (hireDate && !before?.hireDate) {
+    await grantOnHire(userId, { actorId })
+  } else if (hireDate) {
+    recalc = await previewHireDateRecalc(userId)
+  }
   revalidatePath("/admin/users")
-  return { success: true, message: "已更新到職日" }
+  return { success: true, message: "已更新到職日", recalc }
 }
 
 export async function updateUserGender(userId: string, gender: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { gender: true } })
   await prisma.user.update({
     where: { id: userId },
@@ -134,7 +146,7 @@ export async function updateUserGender(userId: string, gender: string) {
 }
 
 export async function updateUserTerminatedDate(userId: string, terminatedDate: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   // 清空 = 復職
   if (!terminatedDate) {
     await prisma.user.update({
@@ -167,6 +179,7 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
     where: { id: userId },
     data: { terminatedDate: new Date(terminatedDate) },
   })
+  const voided = await voidGrantsAfterTermination(userId, new Date(terminatedDate), actorId)
   await logAudit({
     actorId,
     action: "USER_TERMINATE",
@@ -175,11 +188,12 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
     payload: { terminatedDate },
   })
   revalidatePath("/admin/users")
-  return { success: true, message: "已標記離職" }
+  const voidedMsg = voided.length ? `；已作廢 ${voided.map((v) => `${v.year ?? ""} ${v.kind === "ANNUAL" ? "年度" : "首年"}特休 ${v.amount} 天`).join("、")}` : ""
+  return { success: true, message: `已標記離職${voidedMsg}`, voided }
 }
 
 export async function createUser(data: FormData) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const name = data.get("name") as string
   const chineseName = data.get("chineseName") as string
   const email = data.get("email") as string
@@ -219,7 +233,7 @@ export async function createUser(data: FormData) {
       email,
       departmentId,
       role: role || "EMPLOYEE",
-      hireDate: hireDateStr ? new Date(hireDateStr) : null,
+      hireDate: hireDateStr ? parseHireDate(hireDateStr) : null,
       gender: gender || "FEMALE",
       company,
     }
@@ -233,12 +247,14 @@ export async function createUser(data: FormData) {
     payload: { name, chineseName: chineseName || null, email, departmentId, role: role || "EMPLOYEE", hireDate: hireDateStr || null, company },
   })
 
+  if (hireDateStr) await grantOnHire(created.id, { actorId })
+
   revalidatePath("/admin/users")
 }
 
 // 更新中文姓名
 export async function updateUserChineseName(userId: string, chineseName: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({ where: { id: userId }, select: { chineseName: true } })
   const value = chineseName.trim() || null
   await prisma.user.update({ where: { id: userId }, data: { chineseName: value } })
@@ -255,7 +271,7 @@ export async function updateUserChineseName(userId: string, chineseName: string)
 
 // 更新部門：傳入 Department.id；驗證存在且啟用後更新
 export async function updateUserDepartment(userId: string, departmentId: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (!departmentId) throw new Error("請選擇部門")
 
   const dept = await prisma.department.findUnique({
@@ -291,7 +307,7 @@ export async function setAnnualLeaveOpening(
   b: number | null,
   r: number | null,
 ) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   if (isNaN(balance) || balance < 0) throw new Error("Opening 天數需為非負數")
   if (!atISO) throw new Error("Opening 日期必填")
 
@@ -313,6 +329,8 @@ export async function setAnnualLeaveOpening(
       annualLeaveOpeningR: r,
     },
   })
+  // 新制：寫入 OPENING 發放紀錄（舊欄位照寫，保留到遷移穩定後移除，方便退回舊版）
+  await setOpening({ userId, balance, at: new Date(`${atISO}T00:00:00.000Z`), actorId })
   await logAudit({
     actorId,
     action: "USER_SET_ANNUAL_OPENING",
@@ -335,7 +353,7 @@ export async function setAnnualLeaveOpening(
 
 // 清除特休 Opening（四欄一起 null）
 export async function clearAnnualLeaveOpening(userId: string) {
-  const actorId = await requireActorId()
+  const actorId = await requireAdmin()
   const before = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -354,6 +372,10 @@ export async function clearAnnualLeaveOpening(userId: string) {
       annualLeaveOpeningR: null,
     },
   })
+  await prisma.annualLeaveGrant.updateMany({
+    where: { userId, kind: "OPENING", voidedAt: null },
+    data: { voidedAt: new Date(), voidedById: actorId, voidReason: "HR 清除期初餘額" },
+  })
   await logAudit({
     actorId,
     action: "USER_CLEAR_ANNUAL_OPENING",
@@ -370,5 +392,7 @@ export async function clearAnnualLeaveOpening(userId: string) {
   })
   revalidatePath("/admin/users")
   revalidatePath("/")
-  return { success: true, message: "已清除特休 Opening" }
+  // 期初清掉後，該員工的首年與各年度發放需要補回（舊制會自動從到職日重算）→ 回傳預覽讓 HR 確認
+  const recalc = await previewHireDateRecalc(userId)
+  return { success: true, message: "已清除特休期初", recalc }
 }

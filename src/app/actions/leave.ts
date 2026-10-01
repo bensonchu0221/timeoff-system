@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
-import { calculateDurationDays, getUserLeaveBalance, monthsBetween, partsOfDayConflict } from "@/lib/leave-utils"
+import { calculateDurationDays, getUserLeaveBalance, monthsBetween, partsOfDayConflict, findAnnualShortfall } from "@/lib/leave-utils"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
@@ -93,6 +93,13 @@ export async function applyLeave(data: {
 
   if (durationDays > balance.remaining) {
     return { error: `${leaveTypeName}不足！您嘗試申請 ${durationDays} 天，但目前 ${leaveTypeName} 只剩 ${balance.remaining} 天可請（包含審核中假單）。` };
+  }
+
+  if (isAnnual) {
+    const shortfall = await findAnnualShortfall(userId, data.leaveTypeId, { startDate: start, days: durationDays })
+    if (shortfall) {
+      return { error: `${leaveTypeName}不足！加上這張單後，${shortfall.year} 年底特休會是 ${shortfall.remaining} 天（已預約的跨年假單也會用到額度）。` };
+    }
   }
 
   // 代理人驗證：選填，若有填要是真的存在的在職員工、且不是自己
@@ -517,6 +524,16 @@ export async function updateLeave(requestId: string, data: {
     const newLeaveType = await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } });
     const newLeaveTypeName = newLeaveType?.name || "該假別";
     return { error: `${newLeaveTypeName}不足！修改後需要 ${newDuration} 天，但 ${newLeaveTypeName} 目前最多可改為 ${allowedNewDuration} 天。` };
+  }
+
+  const newTypeForCheck = leaveTypeChanged
+    ? await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } })
+    : request.leaveType
+  if (newTypeForCheck && (newTypeForCheck.name.includes("特休") || newTypeForCheck.name.toLowerCase().includes("annual"))) {
+    const shortfall = await findAnnualShortfall(userId, data.leaveTypeId, { startDate: start, days: newDuration }, requestId)
+    if (shortfall) {
+      return { error: `特休不足！修改後 ${shortfall.year} 年底特休會是 ${shortfall.remaining} 天。` };
+    }
   }
 
   // 代理人變更驗證：選填，不能是自己；要是在職員工

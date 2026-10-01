@@ -8,10 +8,9 @@ import {
   updateUserTotalBalance,
   deleteUserLeaveBalance,
   syncHolidays,
-  addLeaveAdjustment,
-  deleteLeaveAdjustment,
   toggleLeaveTypeRequireProof,
 } from "./actions"
+import { addAnnualAdjustmentAction, voidAnnualGrantAction } from "@/app/admin/annual-grant-actions"
 
 export function CreateLeaveTypeForm() {
   const [isPending, startTransition] = useTransition()
@@ -337,14 +336,11 @@ export function CreateOverrideForm({
 // HR 手動調整：新增一筆 LeaveAdjustment
 export function CreateAdjustmentForm({
   users,
-  leaveTypes,
 }: {
   users: { id: string; name: string | null; email: string }[]
-  leaveTypes: { id: string; name: string }[]
 }) {
   const [isPending, startTransition] = useTransition()
   const [userId, setUserId] = useState("")
-  const [leaveTypeId, setLeaveTypeId] = useState("")
   const [effectiveAt, setEffectiveAt] = useState(() => {
     const d = new Date()
     const y = d.getFullYear()
@@ -357,8 +353,8 @@ export function CreateAdjustmentForm({
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!userId || !leaveTypeId || !effectiveAt || amount.trim() === "" || reason.trim() === "") {
-      toast.error("請填寫所有欄位（員工、假別、生效日、數量、原因）")
+    if (!userId || !effectiveAt || amount.trim() === "" || reason.trim() === "") {
+      toast.error("請填寫所有欄位（員工、生效日、數量、原因）")
       return
     }
     const num = Number(amount)
@@ -368,22 +364,15 @@ export function CreateAdjustmentForm({
     }
     startTransition(async () => {
       try {
-        const fd = new FormData()
-        fd.append("userId", userId)
-        fd.append("leaveTypeId", leaveTypeId)
-        fd.append("effectiveAt", effectiveAt)
-        fd.append("amount", String(num))
-        fd.append("reason", reason.trim())
-        const result = await addLeaveAdjustment(fd)
+        const result = await addAnnualAdjustmentAction({ userId, effectiveAt, amount: num, reason: reason.trim() })
         if (result?.success) {
           toast.success(result.message)
           setUserId("")
-          setLeaveTypeId("")
           setAmount("")
           setReason("")
         }
-      } catch (err: any) {
-        toast.error(err.message || "新增失敗")
+      } catch (err) {
+        toast.error((err as Error).message || "新增失敗")
       }
     })
   }
@@ -411,22 +400,6 @@ export function CreateAdjustmentForm({
           </select>
         </div>
         <div className="w-full md:w-auto">
-          <label className="block text-xs font-medium text-gray-700">假別</label>
-          <select
-            value={leaveTypeId}
-            onChange={(e) => setLeaveTypeId(e.target.value)}
-            required
-            className="mt-1 block w-full md:w-36 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
-          >
-            <option value="">請選擇假別</option>
-            {leaveTypes.map((lt) => (
-              <option key={lt.id} value={lt.id}>
-                {lt.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="w-full md:w-auto">
           <label className="block text-xs font-medium text-gray-700">生效日</label>
           <input
             type="date"
@@ -443,7 +416,7 @@ export function CreateAdjustmentForm({
             step="0.5"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="+2 / -1"
+            placeholder="2 / -1"
             required
             className="mt-1 block w-full md:w-28 rounded-md border-gray-300 shadow-sm sm:text-sm px-3 py-2 border"
           />
@@ -476,32 +449,27 @@ export function CreateAdjustmentForm({
   )
 }
 
-export function DeleteAdjustmentButton({ id }: { id: string }) {
+export function VoidGrantButton({ id }: { id: string }) {
   const [isPending, startTransition] = useTransition()
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState("")
 
-  const handleDelete = () => {
-    if (!confirm("確定要刪除這筆手動調整嗎？此動作會即時改變員工 balance。")) return
-
-    startTransition(async () => {
-      try {
-        const fd = new FormData()
-        fd.append("id", id)
-        const result = await deleteLeaveAdjustment(fd)
-        if (result?.success) toast.success(result.message)
-      } catch (err: any) {
-        toast.error(err.message || "刪除失敗")
-      }
-    })
+  if (!open) {
+    return <button onClick={() => setOpen(true)} className="text-red-500 hover:text-red-700 text-xs font-medium">作廢</button>
   }
-
   return (
-    <button
-      onClick={handleDelete}
-      disabled={isPending}
-      className="text-red-500 hover:text-red-700 text-xs font-medium disabled:opacity-50"
-    >
-      {isPending ? "刪除中..." : "刪除"}
-    </button>
+    <div className="flex items-center gap-1">
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="作廢原因（必填）" className="input input-bordered input-xs w-36" />
+      <button
+        disabled={isPending || !reason.trim()}
+        onClick={() => startTransition(async () => {
+          try { toast.success((await voidAnnualGrantAction(id, reason)).message); setOpen(false) }
+          catch (e) { toast.error((e as Error).message) }
+        })}
+        className="btn btn-xs btn-error"
+      >確認</button>
+      <button onClick={() => setOpen(false)} className="btn btn-xs btn-ghost">取消</button>
+    </div>
   )
 }
 

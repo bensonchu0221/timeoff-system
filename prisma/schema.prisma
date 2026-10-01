@@ -108,6 +108,9 @@ model User {
   secondApprovedLeaves LeaveRequest[] @relation("SecondApproverLeaveRequests")
   backupRequests LeaveRequest[]     @relation("BackupLeaveRequests")
   leaveBalances  UserLeaveBalance[]
+  annualGrants        AnnualLeaveGrant[] @relation("UserAnnualGrants")
+  createdAnnualGrants AnnualLeaveGrant[] @relation("CreatedAnnualGrants")
+  voidedAnnualGrants  AnnualLeaveGrant[] @relation("VoidedAnnualGrants")
   auditLogs      AuditLog[]         @relation("AuditActor")
 
   // HR 手動調整（曆年制特休：補發 / 扣除）
@@ -253,6 +256,54 @@ model LeaveAdjustment {
   createdAt DateTime @default(now())
 
   @@index([userId, leaveTypeId, effectiveAt])
+}
+
+// 特休發放紀錄：每一次發放（首年、年度、期初、手動調整）都是一筆。
+// 公式只在寫入當下計算；之後公式改變不影響已寫入的紀錄。
+enum AnnualLeaveGrantKind {
+  PRORATA
+  ANNUAL
+  OPENING
+  ADJUSTMENT
+}
+
+enum AnnualLeaveGrantSource {
+  HIRE
+  SYSTEM_CRON
+  HR_BUTTON
+  HR_MANUAL
+  RECALC
+  MIGRATION
+}
+
+model AnnualLeaveGrant {
+  id          String                 @id @default(uuid())
+  userId      String
+  kind        AnnualLeaveGrantKind
+  // PRORATA = 到職年；ANNUAL = 發放年；OPENING / ADJUSTMENT = null
+  year        Int?
+  // 生效日（UTC midnight）；生效日之後才計入餘額
+  effectiveAt DateTime
+  // 0.5 倍數；ADJUSTMENT 可為負
+  amount      Float
+  // 計算依據：{ rule, text, ...數值 }，寫入當下固定
+  basis       Json?
+  reason      String?                @db.Text
+  source      AnnualLeaveGrantSource
+  createdById String?
+  // 防呆唯一鍵："PRORATA:2026" / "ANNUAL:2027"；OPENING / ADJUSTMENT = null；作廢時清為 null
+  periodKey   String?
+  voidedAt    DateTime?
+  voidedById  String?
+  voidReason  String?                @db.Text
+  createdAt   DateTime               @default(now())
+
+  user      User  @relation("UserAnnualGrants", fields: [userId], references: [id])
+  createdBy User? @relation("CreatedAnnualGrants", fields: [createdById], references: [id])
+  voidedBy  User? @relation("VoidedAnnualGrants", fields: [voidedById], references: [id])
+
+  @@unique([userId, periodKey])
+  @@index([userId, effectiveAt])
 }
 
 model Holiday {

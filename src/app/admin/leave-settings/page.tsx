@@ -9,10 +9,12 @@ import {
   SyncHolidaysForm,
   CreateOverrideForm,
   CreateAdjustmentForm,
-  DeleteAdjustmentButton,
+  VoidGrantButton,
   ToggleRequireProofSwitch,
 } from "./Forms"
-import { formatTaipeiDateISO } from "@/lib/date-format"
+import { formatTaipeiDateISO, todayStartUTCFromTaipei } from "@/lib/date-format"
+import { allowedGrantYears } from "@/lib/annual-grant-calc"
+import { AnnualGrantPanel } from "./AnnualGrantPanel"
 import { BalancesTable, OverrideTableRow } from "./BalancesTable"
 
 export const metadata = {
@@ -63,15 +65,23 @@ export default async function LeaveSettingsPage() {
     if (!existing || o.year > existing.year) latestByPair.set(key, o)
   }
 
-  // HR 手動調整清單（含操作人 / 員工 / 假別資訊）
-  const adjustments = await prisma.leaveAdjustment.findMany({
-    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      user: { select: { name: true, email: true } },
-      leaveType: { select: { name: true } },
-      createdBy: { select: { name: true, email: true } },
-    },
+  // HR 手動調整清單（特休發放紀錄中的 ADJUSTMENT，含已作廢）
+  const adjustments = await prisma.annualLeaveGrant.findMany({
+    where: { kind: "ADJUSTMENT" },
+    orderBy: { createdAt: "desc" },
+    include: { user: { select: { name: true, email: true } }, createdBy: { select: { name: true, email: true } } },
   })
+
+  // 特休年度發放狀態（今年、明年）
+  const grantYears = allowedGrantYears(todayStartUTCFromTaipei())
+  const grantStatus = await Promise.all(grantYears.map(async (year) => {
+    const grantRows = await prisma.annualLeaveGrant.findMany({
+      where: { periodKey: `ANNUAL:${year}`, voidedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, source: true },
+    })
+    return { year, count: grantRows.length, lastAt: grantRows[0]?.createdAt ?? null, lastSource: grantRows[0]?.source ?? null }
+  }))
 
   // 對每筆顯示用 row，算出「目前可請」與「移除 override 後的基準」
   const now = new Date()
@@ -121,6 +131,7 @@ export default async function LeaveSettingsPage() {
         <ul className="menu menu-horizontal bg-base-200 rounded-box p-1">
           <li><a href="#section-types" className="font-medium">1. 假別管理</a></li>
           <li><a href="#section-balances" className="font-medium">2. 額度覆寫</a></li>
+          <li><a href="#section-annual-grant" className="font-medium">特休年度發放</a></li>
           <li><a href="#section-adjustments" className="font-medium">3. 手動調整</a></li>
           <li><a href="#section-sync" className="font-medium">4. 國定假日同步</a></li>
         </ul>
@@ -168,6 +179,7 @@ export default async function LeaveSettingsPage() {
         <h2 className="text-lg font-medium mb-4">2. 員工 Override 列表</h2>
         <p className="text-sm text-gray-500 mb-4">
           沒有列在此處的員工，皆走「公司前 2 年 / 政府勞基法 §38」基準。若要為某員工調整額度，請使用下方「+ 新增 Override」。
+          特休的個人年度額度只影響之後的年度發放，不會改到已發放的年度。
         </p>
 
         <CreateOverrideForm
@@ -178,18 +190,24 @@ export default async function LeaveSettingsPage() {
         <BalancesTable rows={rows} />
       </div>
 
+      {/* 特休年度發放 */}
+      <div id="section-annual-grant" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
+        <h2 className="text-lg font-medium mb-2">特休年度發放</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          每年 12/1 系統會自動發放明年的年度特休（1/1 生效）。員工若在 12/1 前要預約明年的假，可在此提前發放全部，或到「員工管理」單人發放。已發放的人會自動略過，不會重複。
+        </p>
+        <AnnualGrantPanel years={grantYears} status={grantStatus} />
+      </div>
+
       {/* HR 手動調整 */}
       <div id="section-adjustments" className="bg-white rounded-lg shadow border border-gray-200 p-6 scroll-mt-32">
-        <h2 className="text-lg font-medium mb-4">3. HR 手動調整（補發 / 扣除）</h2>
+        <h2 className="text-lg font-medium mb-4">3. HR 手動調整（特休補發 / 扣除）</h2>
         <p className="text-sm text-gray-500 mb-4">
-          手動調整獨立於主計算邏輯之外（不影響 override / opening / pro-rata / 1/1 grant），僅加總到員工最終 balance。
+          僅限特休。新人到職的首年特休、每年年度特休由系統自動發放，不需手動補。
           員工從「生效日」當天起可動用該天數；之前 balance 不含此調整。
         </p>
 
-        <CreateAdjustmentForm
-          users={activeUsers}
-          leaveTypes={leaveTypes.map((lt) => ({ id: lt.id, name: lt.name }))}
-        />
+        <CreateAdjustmentForm users={activeUsers} />
 
         {adjustments.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">尚無手動調整紀錄</p>
@@ -199,30 +217,28 @@ export default async function LeaveSettingsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">員工</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">假別</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">生效日</th>
                   <th className="px-4 py-2 text-right font-medium text-gray-500">數量</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">原因</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">操作人</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">建立時間</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">狀態</th>
                   <th className="px-4 py-2 text-left font-medium text-gray-500">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {adjustments.map((adj) => (
-                  <tr key={adj.id}>
+                  <tr key={adj.id} className={adj.voidedAt ? "opacity-50" : ""}>
                     <td className="px-4 py-3 font-medium">{adj.user.name || adj.user.email}</td>
-                    <td className="px-4 py-3">{adj.leaveType.name}</td>
                     <td className="px-4 py-3">{formatTaipeiDateISO(adj.effectiveAt)}</td>
                     <td className={`px-4 py-3 text-right font-bold ${adj.amount >= 0 ? "text-green-600" : "text-red-600"}`}>
                       {adj.amount > 0 ? "+" : ""}{adj.amount}
                     </td>
                     <td className="px-4 py-3 text-gray-600 max-w-xs whitespace-pre-wrap">{adj.reason}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{adj.createdBy.name || adj.createdBy.email}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{adj.createdBy?.name || adj.createdBy?.email || "系統"}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{formatTaipeiDateISO(adj.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <DeleteAdjustmentButton id={adj.id} />
-                    </td>
+                    <td className="px-4 py-3 text-xs">{adj.voidedAt ? `已作廢：${adj.voidReason}` : "有效"}</td>
+                    <td className="px-4 py-3">{!adj.voidedAt && <VoidGrantButton id={adj.id} />}</td>
                   </tr>
                 ))}
               </tbody>
