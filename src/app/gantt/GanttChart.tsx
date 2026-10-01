@@ -129,7 +129,10 @@ export function GanttChart({
   // 從已載入資料動態產生篩選選項（去重）
   const companyOptions = Array.from(new Set(targetUsers.map(u => u.company).filter(Boolean)))
   const deptOptions = Array.from(new Set(targetUsers.map(u => u.department?.name ?? "未設定")))
-  const leaveTypeOptions = Array.from(new Set(leaves.map(l => l.leaveType.name)))
+  // 假別篩選膠囊：依後台「假別管理」的順序
+  const leaveTypeOptions = Array.from(new Set(
+    [...leaves].sort((a, b) => (a.leaveType.sortOrder ?? 0) - (b.leaveType.sortOrder ?? 0)).map(l => l.leaveType.name)
+  ))
 
   // 假別篩選作用在色塊：選了假別只保留該假別的假單
   const visibleLeaves = selectedTypes.length === 0

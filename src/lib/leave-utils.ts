@@ -64,20 +64,6 @@ export function partsOfDayConflict(a: PartOfDay, b: PartOfDay): boolean {
   return a === b
 }
 
-// 申請頁假別下拉：特休釘在第一（沒額度也仍當預設，因為表單用 [0]）。其餘維持原相對順序。
-export function pinAnnualLeaveFirst<T extends { name: string }>(items: T[]): T[] {
-  const annual: T[] = []
-  const rest: T[] = []
-  for (const item of items) {
-    if (item.name.includes("特休") || item.name.toLowerCase().includes("annual")) {
-      annual.push(item)
-    } else {
-      rest.push(item)
-    }
-  }
-  return [...annual, ...rest]
-}
-
 // 判斷「某一天」是不是台北時區的上班日。
 // 規則須與 calculateDurationDays 內的逐日判斷保持一致：
 //   預設六日為非工作日；若 Holiday 表有該日，用 isWorkDay 覆蓋（補班日 true、國定假日 false）。

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       include: { department: { select: { name: true } } },
       orderBy: { name: "asc" },
     })
-    const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
+    const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })
 
     const zip = new JSZip()
 

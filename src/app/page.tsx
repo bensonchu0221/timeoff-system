@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
   const isAdmin = user.role === "ADMIN"
 
-  const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
+  const leaveTypes = await prisma.leaveType.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })
 
   const balances = await Promise.all(
     leaveTypes

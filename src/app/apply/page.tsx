@@ -1,6 +1,6 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db"
-import { getUserLeaveBalance, pinAnnualLeaveFirst } from "@/lib/leave-utils"
+import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { startOfYearUTC, formatTaipeiDateISO } from "@/lib/date-format"
 import { redirect } from "next/navigation"
 import { LeaveForm, EditTarget } from "./LeaveForm"
@@ -43,14 +43,15 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
   })
 
   const year = new Date().getFullYear()
+  // 依後台「假別管理」的拖拉順序；表單預設選第一個
   const leaveTypes = await prisma.leaveType.findMany({
-    where: { isActive: true }
+    where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   })
   
   // Fetch available balances to pass to the client form for validation
   // Filter out Menstrual Leave (生理假) if the user is MALE
-  const balances = pinAnnualLeaveFirst(
-    await Promise.all(
+  const balances = await Promise.all(
       leaveTypes
         .filter(lt => !(user.gender === "MALE" && lt.name.includes("生理假")))
         .map(async (lt) => {
@@ -66,7 +67,6 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
             requireProof: lt.requireProof,
           }
         })
-    )
   )
 
   // Fetch holidays to pass to client to highlight/disable in calendar

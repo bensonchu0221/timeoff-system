@@ -5,9 +5,12 @@ const mockPrisma = vi.hoisted(() => ({
   user: { findUnique: vi.fn() },
   leaveType: {
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    aggregate: vi.fn(async () => ({ _max: { sortOrder: 6 } })),
   },
+  $transaction: vi.fn(async (ops: unknown[]) => ops),
 }))
 
 vi.mock("@/lib/db", () => ({ prisma: mockPrisma }))
@@ -16,7 +19,7 @@ vi.mock("@/lib/audit", () => ({ logAudit: vi.fn(async () => {}) }))
 vi.mock("@/lib/impersonation", () => ({ assertNotImpersonating: vi.fn(async () => {}) }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 
-import { createLeaveType } from "./actions"
+import { createLeaveType, reorderLeaveTypes } from "./actions"
 
 const fd = (o: Record<string, string>) => {
   const f = new FormData()
@@ -48,7 +51,7 @@ describe("createLeaveType", () => {
     expect(mockPrisma.leaveType.create).not.toHaveBeenCalled()
     expect(mockPrisma.leaveType.update).toHaveBeenCalledWith({
       where: { id: "old-id" },
-      data: { defaultDays: 5, isPaid: false, requireProof: true, isActive: true },
+      data: { defaultDays: 5, isPaid: false, requireProof: true, isActive: true, sortOrder: 7 },
     })
     expect(result).toMatchObject({ success: true })
   })
@@ -80,8 +83,39 @@ describe("createLeaveType", () => {
     )
 
     expect(mockPrisma.leaveType.create).toHaveBeenCalledWith({
-      data: { name: "生日假", defaultDays: 1, isPaid: true, requireProof: false, isActive: true },
+      data: { name: "生日假", defaultDays: 1, isPaid: true, requireProof: false, isActive: true, sortOrder: 7 },
     })
     expect(result).toMatchObject({ success: true })
+  })
+})
+
+describe("reorderLeaveTypes（假別拖拉排序）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "admin-id", role: "ADMIN" })
+    mockPrisma.leaveType.findMany.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }])
+    mockPrisma.leaveType.update.mockImplementation(async (args: unknown) => args)
+  })
+
+  it("依傳入順序寫入 sortOrder = 0, 1, 2（同一個 transaction）", async () => {
+    const r = await reorderLeaveTypes(["c", "a", "b"])
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.leaveType.update.mock.calls.map((c) => c[0])).toEqual([
+      { where: { id: "c" }, data: { sortOrder: 0 } },
+      { where: { id: "a" }, data: { sortOrder: 1 } },
+      { where: { id: "b" }, data: { sortOrder: 2 } },
+    ])
+    expect(r).toMatchObject({ success: true })
+  })
+
+  it("清單跟目前啟用中的假別對不上（少了或多了）→ 拒絕，不寫入", async () => {
+    await expect(reorderLeaveTypes(["c", "a"])).rejects.toThrow("假別清單已變動")
+    await expect(reorderLeaveTypes(["c", "a", "b", "x"])).rejects.toThrow("假別清單已變動")
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("非管理員 → Forbidden", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "u", role: "EMPLOYEE" })
+    await expect(reorderLeaveTypes(["a", "b", "c"])).rejects.toThrow("Forbidden")
   })
 })

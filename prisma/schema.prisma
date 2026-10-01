@@ -147,6 +147,8 @@ model LeaveType {
   isActive       Boolean   @default(true) // For soft delete
   // 是否需要上傳證明文件（例：婚假、喪假）；事後補件也允許，僅在 UI 與後端做提示/驗證
   requireProof   Boolean   @default(false)
+  // 顯示順序（後台「假別管理」拖拉排序）：首頁額度、請假表單下拉、LINE 查詢、報表都依此排序
+  sortOrder      Int       @default(0)
 
   // Relations
   requests       LeaveRequest[]
