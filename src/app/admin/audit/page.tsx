@@ -9,6 +9,8 @@ export const metadata = { title: "稽核日誌 | Timeoff" }
 const ACTION_LABEL: Record<string, string> = {
   LEAVE_APPLY: "申請假單",
   LEAVE_APPROVE: "核准假單",
+  LEAVE_APPROVE_L1: "一審通過",
+  LEAVE_APPROVE_L2: "終審核准",
   LEAVE_REJECT: "駁回假單",
   LEAVE_CANCEL: "撤銷假單",
   LEAVE_UPDATE: "修改假單",
@@ -24,6 +26,11 @@ const ACTION_LABEL: Record<string, string> = {
   LEAVE_TYPE_CREATE: "新增假別",
   LEAVE_TYPE_DELETE: "刪除假別",
   HOLIDAY_SYNC: "同步國定假日",
+  LEAVE_TYPE_UPDATE: "修改假別",
+  ANNUAL_GRANT_ISSUE: "發放特休",
+  ANNUAL_GRANT_VOID: "作廢特休發放",
+  ANNUAL_GRANT_ADJUST: "特休手動調整",
+  ANNUAL_GRANT_RECALC: "特休重算",
 }
 
 const PAGE_SIZE = 100
@@ -130,6 +137,9 @@ export default async function AuditPage(props: {
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{ACTION_LABEL[log.action] || log.action}</span>
+                    {(log.payload as { selfApproved?: boolean } | null)?.selfApproved && (
+                      <span className="ml-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs" title="審核者就是申請人本人">自己核准</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600 font-mono whitespace-nowrap">
                     <div>{log.targetType}</div>

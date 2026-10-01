@@ -516,6 +516,19 @@ export async function updateLeave(requestId: string, data: {
   const newDuration = await calculateDurationDays(start, end, data.partOfDay);
   if (newDuration === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
+  // 與 applyLeave 相同的假別限制（改假別時也要擋）：男性不得請生理假、特休需到職滿 3 個月
+  const targetType = data.leaveTypeId === request.leaveTypeId
+    ? request.leaveType
+    : await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } })
+  const targetTypeName = targetType?.name ?? ""
+  if (request.user?.gender === "MALE" && targetTypeName.includes("生理假")) {
+    return { error: "男性員工無法申請生理假。" };
+  }
+  const targetIsAnnual = targetTypeName.includes("特休") || targetTypeName.toLowerCase().includes("annual")
+  if (targetIsAnnual && request.user?.hireDate && monthsBetween(request.user.hireDate, start) < 3) {
+    return { error: `${targetTypeName}需到職滿 3 個月後才能申請。` };
+  }
+
   // 額度檢查：若假別未變，舊單的天數已計入 pending、需加回；若假別改了，新假別的 pending 不含本單
   const leaveTypeChanged = data.leaveTypeId !== request.leaveTypeId;
   const balance = await getUserLeaveBalance(userId, data.leaveTypeId, start);
@@ -671,6 +684,10 @@ export async function reviewLeaveAsUser(
   // 用 transaction 確保「讀取額度 → 檢查可用 → 更新狀態」是原子操作，
   // updateMany 的 where 帶階段條件（firstApprovedAt），若已被別人改掉會回 count=0 並中止。
   await prisma.$transaction(async (tx) => {
+    if (status !== "REJECTED") {
+      // 鎖住申請人那一列：同一人的多張單同時被核准時排隊處理，避免各自查到同一份額度而超額
+      await tx.$queryRaw`SELECT id FROM \`User\` WHERE id = ${request.userId} FOR UPDATE`
+    }
     if (status === "REJECTED") {
       // 任何階段駁回 → 直接 REJECTED 結束（一審寫 reviewMessage、二審寫 secondReviewMessage）
       const result = await tx.leaveRequest.updateMany({
@@ -686,7 +703,7 @@ export async function reviewLeaveAsUser(
     if (isFirstStagePass) {
       // 一審通過（兩階段）：硬擋用「一審算式」total - used - pendingSecond，
       // 把已過一審、等二審的其他單也預留掉，先擋掉未來二審必然不足的單。
-      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
+      const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate, tx);
       const available = balance.total - balance.used - balance.pendingSecond;
       if (request.durationDays > available) {
         throw new Error(`${request.leaveType.name}不足！一審可核准天數為 ${available} 天（您正嘗試核准 ${request.durationDays} 天）。`);
@@ -701,7 +718,7 @@ export async function reviewLeaveAsUser(
     }
 
     // 最終核准：硬擋用「二審算式」total - used（不扣 pending，避免把正在核准的自己扣掉）
-    const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate);
+    const balance = await getUserLeaveBalance(request.userId, request.leaveTypeId, request.startDate, tx);
     const actualAvailable = balance.total - balance.used;
     if (request.durationDays > actualAvailable) {
       throw new Error(`${request.leaveType.name}不足！${request.leaveType.name} 目前可核准天數為 ${actualAvailable} 天（您正嘗試核准 ${request.durationDays} 天）。`);
@@ -724,7 +741,12 @@ export async function reviewLeaveAsUser(
       : isTwoStage ? "LEAVE_APPROVE_L2" : "LEAVE_APPROVE",
     targetType: "LeaveRequest",
     targetId: requestId,
-    payload: { stage: inFirstStage ? 1 : 2, ...(trimmedMessage ? { message: trimmedMessage } : {}) },
+    payload: {
+      stage: inFirstStage ? 1 : 2,
+      ...(trimmedMessage ? { message: trimmedMessage } : {}),
+      // 管理員核准自己的假單（允許，但要留標記方便稽核）
+      ...(status === "APPROVED" && actorId === request.userId ? { selfApproved: true } : {}),
+    },
   })
 
   const applicantName = displayName(request.user?.name, request.user?.chineseName)

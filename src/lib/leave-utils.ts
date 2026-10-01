@@ -1,5 +1,5 @@
 import { prisma } from "./db"
-import { PartOfDay } from "@prisma/client"
+import { PartOfDay, Prisma } from "@prisma/client"
 import { startOfYearUTC } from "./date-format"
 import { sumGrantTotal, isAnnualLeaveTypeName } from "./annual-grant-calc"
 
@@ -122,24 +122,26 @@ export function addYearsUTC(d: Date, years: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear() + years, d.getUTCMonth(), d.getUTCDate()))
 }
 
+// db：預設全域連線；核准流程傳入 transaction client，讓「查額度 → 更新狀態」在同一個 transaction 內
 export async function getUserLeaveBalance(
   userId: string,
   leaveTypeId: string,
-  asOf: Date = new Date()
+  asOf: Date = new Date(),
+  db: Prisma.TransactionClient = prisma
 ): Promise<{ total: number, used: number, pending: number, pendingFirst: number, pendingSecond: number, remaining: number }> {
-  const leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId }});
+  const leaveType = await db.leaveType.findUnique({ where: { id: leaveTypeId }});
   if (!leaveType) throw new Error("Leave type not found");
 
   const isAnnualLeave = isAnnualLeaveTypeName(leaveType.name);
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("User not found");
 
   if (isAnnualLeave) {
     if (!user.hireDate) {
       return { total: 0, used: 0, pending: 0, pendingFirst: 0, pendingSecond: 0, remaining: 0 };
     }
-    const grants = await prisma.annualLeaveGrant.findMany({
+    const grants = await db.annualLeaveGrant.findMany({
       where: { userId, voidedAt: null },
       select: { kind: true, effectiveAt: true, amount: true, year: true },
     })
@@ -150,9 +152,9 @@ export async function getUserLeaveBalance(
     const endOfYear = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59, 999))
     const startFilter = opening ? { gte: opening.effectiveAt, lte: endOfYear } : { lte: endOfYear }
     const [usedAgg, pendingAgg, pendingSecondAgg] = await Promise.all([
-      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter } }),
-      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter } }),
-      prisma.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: startFilter } }),
+      db.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "APPROVED", startDate: startFilter } }),
+      db.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", startDate: startFilter } }),
+      db.leaveRequest.aggregate({ _sum: { durationDays: true }, where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: startFilter } }),
     ])
     const used = usedAgg._sum.durationDays || 0
     const pending = pendingAgg._sum.durationDays || 0
@@ -166,7 +168,7 @@ export async function getUserLeaveBalance(
   const periodStart = startOfYearUTC(year)
   const periodEnd = startOfYearUTC(year + 1)
 
-  const allOverrides = await prisma.userLeaveBalance.findMany({
+  const allOverrides = await db.userLeaveBalance.findMany({
     where: { userId, leaveTypeId },
     orderBy: { year: 'asc' },
     select: { year: true, totalQuota: true }
@@ -180,15 +182,15 @@ export async function getUserLeaveBalance(
 
   // used / pending 只算當前曆年內 [periodStart, periodEnd)
   const [used, pending, pendingSecondAgg] = await Promise.all([
-    prisma.leaveRequest.aggregate({
+    db.leaveRequest.aggregate({
       _sum: { durationDays: true },
       where: { userId, leaveTypeId, status: "APPROVED", startDate: { gte: periodStart, lt: periodEnd } }
     }),
-    prisma.leaveRequest.aggregate({
+    db.leaveRequest.aggregate({
       _sum: { durationDays: true },
       where: { userId, leaveTypeId, status: "PENDING", startDate: { gte: periodStart, lt: periodEnd } }
     }),
-    prisma.leaveRequest.aggregate({
+    db.leaveRequest.aggregate({
       _sum: { durationDays: true },
       where: { userId, leaveTypeId, status: "PENDING", firstApprovedAt: { not: null }, startDate: { gte: periodStart, lt: periodEnd } }
     })
