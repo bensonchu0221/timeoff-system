@@ -184,8 +184,18 @@ npx prisma db execute --file /tmp/apply.sql --schema prisma/schema.prisma
 | `timeoff-daily-leave-roster` | `0 10 * * *` Asia/Taipei | `/api/cron/daily-leave-roster` |
 | `timeoff-daily-pending-reminder` | `0 11 * * *` Asia/Taipei | `/api/cron/daily-pending-reminder` |
 | `timeoff-escalate-pending` | `0 9-18 * * 1-5` Asia/Taipei（平日 09–18 每小時） | `/api/cron/escalate-pending` |
+| `timeoff-annual-leave-grant` | `0 6 1 12 *` Asia/Taipei（每年 12/1 06:00） | `/api/cron/annual-leave-grant` |
 
-三個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+四個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+
+### 特休年度發放（`timeoff-annual-leave-grant`，2026-10-01 建立）
+
+- 特休自 2026-10-01 起改為「發放紀錄存資料庫」（`AnnualLeaveGrant` 表），不再即時用公式算。
+- 每年 12/1 發「明年」的年度特休（生效日 = 明年 1/1）。重試 3 次、間隔 ≥ 5 分鐘、deadline 300s。
+- **重跑安全**：每人每年只能有一筆（DB 唯一鍵 `userId + periodKey`），已發過的自動略過。
+- 結果（成功 / 失敗）用 LINE 推給在職 ADMIN；不通知員工。
+- 排程失敗或要提前發：後台「假別與額度設定 → 特休年度發放 → 預覽全部發放」，或「員工管理 → 特休欄 → 發放 YYYY」單人發放。
+- 遷移相關：`scripts/annual-grant-backfill.ts`（回填，已執行）、`scripts/annual-grant-audit.ts`（零差異審核）、`src/lib/legacy-annual-calc.ts`（舊公式，只給審核用）。過完 2027/1/1 確認穩定後，可移除這些與 `User.annualLeaveOpening*` 四欄、`LeaveAdjustment` 表。
 
 `escalate-pending`：找出當前審核階段已超過 2 天未處理的待審單，通知「目前該審的人」（一審→主管、二審→Boss），每階段各算 2 天、每階段只通知一次。
 
