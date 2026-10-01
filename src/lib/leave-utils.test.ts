@@ -4,9 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // 之後 calculateDurationDays 內部呼叫 prisma.holiday.findMany 時走 mock
 vi.mock("./db", () => ({
   prisma: {
-    holiday: {
-      findMany: vi.fn(),
-    },
+    holiday: { findMany: vi.fn() },
+    leaveType: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn() },
+    annualLeaveGrant: { findMany: vi.fn() },
+    leaveRequest: { aggregate: vi.fn(), findMany: vi.fn() },
   },
 }))
 
@@ -15,7 +17,8 @@ import {
   getStatutoryAnnualDays,
   monthsBetween,
   addYearsUTC,
-
+  getUserLeaveBalance,
+  findAnnualShortfall,
   isTaipeiWorkDay,
   partsOfDayConflict,
   pinAnnualLeaveFirst,
@@ -478,5 +481,55 @@ describe("addYearsUTC", () => {
 
   it("跨閏年 2/29：2/29 → 隔年 3/1（Date 自動 normalize）", () => {
     expect(addYearsUTC(utcDate("2024-02-29"), 1).toISOString().slice(0, 10)).toBe("2025-03-01")
+  })
+})
+
+describe("getUserLeaveBalance 特休（讀 grants）", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.leaveType.findUnique).mockResolvedValue({ id: "lt", name: "特休", defaultDays: 10 } as never)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "u", hireDate: utcDate("2023-08-14") } as never)
+    vi.mocked(prisma.leaveRequest.aggregate).mockResolvedValue({ _sum: { durationDays: 0 } } as never)
+  })
+
+  it("total = 期初 + 期初後已生效的紀錄；未生效的明年發放不計", async () => {
+    vi.mocked(prisma.annualLeaveGrant.findMany).mockResolvedValue([
+      { kind: "OPENING", effectiveAt: utcDate("2026-01-01"), amount: 12, year: null },
+      { kind: "ADJUSTMENT", effectiveAt: utcDate("2026-10-01"), amount: 4, year: null },
+      { kind: "ANNUAL", effectiveAt: utcDate("2027-01-01"), amount: 14, year: 2027 },
+    ] as never)
+    const bal = await getUserLeaveBalance("u", "lt", utcDate("2026-10-01"))
+    expect(bal.total).toBe(16)
+    const next = await getUserLeaveBalance("u", "lt", utcDate("2027-02-01"))
+    expect(next.total).toBe(30)
+  })
+
+  it("沒有到職日 → 全 0", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "u", hireDate: null } as never)
+    expect((await getUserLeaveBalance("u", "lt")).total).toBe(0)
+  })
+})
+
+describe("findAnnualShortfall（跨年重複花額度）", () => {
+  it("今年剩 5、明年發 14：先請明年 19 天，再請今年 5 天 → 擋下（2027 年底會是 -5）", async () => {
+    vi.mocked(prisma.leaveType.findUnique).mockResolvedValue({ id: "lt", name: "特休", defaultDays: 10 } as never)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "u", hireDate: utcDate("2023-08-14") } as never)
+    vi.mocked(prisma.annualLeaveGrant.findMany).mockResolvedValue([
+      { kind: "OPENING", effectiveAt: utcDate("2026-01-01"), amount: 5, year: null },
+      { kind: "ANNUAL", effectiveAt: utcDate("2027-01-01"), amount: 14, year: 2027 },
+    ] as never)
+    vi.mocked(prisma.leaveRequest.findMany).mockResolvedValue([
+      { id: "r27", startDate: utcDate("2027-02-01"), durationDays: 19 },
+    ] as never)
+    const r = await findAnnualShortfall("u", "lt", { startDate: utcDate("2026-12-01"), days: 5 })
+    expect(r).toEqual({ year: 2027, remaining: -5 })
+  })
+
+  it("額度足夠 → null", async () => {
+    vi.mocked(prisma.annualLeaveGrant.findMany).mockResolvedValue([
+      { kind: "OPENING", effectiveAt: utcDate("2026-01-01"), amount: 5, year: null },
+      { kind: "ANNUAL", effectiveAt: utcDate("2027-01-01"), amount: 14, year: 2027 },
+    ] as never)
+    vi.mocked(prisma.leaveRequest.findMany).mockResolvedValue([] as never)
+    expect(await findAnnualShortfall("u", "lt", { startDate: utcDate("2026-12-01"), days: 5 })).toBeNull()
   })
 })
