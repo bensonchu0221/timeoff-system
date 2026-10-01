@@ -90,7 +90,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">團隊請假甘特圖</h1>
         <p className="mt-1 text-sm text-gray-500">
-          顯示三個月內的請假狀況。按住滑鼠左鍵可左右拖曳，或使用上方按鈕切換月份。
+          顯示三個月內的請假狀況。可拖曳或捲動瀏覽，點人名可標色整列方便對照。
         </p>
       </div>
 
