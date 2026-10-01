@@ -5,6 +5,8 @@ type Balance = {
   total: number
   used: number
   remaining: number
+  // 已寫入但尚未生效的明年特休（12/1 排程或 HR 提前發放）
+  upcoming?: { year: number; amount: number } | null
 }
 
 // 特休改曆年制累計後，「年度」概念對特休不再適用；標題改為「假別額度（截至今日）」
@@ -20,6 +22,9 @@ export function BalanceSummary({ balances }: { balances: Balance[] }) {
             <div className="stat-title text-xs text-gray-500 truncate">{b.type}</div>
             <div className="stat-value text-xl font-bold text-gray-900">{b.remaining}</div>
             <div className="stat-desc text-[10px] text-gray-400">/ {b.total} 天</div>
+            {b.upcoming && (
+              <div className="text-[10px] text-emerald-600 mt-0.5 whitespace-normal">{b.upcoming.year} 年度特休 {b.upcoming.amount} 天將於 1/1 生效</div>
+            )}
           </div>
         ))}
       </div>
@@ -35,6 +40,9 @@ export function BalanceSummary({ balances }: { balances: Balance[] }) {
                 <div className="text-right text-sm">
                   <span className="font-bold text-gray-900">{b.remaining}</span>
                   <span className="text-gray-400 ml-1">/ {b.total} 天</span>
+                  {b.upcoming && (
+                    <div className="text-[10px] text-emerald-600 mt-0.5">{b.upcoming.year} 年度特休 {b.upcoming.amount} 天將於 1/1 生效</div>
+                  )}
                 </div>
               </div>
               <div className="w-full bg-[#E5E7E5] rounded-full h-1.5 mt-2">
