@@ -15,7 +15,7 @@ export default async function FlowPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">請假審核流程圖</h1>
         <p className="mt-2 text-gray-600">
-          以下流程適用於所有員工的請假申請。任何環節都會自動觸發對應的通知（Email + LINE）。
+          以下流程適用於所有員工的請假申請。任何環節都會自動觸發對應的通知（Email + LINE，可在「個人設定」逐項開關）。
         </p>
       </div>
 
@@ -30,15 +30,15 @@ export default async function FlowPage() {
           />
           <FlowStep
             title="系統自動驗證"
-            description="餘額是否足夠、日期是否與既有假單重疊、自動跳過週末與國定假日；不通過會即時提示。"
+            description="餘額是否足夠（特休另會檢查跨年預約後的年底餘額）、日期與時段是否與既有假單重疊、自動跳過週末與國定假日；特休需到職滿 3 個月、生理假限女性。不通過會即時提示。"
           />
           <FlowStep
             title="通知主管"
-            description="同步送出 Email + LINE 推播；LINE 訊息含「核准（送交終審）」「駁回」兩顆按鈕。"
+            description="同步送出 Email + LINE 推播；LINE 訊息含「快速核准」「駁回」「前往網頁查看完整資訊」三顆按鈕，按駁回可再選常用理由或開網頁填寫。"
           />
           <FlowStep
             title="主管一審"
-            description="第一關由直屬主管審核。通過 → 送交 Boss 終審；駁回 → 直接結束，不進第二關。"
+            description="第一關由直屬主管審核（admin 也可代審）。通過 → 送交 Boss 終審；駁回 → 直接結束，不進第二關。"
           />
           <FlowStep
             title="通知 Boss 終審"
@@ -46,7 +46,7 @@ export default async function FlowPage() {
           />
           <FlowStep
             title="Boss 終審"
-            description="第二關由 Boss 做最後核准或駁回；Boss 不在時 admin 可代為終審。額度在此關最終核准時才正式扣除。"
+            description="第二關由 Boss 做最後核准或駁回；Boss 不在時 admin 可代為終審。額度在此關最終核准時才正式扣除（一審通過時會先預留）。"
           />
           <FlowStep
             title="結果通知"
@@ -54,15 +54,16 @@ export default async function FlowPage() {
           />
           <FlowStep
             title="進入行事曆"
-            description="核准的假單會出現在團隊甘特圖，也會同步到個人 iCal 訂閱（行事曆 App）。"
+            description="甘特圖會顯示已核准（綠）與待審（灰）的假單；iCal 訂閱（個人 / 團隊 / 全公司三種，可加到行事曆 App）只同步已核准的假單。"
             isLast
           />
         </ul>
 
         <div className="mt-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
           <p className="font-medium text-gray-800">兩階段的例外情況：</p>
-          <p>• 若你的直屬主管本身就是 Boss，一審通過即為最終核准，不再重複跑第二關。</p>
+          <p>• 若你的直屬主管本身就是 Boss，或你沒有設定直屬主管，由 Boss 單獨審核一關即為最終核准。</p>
           <p>• Boss 本人送出的假單會自動核准（無上層可審）。</p>
+          <p>• 系統尚未設定 Boss 時，只由直屬主管審核一關。</p>
         </div>
       </section>
 
@@ -78,13 +79,13 @@ export default async function FlowPage() {
           />
           <ScenarioCard
             title="員工修改待審假單"
-            trigger="員工在審核完成前到「修改假單」頁更動內容"
-            behavior="假單退回重跑一審：清除一審通過狀態，主管收到含 before / after 對照的修改通知，重新從第一關審核"
+            trigger="員工在一審通過前、且開始日當天（含）以前，到「修改假單」頁更動內容"
+            behavior="主管審核時直接看到最新版本，不另發修改通知；代理人有變動時，舊代理人收解除、新代理人收指派。一審通過後就不能修改，需先撤銷再重新申請"
           />
           <ScenarioCard
             title="員工撤銷假單"
-            trigger="員工在開始日前按「撤銷」"
-            behavior="待審 → 通知目前持單的審核者（一審主管或已進二審的 Boss）；已核准 → 主管 + Boss + 同部門 + 代理人都收到撤銷通知。員工該期間如常出勤"
+            trigger="員工在開始日當天（含）以前按「撤銷」"
+            behavior="待審 → 通知一審主管（已進二審則 Boss 也會收到）與代理人；已核准 → 主管 + Boss + 同部門 + 代理人都收到撤銷通知。員工該期間如常出勤"
           />
           <ScenarioCard
             title="48 小時未審假單提醒"
@@ -108,7 +109,7 @@ export default async function FlowPage() {
       <section>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">通知誰會收到？</h2>
         <p className="text-sm text-gray-500 mb-3">
-          每位收件人需在「個人設定」綁定 LINE 才會收到推播；Email 一律會送。
+          每位收件人需在「個人設定」綁定 LINE 才會收到推播；Email 預設會送。兩者都可在「個人設定」逐項關閉。
         </p>
 
         <div className="overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -129,7 +130,7 @@ export default async function FlowPage() {
               <NotifyRow event="一審通過（送二審）" rcpts={["✓", "-", "✓", "-", "-", "-"]} />
               <NotifyRow event="最終核准" rcpts={["✓", "-", "-", "✓", "✓", "-"]} />
               <NotifyRow event="駁回（一審或二審）" rcpts={["✓", "-", "-", "-", "✓ 解除", "-"]} />
-              <NotifyRow event="修改（退回一審）" rcpts={["-", "✓", "-", "-", "✓ *", "-"]} />
+              <NotifyRow event="修改（限一審前）" rcpts={["-", "-", "-", "-", "✓ *", "-"]} />
               <NotifyRow event="撤銷（待審）" rcpts={["-", "✓", "✓ ***", "-", "✓ 解除", "-"]} />
               <NotifyRow event="撤銷（已核准）" rcpts={["-", "✓", "✓", "✓", "✓ 解除", "-"]} />
               <NotifyRow event="48 小時未審假單提醒（每階段）" rcpts={["-", "✓", "✓", "-", "-", "-"]} />
@@ -145,7 +146,7 @@ export default async function FlowPage() {
           ** 全公司請假名單：所有在職且已綁定 LINE 的同仁皆會收到（自己今天請假則只看到其他人的名單）。
         </p>
         <p className="text-xs text-gray-500 mt-1">
-          *** 撤銷待審單時，若已進入二審，Boss（目前持單者）也會收到通知。
+          *** 撤銷待審單時，一審主管一律會收到；若已進入二審，Boss 也會收到。
         </p>
         <p className="text-xs text-gray-500 mt-1">
           最終核准時，若代理人剛好也是同部門同仁，只會收到一則「代理人通知」（不再另發部門提醒，避免重複）。
@@ -157,11 +158,11 @@ export default async function FlowPage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-3">小提示</h2>
         <ul className="space-y-2 text-sm text-gray-700 list-disc list-inside">
           <li>假單送出後，首頁列表會顯示橫式進度圖（申請 → 主管審核 → Boss 終審 → 完成），一眼看出審到哪一關</li>
-          <li>想關閉特定 LINE 通知？到「個人設定」逐項調整（多種通知可獨立開關）</li>
+          <li>想關閉特定通知？到「個人設定」逐項調整（Email 與 LINE 可分別獨立開關）</li>
           <li>想查餘額？跟 LINE Bot 輸入「查假」即可，免登入網頁</li>
           <li>被駁回想知道為什麼？看「主管留言」（一審）或「終審留言」（Boss 二審）段落（未填則沒有）</li>
-          <li>一審通過後想改內容？修改會退回重跑一審，主管要重新審一次</li>
-          <li>已核准但需要撤銷？只要在開始日前都可以撤；過了開始日請聯絡 admin</li>
+          <li>想改假單內容？一審通過前可直接修改；一審通過後就鎖定了，請先撤銷再重新申請</li>
+          <li>已核准但需要撤銷？開始日當天（含）以前都可以自己撤；過了開始日請聯絡 admin</li>
         </ul>
       </section>
     </div>
