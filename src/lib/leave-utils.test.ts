@@ -48,6 +48,22 @@ describe("calculateDurationDays", () => {
     expect(days).toBe(0.5)
   })
 
+  it("多天：週一到週三、週三上午就結束 = 2.5", async () => {
+    // 2026-05-18 (Mon) ~ 2026-05-20 (Wed)
+    const days = await calculateDurationDays(utcDate("2026-05-18"), utcDate("2026-05-20"), "ALL_DAY", "MORNING")
+    expect(days).toBe(2.5)
+  })
+
+  it("多天：週一下午才開始、週三上午就結束 = 2", async () => {
+    const days = await calculateDurationDays(utcDate("2026-05-18"), utcDate("2026-05-20"), "AFTERNOON", "MORNING")
+    expect(days).toBe(2)
+  })
+
+  it("多天：週一下午開始到週二全天 = 1.5", async () => {
+    const days = await calculateDurationDays(utcDate("2026-05-18"), utcDate("2026-05-19"), "AFTERNOON", "ALL_DAY")
+    expect(days).toBe(1.5)
+  })
+
   it("週末選一天 = 0（沒上班日扣不到）", async () => {
     // 2026-05-17 是星期日
     const days = await calculateDurationDays(utcDate("2026-05-17"), utcDate("2026-05-17"), "ALL_DAY")

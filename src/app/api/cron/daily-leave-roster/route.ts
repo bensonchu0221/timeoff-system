@@ -4,6 +4,7 @@ import { shouldSendLine, sendLineDailyRoster } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { isTaipeiWorkDay } from "@/lib/leave-utils"
 import { activeUserWhere } from "@/lib/employment"
+import { dayPartOn } from "@/lib/leave-period"
 
 // 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「全公司在職員工」
 // 認證：x-cron-secret header
@@ -68,12 +69,9 @@ export async function GET(req: NextRequest) {
       if (filtered.length === 0) return
 
       const rosterLines = filtered.map((l) => {
-        const partLabel =
-          l.partOfDay === "MORNING"
-            ? "（上半天）"
-            : l.partOfDay === "AFTERNOON"
-            ? "（下半天）"
-            : ""
+        // 今天在這張假單裡的時段（多天假的頭尾可能是半天）
+        const part = dayPartOn(l, today)
+        const partLabel = part === "MORNING" ? "（上半天）" : part === "AFTERNOON" ? "（下半天）" : ""
         return `• ${l.user.name || "員工"}：${l.leaveType.name}${partLabel}`
       })
 

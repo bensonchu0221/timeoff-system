@@ -11,7 +11,13 @@ function formatUTCDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-export async function calculateDurationDays(startDate: Date, endDate: Date, partOfDay: PartOfDay): Promise<number> {
+// partOfDay = 開始那天的時段、endPartOfDay = 結束那天的時段（多天假才看；見 lib/leave-period.ts）
+export async function calculateDurationDays(
+  startDate: Date,
+  endDate: Date,
+  partOfDay: PartOfDay,
+  endPartOfDay: PartOfDay = "ALL_DAY"
+): Promise<number> {
   // Get all holidays between startDate and endDate
   const holidays = await prisma.holiday.findMany({
     where: {
@@ -25,8 +31,11 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
   const holidayMap = new Map(holidays.map(h => [formatUTCDate(h.date), h.isWorkDay]));
 
   let workDays = 0;
+  let firstIsWorkDay = false;
+  let lastIsWorkDay = false;
   const currentDate = new Date(startDate);
   currentDate.setUTCHours(0, 0, 0, 0);
+  const startMs = currentDate.getTime();
   const end = new Date(endDate);
   end.setUTCHours(0, 0, 0, 0);
 
@@ -44,25 +53,29 @@ export async function calculateDurationDays(startDate: Date, endDate: Date, part
     if (isWorkDayThisDay) {
       workDays++;
     }
+    if (currentDate.getTime() === startMs) firstIsWorkDay = isWorkDayThisDay;
+    if (currentDate.getTime() === end.getTime()) lastIsWorkDay = isWorkDayThisDay;
 
     currentDate.setUTCDate(currentDate.getUTCDate() + 1);
   }
 
   if (workDays === 0) return 0;
 
-  if (partOfDay !== "ALL_DAY" && workDays === 1) {
-    return 0.5;
+  // 單日假（同一個日曆天）：上/下半天 = 0.5
+  if (formatUTCDate(startDate) === formatUTCDate(endDate)) {
+    return partOfDay !== "ALL_DAY" ? 0.5 : workDays;
   }
 
-  return workDays;
+  // 多天假：首日「下午才開始」、末日「上午就結束」各扣 0.5（該日是工作日才扣）
+  let days = workDays;
+  if (partOfDay === "AFTERNOON" && firstIsWorkDay) days -= 0.5;
+  if (endPartOfDay === "MORNING" && lastIsWorkDay) days -= 0.5;
+  return days;
 }
 
 // 同一天時段是否衝突。上半天與下半天可並存；全天佔滿兩個時段。
 // 不用「整天加總 > 1」當唯一條件：兩張上半天會是 0.5+0.5=1，加總不會擋，但時段已重複。
-export function partsOfDayConflict(a: PartOfDay, b: PartOfDay): boolean {
-  if (a === "ALL_DAY" || b === "ALL_DAY") return true
-  return a === b
-}
+export { partsOfDayConflict } from "./leave-period"
 
 // 判斷「某一天」是不是台北時區的上班日。
 // 規則須與 calculateDurationDays 內的逐日判斷保持一致：

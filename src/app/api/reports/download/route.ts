@@ -6,6 +6,7 @@ import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
 import ExcelJS from "exceljs"
 import JSZip from "jszip"
 import { activeUserWhere } from "@/lib/employment"
+import { partsLabel } from "@/lib/leave-period"
 
 export async function GET(req: NextRequest) {
   try {
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
           formatTaipeiDate(req.startDate),
           formatTaipeiDate(req.endDate),
           req.durationDays,
-          req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天',
+          partsLabel(req.startDate, req.endDate, req),
           req.reason || "",
           req.status === 'APPROVED' ? '已核准' :
           req.status === 'PENDING' ? '待審核' :

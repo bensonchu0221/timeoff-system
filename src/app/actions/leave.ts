@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
-import { calculateDurationDays, getUserLeaveBalance, monthsBetween, partsOfDayConflict, findAnnualShortfall } from "@/lib/leave-utils"
+import { calculateDurationDays, getUserLeaveBalance, monthsBetween, findAnnualShortfall } from "@/lib/leave-utils"
+import { normalizeParts, leavesConflict, type LeaveParts } from "@/lib/leave-period"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { logAudit } from "@/lib/audit"
 import { PartOfDay, LeaveStatus } from "@prisma/client"
@@ -40,6 +41,8 @@ export async function applyLeave(data: {
   startDate: string,
   endDate: string,
   partOfDay: PartOfDay,
+  // 多天假結束那天的時段（ALL_DAY / MORNING）；單日假不用帶
+  endPartOfDay?: PartOfDay,
   reason?: string,
   backupId?: string | null
 }) {
@@ -53,7 +56,15 @@ export async function applyLeave(data: {
 
   if (start > end) return { error: "Start date cannot be after end date" };
 
-  // Check for overlapping leaves：日期區間重疊，且時段衝突才擋。
+  // 時段：partOfDay = 開始那天、endPartOfDay = 結束那天（多天假才有半天頭尾）
+  let parts: { partOfDay: PartOfDay; endPartOfDay: PartOfDay }
+  try {
+    parts = normalizeParts(start, end, data.partOfDay, data.endPartOfDay)
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+
+  // Check for overlapping leaves：日期區間重疊，且重疊的某一天時段衝突才擋。
   // 上半天 + 下半天可並存；全天與任一時段衝突（全天已佔滿 1 天）。
   const overlappingLeaves = await prisma.leaveRequest.findMany({
     where: {
@@ -64,11 +75,11 @@ export async function applyLeave(data: {
     }
   });
 
-  if (overlappingLeaves.some((l) => partsOfDayConflict(l.partOfDay, data.partOfDay))) {
+  if (overlappingLeaves.some((l) => leavesConflict(l, { startDate: start, endDate: end, ...parts }))) {
     return { error: "此日期與時段您已經有申請過假單（待審核或已核准），請勿重複申請！" };
   }
 
-  const durationDays = await calculateDurationDays(start, end, data.partOfDay);
+  const durationDays = await calculateDurationDays(start, end, parts.partOfDay, parts.endPartOfDay);
   if (durationDays === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
   // 提前抓假別名稱：錯誤訊息要用，後面寄信也要用
@@ -144,7 +155,8 @@ export async function applyLeave(data: {
       leaveTypeId: data.leaveTypeId,
       startDate: start,
       endDate: end,
-      partOfDay: data.partOfDay,
+      partOfDay: parts.partOfDay,
+      endPartOfDay: parts.endPartOfDay,
       reason: data.reason,
       durationDays,
       status: autoApprove ? "APPROVED" : "PENDING",
@@ -163,6 +175,8 @@ export async function applyLeave(data: {
       leaveTypeId: data.leaveTypeId,
       startDate: data.startDate,
       endDate: data.endDate,
+      partOfDay: parts.partOfDay,
+      endPartOfDay: parts.endPartOfDay,
       durationDays,
     },
   })
@@ -178,7 +192,7 @@ export async function applyLeave(data: {
       leaveTypeName,
       start,
       end,
-      partOfDay: data.partOfDay,
+      parts,
       durationDays,
       backupId,
     })
@@ -196,7 +210,7 @@ export async function applyLeave(data: {
           leaveTypeName,
           start,
           end,
-          data.partOfDay,
+          parts,
           durationDays,
           reviewLink
         );
@@ -216,7 +230,7 @@ export async function applyLeave(data: {
 
     // 代理人通知（選填；申請時尚未核准 = PENDING）
     if (backupId) {
-      await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, data.partOfDay, durationDays, "PENDING")
+      await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, parts, durationDays, "PENDING")
     }
   }
 
@@ -233,11 +247,11 @@ async function sendApprovedNotifications(args: {
   leaveTypeName: string,
   start: Date,
   end: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   backupId: string | null,
 }) {
-  const { applicantUserId, applicantName, departmentId, leaveTypeName, start, end, partOfDay, durationDays, backupId } = args
+  const { applicantUserId, applicantName, departmentId, leaveTypeName, start, end, parts, durationDays, backupId } = args
 
   // 同部門通知：提醒同部門同事誰會請假
   if (departmentId) {
@@ -249,15 +263,15 @@ async function sendApprovedNotifications(args: {
       // 代理人本人若同部門，跳過部門通知：代理人通知已涵蓋同樣資訊，避免收到 2 則
       if (t.id === backupId) return []
       const tasks: Promise<unknown>[] = []
-      if (shouldSendEmail(t, "departmentLeave")) tasks.push(sendDepartmentLeaveEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays))
-      if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay))
+      if (shouldSendEmail(t, "departmentLeave")) tasks.push(sendDepartmentLeaveEmail(t.email!, applicantName, leaveTypeName, start, end, parts, durationDays))
+      if (shouldSendLine(t, "departmentLeave")) tasks.push(sendLineSameDepartment(t.lineUserId!, applicantName, leaveTypeName, start, end, parts))
       return tasks
     }))
   }
 
   // 代理人正式生效
   if (backupId) {
-    await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, partOfDay, durationDays, "APPROVED")
+    await notifyBackupAssigned(backupId, applicantName, leaveTypeName, start, end, parts, durationDays, "APPROVED")
   }
 }
 
@@ -269,7 +283,7 @@ async function notifyBackupAssigned(
   leaveType: string,
   start: Date,
   end: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   status: "PENDING" | "APPROVED"
 ) {
@@ -279,10 +293,10 @@ async function notifyBackupAssigned(
   })
   if (!backup) return
   if (shouldSendEmail(backup, "backupAssigned")) {
-    await sendBackupAssignedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, status)
+    await sendBackupAssignedEmail(backup.email!, applicantName, leaveType, start, end, parts, durationDays, status)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
-    await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, partOfDay, status)
+    await sendLineBackupAssigned(backup.lineUserId!, applicantName, leaveType, start, end, parts, status)
   }
 }
 
@@ -292,7 +306,7 @@ async function notifyBackupRemoved(
   leaveType: string,
   start: Date,
   end: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   reason: "REMOVED_BY_EDIT" | "CANCELLED" | "REJECTED"
 ) {
@@ -302,10 +316,10 @@ async function notifyBackupRemoved(
   })
   if (!backup) return
   if (shouldSendEmail(backup, "backupAssigned")) {
-    await sendBackupRemovedEmail(backup.email!, applicantName, leaveType, start, end, partOfDay, durationDays, reason)
+    await sendBackupRemovedEmail(backup.email!, applicantName, leaveType, start, end, parts, durationDays, reason)
   }
   if (shouldSendLine(backup, "backupAssigned")) {
-    await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, partOfDay, reason)
+    await sendLineBackupRemoved(backup.lineUserId!, applicantName, leaveType, start, end, parts, reason)
   }
 }
 
@@ -357,7 +371,7 @@ export async function cancelLeave(requestId: string) {
   const leaveTypeName = request.leaveType.name
   const start = request.startDate
   const end = request.endDate
-  const partOfDay = request.partOfDay
+  const parts = request // partOfDay / endPartOfDay
   const durationDays = request.durationDays
 
   // 通知相關審核者：一審主管一律通知；若已進二審（firstApprovedAt 非 null）或原為已核准，
@@ -374,8 +388,8 @@ export async function cancelLeave(requestId: string) {
     })
     await Promise.allSettled(approvers.flatMap((a) => {
       const tasks: Promise<unknown>[] = []
-      if (shouldSendEmail(a, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(a.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
-      if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay, previousStatus))
+      if (shouldSendEmail(a, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(a.email!, applicantName, leaveTypeName, start, end, parts, durationDays, previousStatus))
+      if (shouldSendLine(a, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(a.lineUserId!, applicantName, leaveTypeName, start, end, parts, previousStatus))
       return tasks
     }))
   }
@@ -392,15 +406,15 @@ export async function cancelLeave(requestId: string) {
     })
     await Promise.allSettled(teammates.flatMap(t => {
       const tasks: Promise<unknown>[] = []
-      if (shouldSendEmail(t, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(t.email!, applicantName, leaveTypeName, start, end, partOfDay, durationDays, previousStatus))
-      if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, partOfDay, previousStatus))
+      if (shouldSendEmail(t, "leaveCancelled")) tasks.push(sendLeaveCancelledEmail(t.email!, applicantName, leaveTypeName, start, end, parts, durationDays, previousStatus))
+      if (shouldSendLine(t, "leaveCancelled")) tasks.push(sendLineLeaveCancelled(t.lineUserId!, applicantName, leaveTypeName, start, end, parts, previousStatus))
       return tasks
     }))
   }
 
   // 通知代理人「不用代理了」
   if (request.backupId) {
-    await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, start, end, partOfDay, durationDays, "CANCELLED")
+    await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, start, end, parts, durationDays, "CANCELLED")
   }
 
   revalidatePath("/dashboard")
@@ -465,6 +479,8 @@ export async function updateLeave(requestId: string, data: {
   startDate: string,
   endDate: string,
   partOfDay: PartOfDay,
+  // 多天假結束那天的時段（ALL_DAY / MORNING）；單日假不用帶
+  endPartOfDay?: PartOfDay,
   reason?: string,
   backupId?: string | null
 }) {
@@ -499,6 +515,12 @@ export async function updateLeave(requestId: string, data: {
   if (start < todayStartUTCFromTaipei()) {
     return { error: "請假開始日期不可早於今天。" };
   }
+  let parts: { partOfDay: PartOfDay; endPartOfDay: PartOfDay }
+  try {
+    parts = normalizeParts(start, end, data.partOfDay, data.endPartOfDay)
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
 
   // 排除自己這張，重新檢查是否與其他單重疊（日期 + 時段）
   const overlappingLeaves = await prisma.leaveRequest.findMany({
@@ -510,11 +532,11 @@ export async function updateLeave(requestId: string, data: {
       endDate: { gte: start }
     }
   });
-  if (overlappingLeaves.some((l) => partsOfDayConflict(l.partOfDay, data.partOfDay))) {
+  if (overlappingLeaves.some((l) => leavesConflict(l, { startDate: start, endDate: end, ...parts }))) {
     return { error: "此日期與時段您已經有另一張假單，請避開重疊時段。" };
   }
 
-  const newDuration = await calculateDurationDays(start, end, data.partOfDay);
+  const newDuration = await calculateDurationDays(start, end, parts.partOfDay, parts.endPartOfDay);
   if (newDuration === 0) return { error: "請假天數不可為 0（您可能全選到了週末或國定假日）" };
 
   // 與 applyLeave 相同的假別限制（改假別時也要擋）：男性不得請生理假、特休需到職滿 3 個月
@@ -564,7 +586,8 @@ export async function updateLeave(requestId: string, data: {
       leaveTypeId: data.leaveTypeId,
       startDate: start,
       endDate: end,
-      partOfDay: data.partOfDay,
+      partOfDay: parts.partOfDay,
+      endPartOfDay: parts.endPartOfDay,
       reason: data.reason,
       durationDays: newDuration,
       backupId: newBackupId,
@@ -585,6 +608,7 @@ export async function updateLeave(requestId: string, data: {
         startDate: request.startDate.toISOString(),
         endDate: request.endDate.toISOString(),
         partOfDay: request.partOfDay,
+        endPartOfDay: request.endPartOfDay,
         durationDays: request.durationDays,
         reason: request.reason,
         backupId: request.backupId,
@@ -593,7 +617,8 @@ export async function updateLeave(requestId: string, data: {
         leaveTypeId: data.leaveTypeId,
         startDate: data.startDate,
         endDate: data.endDate,
-        partOfDay: data.partOfDay,
+        partOfDay: parts.partOfDay,
+        endPartOfDay: parts.endPartOfDay,
         durationDays: newDuration,
         reason: data.reason ?? null,
         backupId: newBackupId,
@@ -608,7 +633,7 @@ export async function updateLeave(requestId: string, data: {
   if (request.backupId !== newBackupId) {
     // 舊代理人 → 解除（用舊假單資料）
     if (request.backupId) {
-      await notifyBackupRemoved(request.backupId, applicantName, request.leaveType.name, request.startDate, request.endDate, request.partOfDay, request.durationDays, "REMOVED_BY_EDIT")
+      await notifyBackupRemoved(request.backupId, applicantName, request.leaveType.name, request.startDate, request.endDate, request, request.durationDays, "REMOVED_BY_EDIT")
     }
     // 新代理人 → 指派（用新假單資料：可能改了假別）
     if (newBackupId) {
@@ -616,7 +641,7 @@ export async function updateLeave(requestId: string, data: {
         ? request.leaveType
         : await prisma.leaveType.findUnique({ where: { id: data.leaveTypeId } })
       const newLeaveTypeName = newLeaveType?.name || "該假別"
-      await notifyBackupAssigned(newBackupId, applicantName, newLeaveTypeName, start, end, data.partOfDay, newDuration, "PENDING")
+      await notifyBackupAssigned(newBackupId, applicantName, newLeaveTypeName, start, end, parts, newDuration, "PENDING")
     }
   }
 
@@ -763,16 +788,16 @@ export async function reviewLeaveAsUser(
     })
     const managerName = displayName(dbUser.name, dbUser.chineseName)
     if (shouldSendEmail(boss, "bossReview")) {
-      await sendBossReviewEmail(boss!.email!, applicantName, managerName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, reviewLink)
+      await sendBossReviewEmail(boss!.email!, applicantName, managerName, leaveTypeName, request.startDate, request.endDate, request, request.durationDays, reviewLink)
     }
     if (shouldSendLine(boss, "bossReview")) {
       await sendLineBossReview(boss!.lineUserId!, applicantName, leaveTypeName, request.durationDays, reviewLink, requestId)
     }
     if (shouldSendEmail(request.user, "firstApproved")) {
-      await sendFirstApprovedEmail(request.user.email!, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
+      await sendFirstApprovedEmail(request.user.email!, applicantName, leaveTypeName, request.startDate, request.endDate, request, request.durationDays)
     }
     if (shouldSendLine(request.user, "firstApproved")) {
-      await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays)
+      await sendLineFirstApproved(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request, request.durationDays)
     }
   } else {
     // 最終結果（核准或駁回）→ 通知申請人本人：Email + LINE 雙軌
@@ -783,14 +808,14 @@ export async function reviewLeaveAsUser(
         leaveTypeName,
         request.startDate,
         request.endDate,
-        request.partOfDay,
+        request,
         request.durationDays,
         status,
         trimmedMessage,
       );
     }
     if (shouldSendLine(request.user, "reviewResult")) {
-      await sendLineLeaveResult(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, status, trimmedMessage)
+      await sendLineLeaveResult(request.user.lineUserId!, leaveTypeName, request.startDate, request.endDate, request, request.durationDays, status, trimmedMessage)
     }
 
     if (isFinalApprove) {
@@ -802,13 +827,13 @@ export async function reviewLeaveAsUser(
         leaveTypeName,
         start: request.startDate,
         end: request.endDate,
-        partOfDay: request.partOfDay,
+        parts: request,
         durationDays: request.durationDays,
         backupId: request.backupId,
       })
     } else if (request.backupId) {
       // 駁回 → 解除代理
-      await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, request.startDate, request.endDate, request.partOfDay, request.durationDays, "REJECTED")
+      await notifyBackupRemoved(request.backupId, applicantName, leaveTypeName, request.startDate, request.endDate, request, request.durationDays, "REJECTED")
     }
   }
 

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { buildICS, ICalEvent } from "@/lib/ical"
+import { partsLabel } from "@/lib/leave-period"
+
+// 有半天時加註時段，例：「 (上半天)」「 (首日下午開始)」；全天不加
+const halfDayNote = (l: { startDate: Date; endDate: Date; partOfDay: string; endPartOfDay: string }) => {
+  const label = partsLabel(l.startDate, l.endDate, l)
+  return label === "全天" ? "" : ` (${label})`
+}
 
 // 團隊請假行事曆訂閱：/api/calendar/team/{userId}.ics?token={calendarToken}
 // 內容 = 以 root 為錨的整個小組（root + 所有直屬下屬）的 APPROVED 假單
@@ -42,7 +49,7 @@ export async function GET(
     uid: `leave-${l.id}@timeoff`,
     startDate: l.startDate,
     endDate: l.endDate,
-    summary: `${memberMap.get(l.userId) || "員工"} - ${l.leaveType.name}${l.partOfDay !== "ALL_DAY" ? ` (${l.partOfDay === "MORNING" ? "上半天" : "下半天"})` : ""}`,
+    summary: `${memberMap.get(l.userId) || "員工"} - ${l.leaveType.name}${halfDayNote(l)}`,
     // 共享行事曆不放請假原因（可能含病況等隱私）；原因只出現在本人的個人行事曆
   }))
 

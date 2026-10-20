@@ -29,6 +29,7 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
         startDate: formatTaipeiDateISO(target.startDate),
         endDate: formatTaipeiDateISO(target.endDate),
         partOfDay: target.partOfDay,
+        endPartOfDay: target.endPartOfDay,
         reason: target.reason,
         oldDuration: target.durationDays,
         backupId: target.backupId,

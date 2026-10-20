@@ -6,6 +6,7 @@ import { reviewLeave, adminCancelLeave } from "@/app/actions/leave"
 import toast from "react-hot-toast"
 import { LeaveRequest, LeaveType, PartOfDay } from "@prisma/client"
 import { formatTaipeiDate } from "@/lib/date-format"
+import { partsLabel } from "@/lib/leave-period"
 
 type LeaveWithRelations = LeaveRequest & {
   leaveType: LeaveType
@@ -204,7 +205,7 @@ export function GanttLeaveCell({
           >
             <h3 className="text-lg font-medium text-gray-900">假單 - {userName}</h3>
             <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-gray-100">
-              <p className="mb-1"><strong>假別：</strong>{leaveOnDay.leaveType.name} ({leaveOnDay.partOfDay === 'ALL_DAY' ? '全天' : leaveOnDay.partOfDay === 'MORNING' ? '上半天' : '下半天'})</p>
+              <p className="mb-1"><strong>假別：</strong>{leaveOnDay.leaveType.name} ({partsLabel(new Date(leaveOnDay.startDate), new Date(leaveOnDay.endDate), leaveOnDay)})</p>
               <p className="mb-1"><strong>期間：</strong>{formatTaipeiDate(leaveOnDay.startDate)} ~ {formatTaipeiDate(leaveOnDay.endDate)}</p>
               <p><strong>天數：</strong>{leaveOnDay.durationDays} 天</p>
               {leaveOnDay.reason && <p className="mt-2 text-gray-500 italic">"{leaveOnDay.reason}"</p>}

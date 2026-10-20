@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
         leaveTypeName,
         req.startDate,
         req.endDate,
-        req.partOfDay,
+        req,
         req.durationDays,
         hours,
         reviewLink
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
         leaveTypeName,
         req.startDate,
         req.endDate,
-        req.partOfDay,
+        req,
         hours,
         reviewLink
       ))

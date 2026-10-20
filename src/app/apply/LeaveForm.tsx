@@ -41,6 +41,7 @@ export type EditTarget = {
   startDate: string  // YYYY-MM-DD
   endDate: string    // YYYY-MM-DD
   partOfDay: PartOfDay
+  endPartOfDay: PartOfDay
   reason: string | null
   oldDuration: number  // 舊的 durationDays，用於前端餘額預檢時加回
   backupId: string | null
@@ -72,7 +73,9 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
       : undefined
   )
   const [leaveTypeId, setLeaveTypeId] = useState<string>(editTarget?.leaveTypeId || balances[0]?.id || "")
+  // partOfDay = 開始那天的時段（單日假就是當天的時段）；endPartOfDay = 多天假結束那天的時段
   const [partOfDay, setPartOfDay] = useState<PartOfDay>(editTarget?.partOfDay || "ALL_DAY")
+  const [endPartOfDay, setEndPartOfDay] = useState<PartOfDay>(editTarget?.endPartOfDay || "ALL_DAY")
   const [reason, setReason] = useState(editTarget?.reason || "")
   const [backupId, setBackupId] = useState<string>(editTarget?.backupId || "")
   const [errorMsg, setErrorMsg] = useState("")
@@ -90,7 +93,7 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
   });
 
   // Custom frontend calculation for days to show user before submit
-  const calculateFrontendDays = (start?: Date, end?: Date, ignorePartOfDay = false) => {
+  const calculateFrontendDays = (start?: Date, end?: Date) => {
     if (!start) return 0;
     const endDate = end || start;
     let days = 0;
@@ -111,28 +114,30 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
       current.setDate(current.getDate() + 1);
     }
 
-    if (days === 1 && !ignorePartOfDay && partOfDay !== "ALL_DAY") {
-      return 0.5;
+    if (days === 0) return days;
+    // 單日：上/下半天 = 0.5；多天：首日下午才開始、末日上午就結束各扣 0.5（日曆的起訖日一定是工作日）
+    if (target.getTime() === new Date(start).setHours(0, 0, 0, 0)) {
+      return partOfDay !== "ALL_DAY" ? 0.5 : days;
     }
-    return days;
+    return days - (partOfDay === "AFTERNOON" ? 0.5 : 0) - (endPartOfDay === "MORNING" ? 0.5 : 0);
   }
 
-  // Calculate base days (always assuming ALL_DAY) to determine if we should show the half-day selector
-  const baseDays = calculateFrontendDays(range?.from, range?.to, true);
-  // Calculate actual duration (which might be 0.5) based on the user's selected partOfDay
-  const duration = calculateFrontendDays(range?.from, range?.to, false);
+  // 單日 vs 多天：決定顯示哪一組時段選項
+  const isMultiDay = !!range?.from && !!range?.to && range.from.toDateString() !== range.to.toDateString()
+  // Calculate actual duration (which might be 0.5) based on the user's selected parts
+  const duration = calculateFrontendDays(range?.from, range?.to);
 
   const selectedBalance = balances.find(b => b.id === leaveTypeId);
 
   const isAnnual = selectedBalance?.name.includes("特休");
   const showWarning = isAnnual && duration >= 3;
 
-  // 多日請假時自動強制為全天；放在 effect 中避免 render 期間 setState
+  // 多天假的開始那天不能選「上半天」（只能全天或下午才開始）；放在 effect 中避免 render 期間 setState
   useEffect(() => {
-    if (duration > 1 && partOfDay !== "ALL_DAY") {
+    if (isMultiDay && partOfDay === "MORNING") {
       setPartOfDay("ALL_DAY")
     }
-  }, [duration, partOfDay])
+  }, [isMultiDay, partOfDay])
 
   // 切換到不需證明的假別 → 清掉已選附件，避免讓使用者誤以為會跟著上傳
   useEffect(() => {
@@ -237,6 +242,7 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
           startDate: toLocalDateStr(range.from!),
           endDate: toLocalDateStr(range.to || range.from!),
           partOfDay,
+          endPartOfDay: isMultiDay ? endPartOfDay : partOfDay,
           reason,
           backupId: backupId || null,
         }
@@ -286,6 +292,7 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
       {/* Left side: Calendar */}
       <div className="p-6 flex-1 flex flex-col items-center justify-center bg-gray-50/50">
@@ -349,9 +356,9 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
             </ul>
           </details>
 
-          {baseDays === 1 && (
+          {range?.from && !isMultiDay && (
             <div className="mt-4">
-              <label className="fieldset-label font-medium">時段 (僅限單日請假)</label>
+              <label className="fieldset-label font-medium">時段</label>
               <div className="mt-2 flex gap-6 px-2">
                 <label className="cursor-pointer label justify-start gap-2">
                   <input type="radio" className="radio radio-primary radio-sm" name="partOfDay" value="ALL_DAY" checked={partOfDay === "ALL_DAY"} onChange={() => setPartOfDay("ALL_DAY")} />
@@ -366,6 +373,35 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
                   <span className="label-text">下半天</span>
                 </label>
               </div>
+            </div>
+          )}
+
+          {isMultiDay && (
+            <div className="mt-4 space-y-2">
+              <label className="fieldset-label font-medium">時段（頭尾可以是半天）</label>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-2">
+                <span className="text-sm text-gray-600 w-28">開始那天 {range!.from!.getMonth() + 1}/{range!.from!.getDate()}</span>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="startPart" checked={partOfDay === "ALL_DAY"} onChange={() => setPartOfDay("ALL_DAY")} />
+                  <span className="label-text">全天</span>
+                </label>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="startPart" checked={partOfDay === "AFTERNOON"} onChange={() => setPartOfDay("AFTERNOON")} />
+                  <span className="label-text">下午才開始</span>
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-2">
+                <span className="text-sm text-gray-600 w-28">結束那天 {range!.to!.getMonth() + 1}/{range!.to!.getDate()}</span>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="endPart" checked={endPartOfDay === "ALL_DAY"} onChange={() => setEndPartOfDay("ALL_DAY")} />
+                  <span className="label-text">全天</span>
+                </label>
+                <label className="cursor-pointer label justify-start gap-2">
+                  <input type="radio" className="radio radio-primary radio-sm" name="endPart" checked={endPartOfDay === "MORNING"} onChange={() => setEndPartOfDay("MORNING")} />
+                  <span className="label-text">上午就結束</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 px-2">例：10/20 ～ 10/22 選「結束那天：上午就結束」= 2.5 天，一張假單就能送出。</p>
             </div>
           )}
 
@@ -502,25 +538,26 @@ export function LeaveForm({ balances, holidayDates, editTarget, coworkers }: { b
           )}
         </fieldset>
       </div>
-
-      {/* DaisyUI Modal for Insufficient Balance */}
-      <dialog id="insufficient_balance_modal" className="modal modal-bottom sm:modal-middle">
-        <div className="modal-box">
-          <h3 className="font-bold text-lg text-red-600 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            {modalTitle}！
-          </h3>
-          <p className="py-4 text-gray-700">{errorMsg}</p>
-          <div className="modal-action">
-            <form method="dialog">
-              <button className="btn">了解</button>
-            </form>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>close</button>
-        </form>
-      </dialog>
     </form>
+
+    {/* DaisyUI Modal for Insufficient Balance：放在主表單外面，避免巢狀 <form>（hydration error） */}
+    <dialog id="insufficient_balance_modal" className="modal modal-bottom sm:modal-middle">
+      <div className="modal-box">
+        <h3 className="font-bold text-lg text-red-600 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {modalTitle}！
+        </h3>
+        <p className="py-4 text-gray-700">{errorMsg}</p>
+        <div className="modal-action">
+          <form method="dialog">
+            <button className="btn">了解</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+    </>
   )
 }

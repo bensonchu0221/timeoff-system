@@ -5,12 +5,14 @@ import { reviewLeave, batchReviewLeave } from "@/app/actions/leave"
 import { formatTaipeiDate } from "@/lib/date-format"
 import toast from "react-hot-toast"
 import { AttachmentModalButton } from "@/app/components/AttachmentModalButton"
+import { partsLabel } from "@/lib/leave-period"
 
 type PendingRequest = {
   id: string
   startDate: Date
   endDate: Date
   partOfDay: string
+  endPartOfDay: string
   durationDays: number
   reason: string | null
   user: { id: string; name: string | null; image: string | null; department: { name: string } | null }
@@ -40,9 +42,6 @@ function formatLeaveRange(start: Date, end: Date): string {
   return s === e ? s : `${s} - ${e}`
 }
 
-function partOfDayLabel(p: string): string {
-  return p === "ALL_DAY" ? "全天" : p === "MORNING" ? "上半天" : "下半天"
-}
 
 export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRequest[] }) {
   const [isPending, startTransition] = useTransition()
@@ -222,7 +221,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
                     {formatLeaveRange(req.startDate, req.endDate)}
                   </div>
                   <div className="text-xs text-gray-500">
-                    時段: {partOfDayLabel(req.partOfDay)}
+                    時段: {partsLabel(req.startDate, req.endDate, req)}
                   </div>
                 </td>
                 <td className="px-6 py-4">
@@ -311,7 +310,7 @@ export function ApprovalsTable({ pendingRequests }: { pendingRequests: PendingRe
               <div>
                 <div className="text-xs text-gray-500">期間 / 時段</div>
                 <div className="text-gray-900">{formatLeaveRange(req.startDate, req.endDate)}</div>
-                <div className="text-xs text-gray-500">{partOfDayLabel(req.partOfDay)}</div>
+                <div className="text-xs text-gray-500">{partsLabel(req.startDate, req.endDate, req)}</div>
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { formatTaipeiDate } from "@/lib/date-format"
 import { AttachmentManager } from "@/app/components/AttachmentManager"
+import { partsLabel } from "@/lib/leave-period"
 
 export const metadata = {
   title: "假單附件 | Timeoff",
@@ -33,6 +34,7 @@ export default async function LeaveAttachmentsPage(
       startDate: true,
       endDate: true,
       partOfDay: true,
+      endPartOfDay: true,
       durationDays: true,
       reason: true,
       leaveType: { select: { name: true, requireProof: true } },
@@ -81,7 +83,7 @@ export default async function LeaveAttachmentsPage(
               {formatTaipeiDate(leave.startDate)} ~ {formatTaipeiDate(leave.endDate)}
             </div>
             <div className="text-xs text-gray-500">
-              {leave.partOfDay === "ALL_DAY" ? "全天" : leave.partOfDay === "MORNING" ? "上半天" : "下半天"} / {leave.durationDays} 天
+              {partsLabel(leave.startDate, leave.endDate, leave)} / {leave.durationDays} 天
             </div>
           </div>
           <div>

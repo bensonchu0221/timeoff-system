@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { buildICS, ICalEvent } from "@/lib/ical"
+import { partsLabel } from "@/lib/leave-period"
+
+// 有半天時加註時段，例：「 (上半天)」「 (首日下午開始)」；全天不加
+const halfDayNote = (l: { startDate: Date; endDate: Date; partOfDay: string; endPartOfDay: string }) => {
+  const label = partsLabel(l.startDate, l.endDate, l)
+  return label === "全天" ? "" : ` (${label})`
+}
 
 // 個人請假行事曆訂閱：/api/calendar/{userId}.ics?token={calendarToken}
 // userId 路由參數可帶 .ics 副檔名（Calendar 用戶端比較相容），這裡先 strip
@@ -32,7 +39,7 @@ export async function GET(
     uid: `leave-${l.id}@timeoff`,
     startDate: l.startDate,
     endDate: l.endDate,
-    summary: `${user.name || "員工"} - ${l.leaveType.name}${l.partOfDay !== "ALL_DAY" ? ` (${l.partOfDay === "MORNING" ? "上半天" : "下半天"})` : ""}`,
+    summary: `${user.name || "員工"} - ${l.leaveType.name}${halfDayNote(l)}`,
     description: l.reason || undefined,
   }))
 

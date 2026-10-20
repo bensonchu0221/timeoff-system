@@ -181,7 +181,10 @@ model LeaveRequest {
   leaveTypeId    String
   startDate      DateTime
   endDate        DateTime
+  // 開始那天的時段；單日假就是當天的時段。多天假只會是 ALL_DAY 或 AFTERNOON（下午才開始）
   partOfDay      PartOfDay   @default(ALL_DAY)
+  // 結束那天的時段：多天假只會是 ALL_DAY 或 MORNING（上午就結束）；單日假不看此欄（寫入時與 partOfDay 相同）
+  endPartOfDay   PartOfDay   @default(ALL_DAY)
   durationDays   Float       // Calculated days, excluding holidays/weekends
   reason         String?     @db.Text
   status         LeaveStatus @default(PENDING)

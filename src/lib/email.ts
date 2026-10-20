@@ -1,4 +1,5 @@
 import { isTerminated } from "./employment"
+import { formatLeavePeriod as formatPeriod, type LeaveParts } from "./leave-period"
 
 // ----------- 通知偏好類型 -----------
 // 對照 LINE 的 LineNotifyKey，但少了 dailyPending / dailyRoster（這兩個只走 LINE）
@@ -94,11 +95,11 @@ export async function sendLeaveApplicationEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   link: string,
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = `[待審核] ${applicantName} 送出了請假申請（${range}）`
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
@@ -123,11 +124,11 @@ export async function sendBossReviewEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   link: string,
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = `[終審待審核] ${applicantName} 的假單已通過一審（${range}）`
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
@@ -153,10 +154,10 @@ export async function sendFirstApprovedEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = `[一審通過] 您的請假申請已通過主管審核，等待終審（${range}）`
   const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
   const html = `
@@ -183,7 +184,7 @@ export async function sendLeaveResultEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   status: "APPROVED" | "REJECTED",
   message?: string,
@@ -191,7 +192,7 @@ export async function sendLeaveResultEmail(
   const isApproved = status === "APPROVED"
   const statusText = isApproved ? "✅ 已核准" : "❌ 已駁回"
   const color = isApproved ? "#7A9A8A" : "#C48F8B"
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
 
   const subject = `[假單結果] 您的請假申請 ${statusText}（${range}）`
   const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
@@ -230,11 +231,11 @@ export async function sendLeaveCancelledEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   previousStatus: "PENDING" | "APPROVED"
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = previousStatus === "APPROVED"
     ? `[假單撤銷] ${applicantName} 撤銷了已核准的假單（${range}）`
     : `[假單撤銷] ${applicantName} 撤銷了待審核假單（${range}）`
@@ -264,11 +265,11 @@ export async function sendBackupAssignedEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   status: "PENDING" | "APPROVED"
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const statusLabel = status === "APPROVED" ? "已核准" : "待審核"
   const subject = `[代理人] ${applicantName} 將請您協助代理 ${range}`
   const html = `
@@ -294,11 +295,11 @@ export async function sendBackupRemovedEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   reason: "REMOVED_BY_EDIT" | "CANCELLED" | "REJECTED"
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const reasonLabel = reason === "CANCELLED" ? "已撤銷" : reason === "REJECTED" ? "已駁回" : "已改指定他人"
   const subject = `[代理人] 您不再是 ${applicantName} 的代理人（${reasonLabel}，${range}）`
   const html = `
@@ -323,12 +324,12 @@ export async function sendEscalationEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
   hoursPending: number,
   link: string
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = `[假單待審提醒] ${applicantName} 的假單已 ${hoursPending}h 待你審核（${range}）`
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
@@ -356,10 +357,10 @@ export async function sendDepartmentLeaveEmail(
   leaveType: string,
   startDate: Date,
   endDate: Date,
-  partOfDay: string,
+  parts: LeaveParts,
   durationDays: number,
 ) {
-  const range = formatLeavePeriod(startDate, endDate, partOfDay)
+  const range = formatLeavePeriod(startDate, endDate, parts)
   const subject = `[部門通知] ${applicantName} 將於 ${range} 請${leaveType}`
   const siteUrl = process.env.NEXTAUTH_URL || "http://localhost:8080"
 
@@ -381,20 +382,9 @@ export async function sendDepartmentLeaveEmail(
   await sendBrevoEmail(toEmail, subject, html)
 }
 
-function formatDateRange(start: Date, end: Date): string {
-  const s = formatTaipeiDate(start)
-  const e = formatTaipeiDate(end)
-  return s === e ? s : `${s}–${e}`
-}
-
-// 含半天時段標記的日期區間。例：「6/12 (上半天)」「6/12~6/18」
-function formatLeavePeriod(start: Date, end: Date, partOfDay: string): string {
-  const range = formatDateRange(start, end)
-  const partLabel =
-    partOfDay === "MORNING" ? " (上半天)" :
-    partOfDay === "AFTERNOON" ? " (下半天)" :
-    ""
-  return `${range}${partLabel}`
+// 含半天時段標記的日期區間。例：「6/3 (下半天)」「10/20 下午–10/22 上午」
+function formatLeavePeriod(start: Date, end: Date, parts: LeaveParts): string {
+  return formatPeriod(start, end, parts, formatTaipeiDate)
 }
 
 function formatTaipeiDate(d: Date): string {

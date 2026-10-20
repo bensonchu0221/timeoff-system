@@ -11,6 +11,7 @@ import { HistoryLedgerDrawer } from "./components/HistoryLedgerDrawer"
 import { CalendarSubscribeButton } from "./components/CalendarSubscribeButton"
 import { MobileLeaveActions } from "./components/MobileLeaveActions"
 import { LeaveApprovalSteps } from "./components/LeaveApprovalSteps"
+import { partsLabel } from "@/lib/leave-period"
 
 export const metadata = {
   title: "Dashboard | Timeoff",
@@ -190,7 +191,7 @@ export default async function DashboardPage() {
                           {formatTaipeiDate(req.startDate)} - {formatTaipeiDate(req.endDate)}
                         </div>
                         <div className="text-gray-500 text-xs">
-                          {req.partOfDay === 'ALL_DAY' ? '全天' : req.partOfDay === 'MORNING' ? '上半天' : '下半天'}
+                          {partsLabel(req.startDate, req.endDate, req)}
                         </div>
                         {req.reviewMessage && (
                           <div className={`mt-2 text-xs px-2 py-1 rounded border-l-2 max-w-xs whitespace-pre-wrap ${

@@ -108,6 +108,16 @@ export function GanttChart({
     return d >= s && d <= e
   }
 
+  // 某一天在假單裡的時段：單日假看 partOfDay；多天假首日看 partOfDay（可能下午才開始）、末日看 endPartOfDay（可能上午就結束）
+  const dayPartOf = (date: Date, leave: any): 'ALL_DAY' | 'MORNING' | 'AFTERNOON' => {
+    const d = new Date(date).setHours(0,0,0,0)
+    const s = new Date(leave.startDate).setHours(0,0,0,0)
+    const e = new Date(leave.endDate).setHours(0,0,0,0)
+    if (d === s) return leave.partOfDay
+    if (d === e) return leave.endPartOfDay ?? 'ALL_DAY'
+    return 'ALL_DAY'
+  }
+
   // 國定假日查表（key 用台北時區 ISO，與 server 下傳格式一致）
   const holidayMap = new Map(holidays.map(h => [h.date, h]))
 
@@ -381,7 +391,7 @@ export function GanttChart({
 
                       if (hasLeaveOnDay && !isNonWorkDay) {
                         // 同一天可有上半天 + 下半天兩張單；色塊元件各畫一個對角三角，文字各往自己的三角偏
-                        const pairedHalf = leavesOnDay.filter(l => l.partOfDay !== 'ALL_DAY').length > 1
+                        const pairedHalf = leavesOnDay.filter(l => dayPartOf(day, l) !== 'ALL_DAY').length > 1
                         cellContent = leavesOnDay.map(leaveOnDay => {
                           // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨非工作日（週末/國定假日）時仍是方角，
                           // 象徵「邏輯上還在同一張假單，只是被假日切開」
@@ -426,6 +436,7 @@ export function GanttChart({
                               roundedRight={roundedRight}
                               extendLeft={extendLeft}
                               extendRight={extendRight}
+                              dayPart={dayPartOf(day, leaveOnDay)}
                               pairedHalf={pairedHalf}
                             />
                           )

@@ -27,7 +27,7 @@ export default async function FlowPage() {
         <ul className="steps steps-vertical">
           <FlowStep
             title="員工提交申請"
-            description="到「請假」頁填日期、假別，事由和代理人可填可不填。"
+            description="到「請假」頁填日期、假別，事由和代理人可填可不填。可以請半天；請好幾天時，第一天也能選「下午才開始」、最後一天選「上午就結束」，例如 2.5 天一張假單就能送出。"
           />
           <FlowStep
             title="系統自動驗證"
