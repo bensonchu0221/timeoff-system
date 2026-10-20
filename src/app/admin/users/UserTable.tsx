@@ -33,6 +33,8 @@ type UserNode = {
   hireDate: Date | null
   gender: string
   terminatedDate: Date | null
+  // 最後上班日已過（離職已生效）；填了未來日期的仍為 false
+  terminated: boolean
   annualLeaveOpeningBalance: number | null
   annualLeaveOpeningAt: Date | null
   annualLeaveOpeningB: number | null
@@ -86,7 +88,7 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
   }
 
   // 可選主管：限定在職的 MANAGER / ADMIN，已離職的不能再被選為主管
-  const managers = users.filter(u => (u.role === "MANAGER" || u.role === "ADMIN") && !u.terminatedDate)
+  const managers = users.filter(u => (u.role === "MANAGER" || u.role === "ADMIN") && !u.terminated)
 
   return (
     <div className="relative">
@@ -104,12 +106,15 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">終審者(Boss)</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">到職日</th>
             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">特休</th>
-            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">離職日</th>
+            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">最後上班日</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {users.map((user) => {
-            const isTerminated = !!user.terminatedDate
+            const isTerminated = user.terminated
+            const lastDayStr = user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : ""
+            // 已填最後上班日、但還沒到（仍在職）
+            const isLeaving = !!user.terminatedDate && !isTerminated
             return (
               <tr key={user.id} className={isTerminated ? "bg-gray-50 opacity-60" : ""}>
                 <td className={`sticky left-0 z-10 border-r border-gray-200 align-top whitespace-nowrap transition-all duration-300 ${isTerminated ? "bg-gray-50" : "bg-white"} ${isScrolled ? "px-1 py-1" : "px-6 py-4"}`}>
@@ -124,6 +129,11 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
                       {isTerminated && (
                         <span className={`text-[10px] rounded bg-gray-200 text-gray-600 font-normal overflow-hidden whitespace-nowrap transition-all duration-300 ${isScrolled ? "max-w-0 opacity-0 px-0 py-0" : "max-w-xs opacity-100 px-2 py-0.5"}`}>
                           已離職
+                        </span>
+                      )}
+                      {isLeaving && (
+                        <span className={`text-[10px] rounded bg-amber-100 text-amber-700 font-normal overflow-hidden whitespace-nowrap transition-all duration-300 ${isScrolled ? "max-w-0 opacity-0 px-0 py-0" : "max-w-xs opacity-100 px-2 py-0.5"}`}>
+                          {lastDayStr.slice(5).replace("-", "/")} 最後上班
                         </span>
                       )}
                     </span>
@@ -272,14 +282,27 @@ export function UserTable({ users, departments, remainingByUser, nextYear }: {
                     type="date"
                     disabled={isPending}
                     key={`term-${user.id}-${user.terminatedDate?.toISOString() ?? ""}`}
-                    defaultValue={user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : ""}
+                    defaultValue={lastDayStr}
                     onBlur={(e) => {
                       const v = e.target.value
-                      if (v === (user.terminatedDate ? user.terminatedDate.toISOString().split("T")[0] : "")) return
+                      if (v === lastDayStr) return
+                      const who = user.chineseName || user.name || user.email
+                      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" })
+                      const msg = !v
+                        ? `確定清除 ${who} 的最後上班日、恢復為在職？`
+                        : `確定將 ${who} 的最後上班日設為 ${v}？\n\n` +
+                          (v < todayStr
+                            ? "⚠️ 這個日期已經過了，送出後立即生效：\n"
+                            : `• ${v} 當天（含）以前照常使用系統\n• 隔天起自動生效：\n`) +
+                          "　- 無法登入、不再收到 Email／LINE 通知\n　- 自動解除 LINE 綁定、登出所有裝置\n　- 最後上班日之後才生效的特休發放會作廢"
+                      if (!window.confirm(msg)) {
+                        e.target.value = lastDayStr
+                        return
+                      }
                       wrap(() => updateUserTerminatedDate(user.id, v))
                     }}
                     className="input input-bordered input-sm w-full bg-gray-50"
-                    title="標記離職日；清空可恢復為在職"
+                    title="填員工最後一天上班的日期：當天仍在職，隔天起自動生效。可提前填；清空 = 恢復在職"
                   />
                 </td>
               </tr>

@@ -68,10 +68,10 @@ describe("annualIneligibleReason", () => {
   it("沒有到職日", () => expect(annualIneligibleReason({ hireDate: null, terminatedDate: null }, 2027)).toBe("沒有到職日"))
   it("到職年 = 發放年（走首年）", () =>
     expect(annualIneligibleReason({ hireDate: d("2027-03-01"), terminatedDate: null }, 2027)).toBe("到職年即發放年，已由首年按比例發放"))
-  it("離職日剛好 1/1 → 不發", () =>
-    expect(annualIneligibleReason({ hireDate: d("2020-01-01"), terminatedDate: d("2027-01-01") }, 2027)).toBe("發放日前已離職"))
-  it("離職日 1/2 → 發", () =>
-    expect(annualIneligibleReason({ hireDate: d("2020-01-01"), terminatedDate: d("2027-01-02") }, 2027)).toBeNull())
+  it("最後上班日 12/31 → 不發", () =>
+    expect(annualIneligibleReason({ hireDate: d("2020-01-01"), terminatedDate: d("2026-12-31") }, 2027)).toBe("發放日前已離職"))
+  it("最後上班日剛好 1/1（當天仍在職）→ 發", () =>
+    expect(annualIneligibleReason({ hireDate: d("2020-01-01"), terminatedDate: d("2027-01-01") }, 2027)).toBeNull())
 })
 
 describe("openYearFor / allowedGrantYears", () => {

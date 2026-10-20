@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { formatTaipeiDateISO } from "@/lib/date-format"
 import { GanttChart } from "./GanttChart"
+import { activeUserWhere } from "@/lib/employment"
 
 export const metadata = {
   title: "團隊請假甘特圖 | Timeoff",
@@ -24,7 +25,7 @@ export default async function GanttPage(props: { searchParams: Promise<{ month?:
 
   // 所有 role 都看全公司在職員工（透明化）；審核權限另由 canReview 控制
   const targetUsers = await prisma.user.findMany({
-    where: { terminatedDate: null },
+    where: activeUserWhere(),
     include: { department: { select: { name: true } } },
     orderBy: [{ department: { sortOrder: "asc" } }, { name: "asc" }],
   })

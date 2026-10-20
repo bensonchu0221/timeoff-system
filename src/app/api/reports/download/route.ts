@@ -5,6 +5,7 @@ import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { formatTaipeiDate, startOfYearUTC } from "@/lib/date-format"
 import ExcelJS from "exceljs"
 import JSZip from "jszip"
+import { activeUserWhere } from "@/lib/employment"
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     // 報表只列在職員工，離職者另需手動查詢歷史
     const users = await prisma.user.findMany({
-      where: { terminatedDate: null },
+      where: activeUserWhere(),
       include: { department: { select: { name: true } } },
       orderBy: { name: "asc" },
     })

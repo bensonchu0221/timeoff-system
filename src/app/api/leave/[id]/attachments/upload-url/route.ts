@@ -9,6 +9,7 @@ import {
   extFromMime,
   getSignedUploadUrl,
 } from "@/lib/gcs"
+import { isTerminated } from "@/lib/employment"
 
 // POST /api/leave/[id]/attachments/upload-url
 // 員工拿 v4 signed PUT URL；之後 PUT 完成需再呼叫 POST /attachments 寫 DB
@@ -50,7 +51,7 @@ export async function POST(
     where: { email: session.user.email },
     select: { id: true, terminatedDate: true },
   })
-  if (!me || me.terminatedDate) {
+  if (!me || isTerminated(me.terminatedDate)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

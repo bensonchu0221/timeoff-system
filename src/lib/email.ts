@@ -1,3 +1,5 @@
+import { isTerminated } from "./employment"
+
 // ----------- 通知偏好類型 -----------
 // 對照 LINE 的 LineNotifyKey，但少了 dailyPending / dailyRoster（這兩個只走 LINE）
 // 也不含 leaveUpdated（一審後不能改、修改通知已移除）
@@ -18,10 +20,12 @@ export type EmailNotifyKey =
  * - 明確 false 才當作關閉
  */
 export function shouldSendEmail(
-  user: { email?: string | null; emailNotifyPrefs?: any } | null | undefined,
+  user: { email?: string | null; emailNotifyPrefs?: any; terminatedDate?: Date | null } | null | undefined,
   key: EmailNotifyKey
 ): boolean {
   if (!user?.email) return false
+  // 已離職（最後上班日已過）不再寄信；呼叫端撈 user 時要一併 select terminatedDate
+  if (isTerminated(user.terminatedDate)) return false
   const prefs = user.emailNotifyPrefs as Record<string, boolean> | null | undefined
   if (!prefs) return true
   return prefs[key] !== false

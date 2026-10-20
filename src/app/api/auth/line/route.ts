@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { verifyLineIdToken, createDbSessionForUser } from "@/lib/liff-auth"
+import { isTerminated } from "@/lib/employment"
 
 // LIFF 自動登入：前端（在 LINE in-app browser）用 liff.getIDToken() 拿到 idToken 後打這支，
 // 後端驗證 idToken → 用 lineUserId 對應「已綁定」的系統 user → 建立 database session。
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ status: "unbound" })
   }
-  if (user.terminatedDate) {
+  if (isTerminated(user.terminatedDate)) {
     return NextResponse.json({ status: "terminated" })
   }
 

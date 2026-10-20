@@ -15,6 +15,7 @@ import { allowedGrantYears } from "@/lib/annual-grant-calc"
 import { AnnualGrantPanel } from "./AnnualGrantPanel"
 import { LeaveTypeTable } from "./LeaveTypeTable"
 import { BalancesTable, OverrideTableRow } from "./BalancesTable"
+import { activeUserWhere } from "@/lib/employment"
 
 export const metadata = {
   title: "假別與額度設定 | Timeoff",
@@ -43,14 +44,14 @@ export default async function LeaveSettingsPage() {
 
   // 在職員工清單：給「新增 override」下拉用
   const activeUsers = await prisma.user.findMany({
-    where: { terminatedDate: null },
+    where: activeUserWhere(),
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
   })
 
   // 抓所有 override，按 (user, leaveType) 分組，每組只取最新一筆
   const allOverrides = await prisma.userLeaveBalance.findMany({
-    where: { user: { terminatedDate: null }, leaveType: { isActive: true } },
+    where: { user: activeUserWhere(), leaveType: { isActive: true } },
     include: {
       user: { select: { id: true, name: true, email: true, hireDate: true } },
       leaveType: { select: { id: true, name: true, defaultDays: true } },

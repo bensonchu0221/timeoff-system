@@ -55,7 +55,8 @@ model User {
   gender         Gender    @default(FEMALE)
   // 所屬公司：POPIN=博英、BROADCIEL=鉑芯。與 email 後綴脫鉤（兩者不一致），由 HR 隸屬表為準。
   company        Company?
-  // null = 在職；有值代表「離職日」，自該日起視為離職，所有列表與登入皆排除
+  // 最後上班日：null = 在職；有值時當天（台北）仍在職，隔天起視為離職，所有列表、登入與通知皆排除
+  // HR 可提前填未來日期，到期自動生效（判斷一律走 src/lib/employment.ts）
   terminatedDate DateTime?
 
   // 兩階段審核：終審者（Boss）標記。全公司唯一一人為 true（目前 = Connie）。

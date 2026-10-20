@@ -3,6 +3,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/db"
 import { readImpersonationCookies } from "@/lib/impersonation"
+import { isTerminated } from "@/lib/employment"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -36,7 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // 離職員工不可再登入系統
-        if (dbUser.terminatedDate) {
+        if (isTerminated(dbUser.terminatedDate)) {
           return "/unauthorized"
         }
 

@@ -6,6 +6,7 @@ import {
   MAX_FILE_BYTES,
   MAX_FILES_PER_REQUEST,
 } from "@/lib/gcs"
+import { isTerminated } from "@/lib/employment"
 
 // GET /api/leave/[id]/attachments
 // 列出某張請假單的所有附件，按 createdAt asc（最舊在上，可看出補件順序）。
@@ -100,7 +101,7 @@ export async function POST(
     where: { email: session.user.email },
     select: { id: true, terminatedDate: true },
   })
-  if (!me || me.terminatedDate) {
+  if (!me || isTerminated(me.terminatedDate)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -13,6 +13,7 @@ import {
   buildHelpReply,
   buildRejectReasonFlex,
 } from "@/lib/line"
+import { isTerminated } from "@/lib/employment"
 
 // LINE Webhook：接收 follow / message / postback 事件
 // 注意：簽章驗證需要原始 body 字串，不能 parse 後再 stringify
@@ -85,7 +86,7 @@ async function handlePostback(
     where: { lineUserId },
     select: { id: true, terminatedDate: true },
   })
-  if (!actor || actor.terminatedDate) {
+  if (!actor || isTerminated(actor.terminatedDate)) {
     await lineReply(replyToken, [{ type: "text", text: "您的帳號未綁定或已停用，無法操作。" }])
     return
   }
@@ -146,7 +147,7 @@ async function handleTextMessage(
 
   if (boundUser) {
     // 離職員工已綁定也不再服務查詢
-    if (boundUser.terminatedDate) {
+    if (isTerminated(boundUser.terminatedDate)) {
       await lineReply(replyToken, [
         { type: "text", text: "您的帳號目前已停用，如有疑問請聯絡管理員。" },
       ])
@@ -195,7 +196,7 @@ async function handleBindingAttempt(
     return
   }
 
-  if (candidate.terminatedDate) {
+  if (isTerminated(candidate.terminatedDate)) {
     await lineReply(replyToken, [
       { type: "text", text: "此帳號已停用，無法綁定。" },
     ])

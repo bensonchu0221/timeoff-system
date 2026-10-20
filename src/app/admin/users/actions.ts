@@ -6,6 +6,8 @@ import { requireAdmin } from "@/lib/admin-guard"
 import { grantOnHire, previewHireDateRecalc, voidGrantsAfterTermination, setOpening } from "@/lib/annual-grant"
 import { revalidatePath } from "next/cache"
 import { Role, Company } from "@prisma/client"
+import { activeUserWhere, isTerminated } from "@/lib/employment"
+import { offboardTerminatedUsers } from "@/lib/offboarding"
 
 // 到職日防呆：必須是 YYYY-MM-DD 的真實日期，年份 1980 ~ 明年。
 // （輸入框打到一半的日期如 0002-01-15 會觸發新人發放，必須擋下）
@@ -160,36 +162,45 @@ export async function updateUserTerminatedDate(userId: string, terminatedDate: s
       targetId: userId,
     })
     revalidatePath("/admin/users")
-    return { success: true, message: "已標記為在職" }
+    return { success: true, message: "已恢復為在職（若之前已生效離職，LINE 需本人到「個人設定」重新綁定）" }
   }
 
-  // 標記離職前，必須先把該員工底下的所有下屬重指派；否則下屬會卡死無法簽核
+  // terminatedDate = 最後上班日：當天仍在職，隔天起生效。可提前填未來日期。
+  const lastDay = new Date(terminatedDate)
+  const effectiveNow = isTerminated(lastDay)
   const subordinates = await prisma.user.findMany({
-    where: { managerId: userId, terminatedDate: null },
+    where: { managerId: userId, ...activeUserWhere() },
     select: { id: true, name: true, email: true },
   })
-  if (subordinates.length > 0) {
-    const names = subordinates.map((s) => s.name || s.email).join("、")
+  const names = subordinates.map((s) => s.name || s.email).join("、")
+  // 已生效（補登過去日期）時下屬必須先改派，否則下屬會卡死無法簽核；未來日期先放行，生效前改派即可
+  if (effectiveNow && subordinates.length > 0) {
     throw new Error(
-      `此員工底下還有 ${subordinates.length} 位在職下屬（${names}），請先將下屬的直屬主管改派給其他人再標記離職。`
+      `此員工底下還有 ${subordinates.length} 位在職下屬（${names}），請先將下屬的直屬主管改派給其他人再填最後上班日。`
     )
   }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { terminatedDate: new Date(terminatedDate) },
+    data: { terminatedDate: lastDay },
   })
-  const voided = await voidGrantsAfterTermination(userId, new Date(terminatedDate), actorId)
+  const voided = await voidGrantsAfterTermination(userId, lastDay, actorId)
   await logAudit({
     actorId,
     action: "USER_TERMINATE",
     targetType: "User",
     targetId: userId,
-    payload: { terminatedDate },
+    payload: { terminatedDate, effectiveNow },
   })
+  // 補登過去日期 → 立刻收尾（解除 LINE、登出）；未來日期由每日 cron 在生效當天處理
+  if (effectiveNow) await offboardTerminatedUsers({ userIds: [userId] })
   revalidatePath("/admin/users")
   const voidedMsg = voided.length ? `；已作廢 ${voided.map((v) => `${v.year ?? ""} ${v.kind === "ANNUAL" ? "年度" : "首年"}特休 ${v.amount} 天`).join("、")}` : ""
-  return { success: true, message: `已標記離職${voidedMsg}`, voided }
+  const subsMsg = !effectiveNow && subordinates.length > 0 ? `；請在生效前把 ${names} 的直屬主管改派給其他人` : ""
+  const message = effectiveNow
+    ? `已標記離職並立即生效（已解除 LINE 綁定、登出）${voidedMsg}`
+    : `已設定最後上班日 ${terminatedDate}，隔天起自動生效${voidedMsg}${subsMsg}`
+  return { success: true, message, voided }
 }
 
 export async function createUser(data: FormData) {

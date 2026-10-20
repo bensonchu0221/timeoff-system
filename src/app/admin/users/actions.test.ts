@@ -18,6 +18,8 @@ vi.mock("@/auth", () => ({ auth: mockAuth }))
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn(async () => {}) }))
 vi.mock("@/lib/impersonation", () => ({ assertNotImpersonating: vi.fn(async () => {}) }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+const mockOffboard = vi.hoisted(() => vi.fn(async () => []))
+vi.mock("@/lib/offboarding", () => ({ offboardTerminatedUsers: mockOffboard }))
 
 import { updateUserRole, updateUserHireDate, updateUserTerminatedDate, clearAnnualLeaveOpening } from "./actions"
 
@@ -79,12 +81,42 @@ describe("到職日 / 離職串接 grant", () => {
     expect(svc.grantOnHire).not.toHaveBeenCalled()
   })
 
-  it("標記離職 → 作廢離職日之後的發放，訊息列出明細", async () => {
+  // 以台北今天為基準的相對日期，測試不會因日子過去而失效
+  const dayStr = (offset: number) => {
+    const t = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" }))
+    return new Date(t.getTime() + offset * 86400e3).toISOString().slice(0, 10)
+  }
+
+  it("填未來的最後上班日 → 作廢之後的發放、不立即收尾，訊息說明隔天生效", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "hr", role: "ADMIN" })
     svc.voidGrantsAfterTermination.mockResolvedValueOnce([{ id: "g", kind: "ANNUAL", year: 2027, amount: 10 }] as never)
-    const r = await updateUserTerminatedDate("u", "2026-12-20")
-    expect(svc.voidGrantsAfterTermination).toHaveBeenCalledWith("u", new Date("2026-12-20"), "hr")
-    expect(r.message).toBe("已標記離職；已作廢 2027 年度特休 10 天")
+    const r = await updateUserTerminatedDate("u", dayStr(10))
+    expect(svc.voidGrantsAfterTermination).toHaveBeenCalledWith("u", new Date(dayStr(10)), "hr")
+    expect(mockOffboard).not.toHaveBeenCalled()
+    expect(r.message).toBe(`已設定最後上班日 ${dayStr(10)}，隔天起自動生效；已作廢 2027 年度特休 10 天`)
+  })
+
+  it("最後上班日 = 今天 → 當天仍在職，不立即收尾", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "hr", role: "ADMIN" })
+    await updateUserTerminatedDate("u", dayStr(0))
+    expect(mockOffboard).not.toHaveBeenCalled()
+  })
+
+  it("補登過去日期 → 立即生效並收尾（解除 LINE、登出）", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "hr", role: "ADMIN" })
+    const r = await updateUserTerminatedDate("u", dayStr(-3))
+    expect(mockOffboard).toHaveBeenCalledWith({ userIds: ["u"] })
+    expect(r.message).toBe("已標記離職並立即生效（已解除 LINE 綁定、登出）")
+  })
+
+  it("過去日期 + 還有在職下屬 → 擋下；未來日期 + 有下屬 → 放行但提醒改派", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "hr", role: "ADMIN" })
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "s", name: "Sub", email: "s@x" }] as never)
+    await expect(updateUserTerminatedDate("u", dayStr(-1))).rejects.toThrow("請先將下屬的直屬主管改派")
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+    const r = await updateUserTerminatedDate("u", dayStr(5))
+    expect(r.message).toContain("請在生效前把 Sub 的直屬主管改派給其他人")
+    mockPrisma.user.findMany.mockResolvedValue([])
   })
 })
 

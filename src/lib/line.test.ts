@@ -40,6 +40,14 @@ describe("shouldSendLine", () => {
     expect(shouldSendLine(null, "reviewResult")).toBe(false)
     expect(shouldSendLine(undefined, "reviewResult")).toBe(false)
   })
+
+  it("最後上班日已過 → 不推；今天才是最後上班日 / 未來日期 → 照推", () => {
+    const today = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" }))
+    const day = (offset: number) => new Date(today.getTime() + offset * 86400e3)
+    expect(shouldSendLine({ ...user("U123", null), terminatedDate: day(-1) }, "reviewResult")).toBe(false)
+    expect(shouldSendLine({ ...user("U123", null), terminatedDate: day(0) }, "reviewResult")).toBe(true)
+    expect(shouldSendLine({ ...user("U123", null), terminatedDate: day(7) }, "reviewResult")).toBe(true)
+  })
 })
 
 describe("isBalanceQuery", () => {

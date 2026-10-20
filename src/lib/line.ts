@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { prisma } from "./db"
+import { activeUserWhere, isTerminated } from "./employment"
 
 // ----------- 通知偏好類型 -----------
 export type LineNotifyKey =
@@ -17,14 +18,16 @@ export type LineNotifyKey =
 /**
  * 判斷是否該發 LINE 給該使用者。
  * - 沒綁 LINE 直接 false
+ * - 已離職（最後上班日已過）直接 false；呼叫端撈 user 時要一併 select terminatedDate
  * - lineNotifyPrefs 為 null 視為全 true（新員工 default 開啟所有通知）
  * - 明確 false 才當作關閉
  */
 export function shouldSendLine(
-  user: { lineUserId?: string | null; lineNotifyPrefs?: any } | null | undefined,
+  user: { lineUserId?: string | null; lineNotifyPrefs?: any; terminatedDate?: Date | null } | null | undefined,
   key: LineNotifyKey
 ): boolean {
   if (!user?.lineUserId) return false
+  if (isTerminated(user.terminatedDate)) return false
   const prefs = user.lineNotifyPrefs as Record<string, boolean> | null | undefined
   if (!prefs) return true
   return prefs[key] !== false
@@ -495,7 +498,7 @@ export async function sendLineDailyRoster(
  */
 export async function sendLineAdminNotice(text: string): Promise<number> {
   const admins = await prisma.user.findMany({
-    where: { role: "ADMIN", terminatedDate: null, lineUserId: { not: null } },
+    where: { role: "ADMIN", ...activeUserWhere(), lineUserId: { not: null } },
     select: { lineUserId: true },
   })
   await Promise.allSettled(admins.map((a) => linePush(a.lineUserId!, [{ type: "text", text }])))

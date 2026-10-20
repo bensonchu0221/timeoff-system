@@ -155,16 +155,16 @@ export async function grantOnHire(userId: string, opts: { actorId: string | null
   return { created }
 }
 
-// 離職：作廢生效日 >= 離職日的系統發放（離職日起視為離職）
+// 離職：作廢生效日在最後上班日之後的系統發放（最後上班日當天仍在職）
 export async function voidGrantsAfterTermination(userId: string, terminatedDate: Date, actorId: string) {
   const targets = await prisma.annualLeaveGrant.findMany({
-    where: { userId, voidedAt: null, kind: { in: ["PRORATA", "ANNUAL"] }, effectiveAt: { gte: terminatedDate } },
+    where: { userId, voidedAt: null, kind: { in: ["PRORATA", "ANNUAL"] }, effectiveAt: { gt: terminatedDate } },
     select: { id: true, kind: true, year: true, amount: true },
   })
   if (targets.length === 0) return []
   await prisma.annualLeaveGrant.updateMany({
     where: { id: { in: targets.map((t) => t.id) } },
-    data: { voidedAt: new Date(), voidedById: actorId, voidReason: "生效日在離職日之後", periodKey: null },
+    data: { voidedAt: new Date(), voidedById: actorId, voidReason: "生效日在最後上班日之後", periodKey: null },
   })
   return targets
 }

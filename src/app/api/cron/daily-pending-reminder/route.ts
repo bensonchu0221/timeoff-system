@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyPending } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { isTaipeiWorkDay } from "@/lib/leave-utils"
+import { activeUserWhere } from "@/lib/employment"
 
 // 每日 11:00 由外部 cron 觸發：把每位主管當下還有幾筆待審 push 到 LINE
 // 認證：header x-cron-secret 必須等於 CRON_SECRET（避免被外部任意呼叫）
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
   const approvers = await prisma.user.findMany({
     where: {
       id: { in: Array.from(countByApprover.keys()) },
-      terminatedDate: null,
+      ...activeUserWhere(),
     },
     select: { id: true, lineUserId: true, lineNotifyPrefs: true },
   })

@@ -15,7 +15,8 @@ export default async function FlowPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">請假審核流程圖</h1>
         <p className="mt-2 text-gray-600">
-          以下流程適用於所有員工的請假申請。任何環節都會自動觸發對應的通知（Email + LINE，可在「個人設定」逐項開關）。
+          從送出假單到核准，大致會經過下面幾步。每一步系統都會自動通知相關的人（Email + LINE），你不用另外傳訊息提醒；
+          不想收的通知可以到「個人設定」逐項關掉。
         </p>
       </div>
 
@@ -26,44 +27,44 @@ export default async function FlowPage() {
         <ul className="steps steps-vertical">
           <FlowStep
             title="員工提交申請"
-            description="在「請假」頁面填寫日期區間、假別、事由（選填）、代理人（選填）。"
+            description="到「請假」頁填日期、假別，事由和代理人可填可不填。"
           />
           <FlowStep
             title="系統自動驗證"
-            description="餘額是否足夠（特休另會檢查跨年預約後的年底餘額）、日期與時段是否與既有假單重疊、自動跳過週末與國定假日；特休需到職滿 3 個月、生理假限女性。不通過會即時提示。"
+            description="送出當下系統會幫你檢查：餘額夠不夠（特休也會算跨年預約後的年底餘額）、有沒有和其他假單撞期；週末和國定假日會自動跳過不扣天數。特休需到職滿 3 個月、生理假限女性。有問題會馬上提示，不會送出。"
           />
           <FlowStep
             title="通知主管"
-            description="同步送出 Email + LINE 推播；LINE 訊息含「快速核准」「駁回」「前往網頁查看完整資訊」三顆按鈕，按駁回可再選常用理由或開網頁填寫。"
+            description="主管會同時收到 Email 和 LINE。LINE 訊息上可以直接按「快速核准」或「駁回」，駁回時能選常用理由，也可以開網頁看完整資訊。"
           />
           <FlowStep
             title="主管一審"
-            description="第一關由直屬主管審核（admin 也可代審）。通過 → 送交 Boss 終審；駁回 → 直接結束，不進第二關。"
+            description="第一關由直屬主管審核（主管不在時 admin 可以代審）。通過就送到 Boss 做最後確認；駁回就直接結束。"
           />
           <FlowStep
             title="通知 Boss 終審"
-            description="一審通過後，系統通知終審者（Boss）；同時通知申請人「一審已通過、等待終審」。"
+            description="一審通過後，系統會通知 Boss，也會告訴你「主管已同意，等 Boss 最後確認」。"
           />
           <FlowStep
             title="Boss 終審"
-            description="第二關由 Boss 做最後核准或駁回；Boss 不在時 admin 可代為終審。額度在此關最終核准時才正式扣除（一審通過時會先預留）。"
+            description="Boss 做最後核准或駁回（Boss 不在時 admin 可代為終審）。一審通過時天數會先幫你保留，Boss 核准後才正式扣除。"
           />
           <FlowStep
             title="結果通知"
-            description="申請人收到 Email + LINE 最終結果；若核准，同部門同事收提醒、代理人收到正式通知。"
+            description="你會收到最終結果（Email + LINE）。核准的話，同部門同事會收到「誰哪天請假」的提醒，代理人也會收到正式通知。"
           />
           <FlowStep
             title="進入行事曆"
-            description="甘特圖會顯示已核准（綠）與待審（灰）的假單；iCal 訂閱（個人 / 團隊 / 全公司三種，可加到行事曆 App）只同步已核准的假單。"
+            description="甘特圖上看得到已核准（綠）和待審（灰）的假單。也可以把個人、團隊或全公司的請假行事曆訂閱到手機或 Google 行事曆，只會同步已核准的假單。"
             isLast
           />
         </ul>
 
         <div className="mt-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
-          <p className="font-medium text-gray-800">兩階段的例外情況：</p>
-          <p>• 若你的直屬主管本身就是 Boss，或你沒有設定直屬主管，由 Boss 單獨審核一關即為最終核准。</p>
-          <p>• Boss 本人送出的假單會自動核准（無上層可審）。</p>
-          <p>• 系統尚未設定 Boss 時，只由直屬主管審核一關。</p>
+          <p className="font-medium text-gray-800">什麼時候只審一關？</p>
+          <p>• 你的直屬主管就是 Boss，或你還沒有設定直屬主管：Boss 審一次就算定案。</p>
+          <p>• Boss 自己請假：自動核准（沒有更上層可以審）。</p>
+          <p>• 系統還沒設定 Boss：只由直屬主管審一關。</p>
         </div>
       </section>
 
@@ -109,7 +110,7 @@ export default async function FlowPage() {
       <section>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">通知誰會收到？</h2>
         <p className="text-sm text-gray-500 mb-3">
-          每位收件人需在「個人設定」綁定 LINE 才會收到推播；Email 預設會送。兩者都可在「個人設定」逐項關閉。
+          要先在「個人設定」綁定 LINE 才收得到 LINE 推播；Email 預設都會寄。兩種都可以在「個人設定」逐項關掉。已離職（最後上班日已過）的同仁不會收到任何通知。
         </p>
 
         <div className="overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -143,7 +144,7 @@ export default async function FlowPage() {
           * 修改時，代理人若有變動才會通知（舊代理人收解除、新代理人收指派）。
         </p>
         <p className="text-xs text-gray-500 mt-1">
-          ** 全公司請假名單：所有在職且已綁定 LINE 的同仁皆會收到（自己今天請假則只看到其他人的名單）。
+          ** 全公司請假名單：所有在職、已綁定 LINE 的同仁都會收到（自己今天請假的話，名單上不會出現自己）。
         </p>
         <p className="text-xs text-gray-500 mt-1">
           *** 撤銷待審單時，一審主管一律會收到；若已進入二審，Boss 也會收到。
@@ -153,16 +154,55 @@ export default async function FlowPage() {
         </p>
       </section>
 
+      {/* ===== 同仁離職時 ===== */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">同仁離職時</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          HR 一收到離職通知，就可以到「使用者管理」先填好這位同仁的<strong>最後上班日</strong>，不必等到人離開那天才處理。
+          最後上班日當天照常使用系統，<strong>隔天 00:00 起自動生效</strong>。
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ScenarioCard
+            title="最後上班日以前（含當天）"
+            trigger="已經填好最後上班日，但日期還沒過"
+            behavior="一切照常：可以登入、請假、審核，也會照常收到通知。使用者管理列表上會標示「MM/DD 最後上班」提醒大家"
+          />
+          <ScenarioCard
+            title="最後上班日的隔天起"
+            trigger="系統每天 00:10 自動檢查，不需要 HR 再做任何事"
+            behavior="無法再登入網頁或使用 LINE 功能、不再收到任何 Email／LINE 通知；系統會自動解除 LINE 綁定並登出所有裝置，也會從請假名單、甘特圖、代理人選單和報表中移除"
+          />
+          <ScenarioCard
+            title="特休怎麼處理？"
+            trigger="填最後上班日的時候"
+            behavior="最後上班日之後才生效的特休發放會自動作廢（例如最後上班日是 12/31，就不會拿到明年 1/1 發的特休）；已經發的、最後上班日以前的照舊"
+          />
+          <ScenarioCard
+            title="他是主管或審核者怎麼辦？"
+            trigger="離職的人底下還有下屬，或還有假單等他審"
+            behavior="填未來日期時，系統會提醒 HR 在生效前把下屬改派給其他主管；如果生效後還沒改派，每天會用 LINE 提醒 admin，直到處理完為止"
+          />
+        </div>
+
+        <div className="mt-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
+          <p className="font-medium text-gray-800">HR 小提醒：</p>
+          <p>• 填日期時會跳出確認視窗，列出會發生的事，確認後才會儲存。</p>
+          <p>• 日期填錯或同仁決定留下來？把最後上班日清空，就會恢復為在職。若之前已經生效，本人需要到「個人設定」重新綁定 LINE；被作廢的特休請到特休欄按「檢查是否需重算」補回。</p>
+          <p>• 補登已經過去的日期，會立刻生效。</p>
+        </div>
+      </section>
+
       {/* ===== 小提示 ===== */}
       <section className="bg-[#7A9A8A]/10 border border-[#7A9A8A]/30 rounded-lg p-5">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">小提示</h2>
         <ul className="space-y-2 text-sm text-gray-700 list-disc list-inside">
-          <li>假單送出後，首頁列表會顯示橫式進度圖（申請 → 主管審核 → Boss 終審 → 完成），一眼看出審到哪一關</li>
-          <li>想關閉特定通知？到「個人設定」逐項調整（Email 與 LINE 可分別獨立開關）</li>
-          <li>想查餘額？跟 LINE Bot 輸入「查假」即可，免登入網頁</li>
-          <li>被駁回想知道為什麼？看「主管留言」（一審）或「終審留言」（Boss 二審）段落（未填則沒有）</li>
-          <li>想改假單內容？一審通過前可直接修改；一審通過後就鎖定了，請先撤銷再重新申請</li>
-          <li>已核准但需要撤銷？開始日當天（含）以前都可以自己撤；過了開始日請聯絡 admin</li>
+          <li>想知道審到哪一關？首頁的假單會顯示進度條（申請 → 主管審核 → Boss 終審 → 完成）</li>
+          <li>通知太多？到「個人設定」逐項關掉，Email 和 LINE 可以分開設定</li>
+          <li>想查還剩幾天假？傳「查假」給 LINE Bot 就好，不用開網頁</li>
+          <li>被駁回想知道原因？打開假單看「主管留言」（一審）或「終審留言」（Boss）；如果主管沒填就不會有</li>
+          <li>想改假單？主管審核前都能直接改；主管通過後就不能改了，請先撤銷再重新申請</li>
+          <li>已核准但要取消？開始日當天（含）以前都可以自己撤銷；超過開始日請聯絡 admin 協助</li>
         </ul>
       </section>
     </div>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { CreateUserForm } from "./CreateUserForm"
 import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
+import { isTerminated } from "@/lib/employment"
 
 export const metadata = {
   title: "層級與角色設定 | Timeoff",
@@ -17,7 +18,7 @@ export default async function AdminUsersPage() {
   if (me?.role !== "ADMIN") redirect("/")
 
   // admin 頁面同時顯示在職與離職者（離職者會被前端打灰並標籤），方便 HR 還能進行設定/復職
-  const users = await prisma.user.findMany({
+  const rows = await prisma.user.findMany({
     select: {
       id: true,
       name: true,
@@ -37,18 +38,19 @@ export default async function AdminUsersPage() {
       annualLeaveOpeningB: true,
       annualLeaveOpeningR: true,
     },
-    orderBy: [
-      { terminatedDate: 'asc' }, // 在職在上（null 排前）
-      { name: 'asc' }
-    ]
+    orderBy: { name: 'asc' },
   })
+  // terminated = 最後上班日已過（已生效）；填了未來日期的仍算在職。在職在上、已離職在下
+  const users = rows
+    .map((u) => ({ ...u, terminated: isTerminated(u.terminatedDate) }))
+    .sort((a, b) => Number(a.terminated) - Number(b.terminated))
 
   // 每位在職員工目前的特休剩餘（讀發放紀錄）
   const annualType = await prisma.leaveType.findFirst({ where: { isActive: true, name: { contains: "特休" } }, select: { id: true } })
   const remainingByUser: Record<string, number> = {}
   if (annualType) {
     for (const u of users) {
-      if (u.terminatedDate) continue
+      if (u.terminated) continue
       remainingByUser[u.id] = (await getUserLeaveBalance(u.id, annualType.id)).remaining
     }
   }

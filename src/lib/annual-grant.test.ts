@@ -122,12 +122,12 @@ describe("grantOnHire", () => {
 })
 
 describe("voidGrantsAfterTermination", () => {
-  it("作廢生效日 >= 離職日的 PRORATA/ANNUAL，並清空 periodKey", async () => {
+  it("作廢生效日在最後上班日之後（>）的 PRORATA/ANNUAL，並清空 periodKey", async () => {
     mockPrisma.annualLeaveGrant.findMany.mockResolvedValue([{ id: "g27", kind: "ANNUAL", year: 2027, amount: 10 }])
     mockPrisma.annualLeaveGrant.updateMany.mockResolvedValue({ count: 1 })
-    const r = await voidGrantsAfterTermination("u", d("2027-01-01"), "hr")
+    const r = await voidGrantsAfterTermination("u", d("2026-12-31"), "hr")
     expect(mockPrisma.annualLeaveGrant.findMany.mock.calls[0][0].where).toMatchObject({
-      userId: "u", voidedAt: null, kind: { in: ["PRORATA", "ANNUAL"] }, effectiveAt: { gte: d("2027-01-01") },
+      userId: "u", voidedAt: null, kind: { in: ["PRORATA", "ANNUAL"] }, effectiveAt: { gt: d("2026-12-31") },
     })
     expect(mockPrisma.annualLeaveGrant.updateMany.mock.calls[0][0].data).toMatchObject({ periodKey: null, voidedById: "hr" })
     expect(r).toHaveLength(1)

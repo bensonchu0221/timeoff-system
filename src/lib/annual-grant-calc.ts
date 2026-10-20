@@ -68,8 +68,8 @@ export function annualIneligibleReason(
   if (!u.hireDate) return "沒有到職日"
   if (u.hireDate.getUTCFullYear() >= year) return "到職年即發放年，已由首年按比例發放"
   const jan1 = new Date(Date.UTC(year, 0, 1))
-  // terminatedDate = 離職日，自該日起視為離職
-  if (u.terminatedDate && u.terminatedDate <= jan1) return "發放日前已離職"
+  // terminatedDate = 最後上班日；1/1 當天仍在職才發（最後上班日 12/31 以前 = 不發）
+  if (u.terminatedDate && u.terminatedDate < jan1) return "發放日前已離職"
   return null
 }
 

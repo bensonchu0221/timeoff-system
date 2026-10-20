@@ -4,6 +4,7 @@ import { getUserLeaveBalance } from "@/lib/leave-utils"
 import { startOfYearUTC, formatTaipeiDateISO } from "@/lib/date-format"
 import { redirect } from "next/navigation"
 import { LeaveForm, EditTarget } from "./LeaveForm"
+import { activeUserWhere } from "@/lib/employment"
 
 export const metadata = {
   title: "申請休假 | Timeoff",
@@ -37,7 +38,7 @@ export default async function ApplyLeavePage(props: { searchParams: Promise<{ ed
 
   // 代理人下拉清單：在職、排除自己；顯示姓名（部門）
   const coworkers = await prisma.user.findMany({
-    where: { terminatedDate: null, id: { not: user.id } },
+    where: { ...activeUserWhere(), id: { not: user.id } },
     select: { id: true, name: true, department: { select: { name: true, sortOrder: true } } },
     orderBy: [{ department: { sortOrder: "asc" } }, { name: "asc" }],
   })

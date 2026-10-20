@@ -33,6 +33,7 @@ import {
 import { getFinalApprover } from "@/lib/approval"
 import { assertNotImpersonating } from "@/lib/impersonation"
 import { deleteObjects } from "@/lib/gcs"
+import { activeUserWhere, isTerminated } from "@/lib/employment"
 
 export async function applyLeave(data: {
   leaveTypeId: string,
@@ -107,7 +108,7 @@ export async function applyLeave(data: {
   if (backupId === userId) backupId = null;
   if (backupId) {
     const backup = await prisma.user.findUnique({ where: { id: backupId } });
-    if (!backup || backup.terminatedDate) backupId = null;
+    if (!backup || isTerminated(backup.terminatedDate)) backupId = null;
   }
 
   // 兩階段審核路由：決定一審者(approverId) / 二審者(secondApproverId) / 是否自動核准。
@@ -241,7 +242,7 @@ async function sendApprovedNotifications(args: {
   // 同部門通知：提醒同部門同事誰會請假
   if (departmentId) {
     const teammates = await prisma.user.findMany({
-      where: { departmentId, terminatedDate: null, id: { not: applicantUserId } },
+      where: { departmentId, ...activeUserWhere(), id: { not: applicantUserId } },
       select: { id: true, email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
     })
     await Promise.allSettled(teammates.flatMap((t) => {
@@ -274,7 +275,7 @@ async function notifyBackupAssigned(
 ) {
   const backup = await prisma.user.findUnique({
     where: { id: backupUserId },
-    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true, terminatedDate: true },
   })
   if (!backup) return
   if (shouldSendEmail(backup, "backupAssigned")) {
@@ -297,7 +298,7 @@ async function notifyBackupRemoved(
 ) {
   const backup = await prisma.user.findUnique({
     where: { id: backupUserId },
-    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+    select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true, terminatedDate: true },
   })
   if (!backup) return
   if (shouldSendEmail(backup, "backupAssigned")) {
@@ -369,7 +370,7 @@ export async function cancelLeave(requestId: string) {
   if (approverIds.size > 0) {
     const approvers = await prisma.user.findMany({
       where: { id: { in: [...approverIds] } },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true, terminatedDate: true },
     })
     await Promise.allSettled(approvers.flatMap((a) => {
       const tasks: Promise<unknown>[] = []
@@ -384,10 +385,10 @@ export async function cancelLeave(requestId: string) {
     const teammates = await prisma.user.findMany({
       where: {
         departmentId: request.user.departmentId,
-        terminatedDate: null,
+        ...activeUserWhere(),
         id: { not: request.userId },
       },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true, terminatedDate: true },
     })
     await Promise.allSettled(teammates.flatMap(t => {
       const tasks: Promise<unknown>[] = []
@@ -554,7 +555,7 @@ export async function updateLeave(requestId: string, data: {
   if (newBackupId === userId) newBackupId = null;
   if (newBackupId && newBackupId !== request.backupId) {
     const backup = await prisma.user.findUnique({ where: { id: newBackupId } });
-    if (!backup || backup.terminatedDate) newBackupId = null;
+    if (!backup || isTerminated(backup.terminatedDate)) newBackupId = null;
   }
 
   await prisma.leaveRequest.update({
@@ -651,7 +652,7 @@ export async function reviewLeaveAsUser(
 
   // 由 DB 拿最新的 role/權限，避免外部呼叫端傳入過期 session
   const dbUser = await prisma.user.findUnique({ where: { id: actorId } });
-  if (!dbUser || dbUser.terminatedDate) throw new Error("Unauthorized");
+  if (!dbUser || isTerminated(dbUser.terminatedDate)) throw new Error("Unauthorized");
 
   // 只能審核「待審核」狀態的假單，避免對已核准/已駁回/已銷假的單再次審核
   if (request.status !== "PENDING") {
@@ -758,7 +759,7 @@ export async function reviewLeaveAsUser(
     // 一審通過 → 通知終審者（Boss）進二審；並通知申請人「一審通過、等待終審」
     const boss = await prisma.user.findUnique({
       where: { id: request.secondApproverId! },
-      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true },
+      select: { email: true, lineUserId: true, lineNotifyPrefs: true, emailNotifyPrefs: true, terminatedDate: true },
     })
     const managerName = displayName(dbUser.name, dbUser.chineseName)
     if (shouldSendEmail(boss, "bossReview")) {

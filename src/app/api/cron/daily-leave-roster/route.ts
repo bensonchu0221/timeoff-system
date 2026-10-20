@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { shouldSendLine, sendLineDailyRoster } from "@/lib/line"
 import { todayStartUTCFromTaipei } from "@/lib/date-format"
 import { isTaipeiWorkDay } from "@/lib/leave-utils"
+import { activeUserWhere } from "@/lib/employment"
 
 // 每日 10:00 由外部 cron 觸發：把今天所有 APPROVED 的請假成員 push 給「全公司在職員工」
 // 認證：x-cron-secret header
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
   // 通知對象：全公司在職且已綁定 LINE 的員工（不再限同部門）
   const recipients = await prisma.user.findMany({
     where: {
-      terminatedDate: null,
+      ...activeUserWhere(),
       lineUserId: { not: null },
     },
     select: { id: true, lineUserId: true, lineNotifyPrefs: true },
