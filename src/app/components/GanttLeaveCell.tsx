@@ -1,14 +1,47 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { reviewLeave, adminCancelLeave } from "@/app/actions/leave"
 import toast from "react-hot-toast"
-import { LeaveRequest, LeaveType, User } from "@prisma/client"
+import { LeaveRequest, LeaveType, PartOfDay } from "@prisma/client"
 import { formatTaipeiDate } from "@/lib/date-format"
 
 type LeaveWithRelations = LeaveRequest & {
   leaveType: LeaveType
+}
+
+// 莫蘭迪色系：核准用 #7A9A8A，待審核用 #A9ADA9（色塊與文字外框共用）
+const APPROVED_COLOR = "#7A9A8A"
+const PENDING_COLOR = "#A9ADA9"
+// 半天三角形三個角的圓角半徑（px），與全天色塊 rounded-md 接近
+const HALF_CORNER_RADIUS = 5
+
+type Pt = [number, number]
+
+// 圓角多邊形 SVG path：每個頂點用同一個半徑 r 的圓弧接起兩條邊（r = 0 為尖角），
+// 銳角與直角看起來圓潤程度一致。切點距頂點 r / tan(θ/2)，不超過相鄰邊長的一半。
+function roundedPolygonPath(points: Pt[], radii: number[]): string {
+  const n = points.length
+  let d = ""
+  for (let i = 0; i < n; i++) {
+    const [vx, vy] = points[i]
+    const [px, py] = points[(i - 1 + n) % n]
+    const [nx, ny] = points[(i + 1) % n]
+    const v1: Pt = [px - vx, py - vy]
+    const v2: Pt = [nx - vx, ny - vy]
+    const l1 = Math.hypot(...v1)
+    const l2 = Math.hypot(...v2)
+    const angle = Math.acos((v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2))
+    const t = Math.min(radii[i] / Math.tan(angle / 2), l1 / 2, l2 / 2)
+    const r = t * Math.tan(angle / 2)
+    const a: Pt = [vx + (v1[0] / l1) * t, vy + (v1[1] / l1) * t]
+    const b: Pt = [vx + (v2[0] / l2) * t, vy + (v2[1] / l2) * t]
+    // 順時針走的多邊形，圓弧 sweep 取外積方向
+    const sweep = v1[0] * v2[1] - v1[1] * v2[0] < 0 ? 1 : 0
+    d += `${i === 0 ? "M" : "L"}${a[0]},${a[1]} A${r},${r} 0 0 ${sweep} ${b[0]},${b[1]} `
+  }
+  return d + "Z"
 }
 
 export function GanttLeaveCell({
@@ -21,6 +54,8 @@ export function GanttLeaveCell({
   roundedRight = true,
   extendLeft = false,
   extendRight = false,
+  dayPart,
+  pairedHalf = false,
 }: {
   leaveOnDay: LeaveWithRelations,
   isPending: boolean,
@@ -31,6 +66,10 @@ export function GanttLeaveCell({
   roundedRight?: boolean,
   extendLeft?: boolean,
   extendRight?: boolean,
+  // 這一格是全天還是上/下半天；預設取假單本身的 partOfDay
+  dayPart?: PartOfDay,
+  // 同一格另有一張互補的半天單（上午 + 下午）→ 文字各往自己的三角偏，避免疊字
+  pairedHalf?: boolean,
 }) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
@@ -69,8 +108,7 @@ export function GanttLeaveCell({
     })
   }
 
-  // 莫蘭迪色系：核准用 #7A9A8A，待審核用 #A9ADA9
-  const bgColorClass = isPending ? 'bg-[#A9ADA9]' : 'bg-[#7A9A8A]'
+  const color = isPending ? PENDING_COLOR : APPROVED_COLOR
 
   // 圓角規則：只有假單真正端點（startDate/endDate）才用圓角；中間（含跨假日的兩側）為方角
   // 延伸規則：相鄰那格是同色塊才向外延伸 -1px 蓋過 td border；接空白格則不延伸
@@ -82,37 +120,78 @@ export function GanttLeaveCell({
   const leftClass = extendLeft ? "-left-px" : "left-0"
   const rightClass = extendRight ? "-right-px" : "right-0"
 
-  // 半天假只會是單日。上半天：貼上邊 + 貼左邊 + 斜線閉合（左上三角）；
-  // 下半天：貼下邊 + 貼右邊 + 斜線閉合（右下三角）。兩張互補單會沿對角線拼滿整格。
-  // clip-path 會蓋掉同一元素的 border-radius，所以半天用外層 rounded-md + overflow 裁出與全天相同的圓角。
-  const isHalfDay = leaveOnDay.partOfDay !== "ALL_DAY"
-  const isMorning = leaveOnDay.partOfDay === "MORNING"
-  const positionClass = isHalfDay ? "inset-0" : `top-0 bottom-0 ${leftClass} ${rightClass}`
-  const textAlignClass = isHalfDay
-    ? (isMorning ? "items-start justify-start pt-0.5 pl-1" : "items-end justify-end pb-0.5 pr-1")
-    : "items-center justify-center"
-  const clipPath = isHalfDay
-    ? (isMorning ? "polygon(0 0, 100% 0, 0 100%)" : "polygon(100% 0, 100% 100%, 0 100%)")
-    : undefined
-  const title = `${leaveOnDay.leaveType.name} (${leaveOnDay.partOfDay === "ALL_DAY" ? "全天" : leaveOnDay.partOfDay === "MORNING" ? "上半天" : "下半天"}) - ${leaveOnDay.status}`
-  const block = (
+  // 上半天：左上三角；下半天：右下三角。兩張互補單沿對角線拼滿整格。
+  // 三角形用 SVG 依格子實際大小畫，三個角同一個圓角半徑；接著相鄰色塊的那一側不圓角。
+  const part = dayPart ?? leaveOnDay.partOfDay
+  const isHalfDay = part !== "ALL_DAY"
+  const isMorning = part === "MORNING"
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    const el = boxRef.current
+    if (!isHalfDay || !el) return
+    const ro = new ResizeObserver(([entry]) => setBox({ w: entry.contentRect.width, h: entry.contentRect.height }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isHalfDay])
+
+  let trianglePath: string | null = null
+  if (isHalfDay && box) {
+    const { w, h } = box
+    const r = HALF_CORNER_RADIUS
+    // 頂點順時針；左緣頂點看 roundedLeft、右緣頂點看 roundedRight
+    const L = roundedLeft ? r : 0
+    const R = roundedRight ? r : 0
+    trianglePath = isMorning
+      ? roundedPolygonPath([[0, 0], [w, 0], [0, h]], [L, R, L])
+      : roundedPolygonPath([[w, 0], [w, h], [0, h]], [R, R, L])
+  }
+
+  // 文字：與全天一樣 text-sm 置中；外加一圈色塊同色的外框，壓到白底時也看得清楚。
+  // 同格有上午 + 下午兩張時，各往自己的三角偏，避免疊字。
+  // 16 個方向、半徑 2px 的實心外框，再加一層柔邊
+  const textHalo = Array.from({ length: 16 }, (_, i) => {
+    const a = (i / 16) * 2 * Math.PI
+    return `${(2 * Math.cos(a)).toFixed(2)}px ${(2 * Math.sin(a)).toFixed(2)}px 0 ${color}`
+  }).concat(`0 0 3px ${color}`).join(", ")
+  const textPos = !isHalfDay || !pairedHalf ? { left: "50%", top: "50%" } : isMorning ? { left: "30%", top: "32%" } : { left: "70%", top: "68%" }
+
+  const title = `${leaveOnDay.leaveType.name} (${part === "ALL_DAY" ? "全天" : isMorning ? "上半天" : "下半天"}) - ${leaveOnDay.status}`
+  const label = leaveOnDay.leaveType.name.substring(0, 1)
+  const interactiveClass = `${clickable ? "cursor-pointer hover:opacity-80" : ""} ${isPendingAction ? "opacity-50 animate-pulse" : ""}`
+  const openModal = () => { if (clickable) setIsOpen(true) }
+
+  const block = isHalfDay ? (
+    <div ref={boxRef} className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} pointer-events-none`}>
+      {trianglePath && (
+        <svg width="100%" height="100%" className="absolute inset-0 overflow-visible">
+          {/* 只有三角形本身可點；互補的另一張單點得到自己那半 */}
+          <path d={trianglePath} fill={color} onClick={openModal} className={`pointer-events-auto ${interactiveClass}`}>
+            <title>{title}</title>
+          </path>
+        </svg>
+      )}
+      <span
+        className="absolute -translate-x-1/2 -translate-y-1/2 text-sm font-semibold leading-none text-white select-none"
+        style={{ ...textPos, textShadow: textHalo }}
+      >
+        {label}
+      </span>
+    </div>
+  ) : (
     <div
-      onClick={() => { if (clickable) setIsOpen(true) }}
-      style={clipPath ? { clipPath } : undefined}
-      className={`absolute ${positionClass} ${isHalfDay ? "pointer-events-auto" : roundedClass} ${textAlignClass} ${isHalfDay ? "text-[11px] leading-none" : "text-sm"} font-semibold flex text-white select-none ${bgColorClass} ${clickable ? "cursor-pointer hover:opacity-80" : ""} ${isPendingAction ? "opacity-50 animate-pulse" : ""}`}
+      onClick={openModal}
+      className={`absolute top-0 bottom-0 ${leftClass} ${rightClass} ${roundedClass} items-center justify-center text-sm font-semibold flex text-white select-none ${interactiveClass}`}
+      style={{ backgroundColor: color }}
       title={title}
     >
-      {leaveOnDay.leaveType.name.substring(0, 1)}
+      {label}
     </div>
   )
 
   return (
     <>
-      {isHalfDay ? (
-        <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none">
-          {block}
-        </div>
-      ) : block}
+      {block}
 
       {isOpen && clickable && (
         <div

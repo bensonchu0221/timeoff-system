@@ -380,7 +380,8 @@ export function GanttChart({
                       if (isFirstOfMonth) bgColorClass += ' border-l-2 border-l-gray-50'
 
                       if (hasLeaveOnDay && !isNonWorkDay) {
-                        // 同一天可有上半天 + 下半天兩張單；色塊元件各畫一個對角三角
+                        // 同一天可有上半天 + 下半天兩張單；色塊元件各畫一個對角三角，文字各往自己的三角偏
+                        const pairedHalf = leavesOnDay.filter(l => l.partOfDay !== 'ALL_DAY').length > 1
                         cellContent = leavesOnDay.map(leaveOnDay => {
                           // 圓角規則：圓角僅用於「假單真正起點/終點」；中間跨非工作日（週末/國定假日）時仍是方角，
                           // 象徵「邏輯上還在同一張假單，只是被假日切開」
@@ -425,6 +426,7 @@ export function GanttChart({
                               roundedRight={roundedRight}
                               extendLeft={extendLeft}
                               extendRight={extendRight}
+                              pairedHalf={pairedHalf}
                             />
                           )
                         })
