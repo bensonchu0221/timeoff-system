@@ -186,10 +186,13 @@ npx prisma db execute --file /tmp/apply.sql --schema prisma/schema.prisma
 | `timeoff-escalate-pending` | `0 9-18 * * 1-5` Asia/Taipei（平日 09–18 每小時） | `/api/cron/escalate-pending` |
 | `timeoff-annual-leave-grant` | `0 6 1 12 *` Asia/Taipei（每年 12/1 06:00） | `/api/cron/annual-leave-grant` |
 | `timeoff-sync-holidays` | `0 6 1 9 *` Asia/Taipei（每年 9/1 06:00） | `/api/cron/sync-holidays` |
+| `timeoff-offboard-terminated` | `10 0 * * *` Asia/Taipei（每天 00:10） | `/api/cron/offboard-terminated` |
 
-五個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
+六個都在 `asia-east1`，用 `x-cron-secret` header 驗證。
 
 國定假日同步（`timeoff-sync-holidays`，2026-10-01 建立）：同步「明年＋今年」；明年未公布（來源 404）不算失敗；結果 LINE 通知 ADMIN。失敗時到「假別與額度設定 → 國定假日同步」手動同步。
+
+離職收尾（`timeoff-offboard-terminated`，2026-10-20 建立）：「最後上班日」已過的員工自動解除 LINE 綁定、登出所有裝置（audit `USER_OFFBOARD`）；若仍有在職下屬或待審假單卡在他身上，LINE 提醒 ADMIN 改派。重跑安全；失敗回 500，Scheduler 重試 3 次（300s–3600s backoff）。
 
 ### 特休年度發放（`timeoff-annual-leave-grant`，2026-10-01 建立）
 
@@ -249,5 +252,6 @@ npx prisma db execute --file /tmp/apply.sql --schema prisma/schema.prisma
 
 | 日期 | 重點 |
 |---|---|
+| 2026-10-20 | 離職改「最後上班日」制＋`timeoff-offboard-terminated` 排程；LeaveRequest 加 `endPartOfDay`（多天假可半天頭尾，以 db execute 加欄位） |
 | 2026-05-17 | 加入 LINE Messaging API、同部門通知、Cloud Scheduler、Google OAuth 加 timeoff.pacnexus.net redirect URI |
 | 2026-05-16 | Phase 1 上線（review messages, leave edits, iCal feed, batch approval, audit log） |
